@@ -2,66 +2,26 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-// Added 'doc' to the Firestore import list
-import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
-
-// Define the shape of a trip item
-const initialTripItems = [
-  {
-    id: 'spirit-of-tasmania-sailing1',
-    date: '2025-12-22',
-    location: 'Geelong to Devonport',
-    accommodation: 'Spirit of Tasmania (Sailing 1)',
-    status: 'Booked',
-    notes: 'Depart Geelong 08:30, Arrive Devonport 19:00. 4 adults, 2 recliner accessible, 2 day tickets, 1 vehicle.',
-    travelTime: '10h 30m',
-  },
-  {
-    id: 'scamander-sanctuary',
-    date: '2025-12-24',
-    location: 'Scamander Sanctuary Holiday Park',
-    accommodation: 'Scamander Sanctuary Holiday Park',
-    status: 'Booked',
-    notes: 'Accommodation for George Corea (24 Dec 2025 to 25 Dec 2025).',
-    travelTime: '', // To be filled in
-  },
-  {
-    id: 'cethana-campground',
-    date: '2026-01-09',
-    location: 'Cethana Campground',
-    accommodation: 'Cethana Campground',
-    status: 'Booked',
-    notes: 'Trip dates: Fri, Jan 9th to Sun, Jan 11th. Group size: 3 Adults, 1 Vehicle.',
-    travelTime: '', // To be filled in
-  },
-  {
-    id: 'spirit-of-tasmania-sailing2',
-    date: '2026-01-13',
-    location: 'Devonport to Geelong',
-    accommodation: 'Spirit of Tasmania (Sailing 2)',
-    status: 'Booked',
-    notes: 'Depart Devonport 08:30, Arrive Geelong 19:00. 3 adults, 1 recliner, 2 day tickets, 1 vehicle.',
-    travelTime: '10h 30m',
-  },
-];
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
 
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
   // eslint-disable-next-line no-unused-vars
-  const [auth, setAuth] = useState(null); // This line is now explicitly ignored by ESLint for unused-vars
+  const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
+  const [loadingInitialData, setLoadingInitialData] = useState(true);
 
   // Initialize Firebase and set up authentication
   useEffect(() => {
-    // Suppress ESLint warning for __app_id, __firebase_config, __initial_auth_token here
     // eslint-disable-next-line no-undef, no-unused-vars
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // This line is now explicitly ignored by ESLint for unused-vars
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
     // eslint-disable-next-line no-undef
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 
@@ -69,8 +29,8 @@ function App() {
       const app = initializeApp(firebaseConfig);
       const firestore = getFirestore(app);
       setDb(firestore);
-      const firebaseAuth = getAuth(app); // Assign to a local variable as `auth` state isn't used directly
-      setAuth(firebaseAuth); // Still set the state for potential future use
+      const firebaseAuth = getAuth(app);
+      setAuth(firebaseAuth);
 
       const signIn = async () => {
         try {
@@ -92,13 +52,14 @@ function App() {
         if (user) {
           setUserId(user.uid);
         } else {
-          setUserId(crypto.randomUUID()); // Anonymous user or not signed in
+          setUserId(crypto.randomUUID());
         }
       });
     } else {
       console.log("Firebase config not available, running without database persistence.");
-      // If Firebase config is not available, use initialTripItems directly.
-      setTripItems(initialTripItems);
+      // If Firebase config is not available, simulate initial data load immediately for display
+      setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      setLoadingInitialData(false);
     }
   }, []);
 
@@ -109,32 +70,34 @@ function App() {
       const tripRef = collection(db, `artifacts/${__app_id}/public/data/tripItems`);
       const q = query(tripRef);
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      const unsubscribe = onSnapshot(q, async (snapshot) => {
         const items = [];
         snapshot.forEach((doc) => {
           items.push({ id: doc.id, ...doc.data() });
         });
-        // Sort items by date before setting them
-        items.sort((a, b) => new Date(a.date) - new Date(b.date));
-        setTripItems(items);
-      }, (error) => {
-        console.error("Error fetching trip items: ", error);
-        // If there's an error, or no data, initialize with default data
-        // This will now write to the public collection
-        if (tripItems.length === 0) {
-          initialTripItems.forEach(async (item) => {
+
+        // If no data exists in Firestore, populate it from the imported default data
+        if (items.length === 0) {
+          console.log("Firestore collection empty. Populating with initial Tasmania trip data.");
+          for (const item of defaultTasmaniaTripData) {
             // eslint-disable-next-line no-undef
             const itemRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, item.id);
             await setDoc(itemRef, item);
-          });
-          setTripItems(initialTripItems.sort((a, b) => new Date(a.date) - new Date(b.date)));
+          }
+          setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        } else {
+          // Data already exists in Firestore, so use it directly
+          setTripItems(items.sort((a, b) => new Date(a.date) - new Date(b.date)));
         }
+        setLoadingInitialData(false);
+      }, (error) => {
+        console.error("Error fetching trip items: ", error);
+        setLoadingInitialData(false);
       });
 
       return () => unsubscribe();
     }
-    // Added tripItems.length to dependencies to satisfy react-hooks/exhaustive-deps
-  }, [db, userId, tripItems.length]); // Added tripItems.length here
+  }, [db, userId]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -170,7 +133,7 @@ function App() {
       return;
     }
 
-    const itemToAdd = { ...newItem, id: doc(collection(db, 'temp')).id }; // Generate a temporary ID
+    const itemToAdd = { ...newItem, id: doc(collection(db, 'temp')).id };
     try {
       if (db && userId) {
         // eslint-disable-next-line no-undef
@@ -224,13 +187,20 @@ function App() {
           setTripItems(tripItems.filter((item) => item.id !== id));
         }
         openModal('Trip item deleted successfully!');
-      }
-       catch (error) {
+      } catch (error) {
         console.error("Error deleting document: ", error);
         openModal('Error deleting trip item. Please try again.');
       }
     });
   };
+
+  if (loadingInitialData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 flex items-center justify-center">
+        <div className="text-indigo-700 text-2xl font-semibold">Loading your Trip Data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 p-4 font-inter text-gray-800 flex justify-center items-center">
