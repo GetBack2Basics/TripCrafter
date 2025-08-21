@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+// eslint-disable-next-line no-unused-vars
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore'; // Fix for 'getDocs' no-unused-vars
 import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
 
 function App() {
