@@ -3,16 +3,16 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 // eslint-disable-next-line no-unused-vars
-import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore'; // Added getDocs
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
 
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
   // eslint-disable-next-line no-unused-vars
-  const [auth, setAuth] = useState(null); // Fix for 'auth' no-unused-vars
+  const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
-  const [userEmail, setUserEmail] = useState(null); // New state for user email
+  const [userEmail, setUserEmail] = useState(null);
   const [currentTripId, setCurrentTripId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
@@ -20,16 +20,16 @@ function App() {
   const [modalMessage, setModalMessage] = useState('');
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
   const [loadingInitialData, setLoadingInitialData] = useState(true);
-  const [isAuthReady, setIsAuthReady] = useState(false); // New state to track if auth is initialized
+  const [isAuthReady, setIsAuthReady] = useState(false);
   // eslint-disable-next-line no-unused-vars
-  const [version, setVersion] = useState('1.0.0'); // Fix for 'setVersion' no-unused-vars
+  const [version, setVersion] = useState('1.0.0');
 
   // New states for authentication UI
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [isLoginMode, setIsLoginMode] = useState(true); // true for login, false for signup
+  const [isLoginMode, setIsLoginMode] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState(''); // Fix for 'authError' no-unused-vars
+  const [authError, setAuthError] = useState('');
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
@@ -45,15 +45,12 @@ function App() {
       const firebaseAuth = getAuth(app);
       setAuth(firebaseAuth);
 
-      // Listen for auth state changes
       const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
         if (user) {
-          // User is signed in.
           setUserId(user.uid);
-          setUserEmail(user.email); // Set email if available
+          setUserEmail(user.email);
           setIsAuthReady(true);
         } else {
-          // User is signed out. Sign in anonymously for initial data access.
           try {
             // eslint-disable-next-line no-undef
             if (typeof __initial_auth_token !== 'undefined') {
@@ -64,7 +61,6 @@ function App() {
             }
           } catch (error) {
             console.error("Error during anonymous sign-in:", error);
-            // Fallback if anonymous sign-in also fails
             setUserId(crypto.randomUUID());
           } finally {
             setIsAuthReady(true);
@@ -72,24 +68,23 @@ function App() {
         }
       });
 
-      return () => unsubscribeAuth(); // Cleanup auth listener
+      return () => unsubscribeAuth();
     } else {
       console.log("Firebase config not available, running without database persistence.");
       setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
       setLoadingInitialData(false);
-      setIsAuthReady(true); // Auth is "ready" as it's not being used
+      setIsAuthReady(true);
     }
   }, []);
 
-  // Effect to manage initial trip creation and selection (runs AFTER auth is ready)
   useEffect(() => {
     const initializeTrip = async () => {
-      if (!db || !userId || !isAuthReady) return; // Wait for db, userId, and auth to be ready
+      if (!db || !userId || !isAuthReady) return;
 
       setLoadingInitialData(true);
       // eslint-disable-next-line no-undef
       const tripsCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips`);
-      const q = query(tripsCollectionRef); // Query to get all trips
+      const q = query(tripsCollectionRef);
 
       const tripsSnapshot = await getDocs(q);
 
@@ -97,7 +92,6 @@ function App() {
 
       if (tripsSnapshot.empty) {
         console.log("No trips found. Creating default 'Tasmania 2025' trip.");
-        // Create the main trip document
         const newTripRef = doc(tripsCollectionRef);
         selectedTripId = newTripRef.id;
 
@@ -105,17 +99,15 @@ function App() {
           name: 'Tasmania 2025',
           startDate: '2025-12-22',
           endDate: '2026-01-13',
-          ownerId: userId, // Associate with the current user
+          ownerId: userId,
           createdAt: new Date(),
         });
 
-        // Populate its subcollection with itinerary items
         const itineraryCollectionRef = collection(newTripRef, 'itineraryItems');
         for (const item of defaultTasmaniaTripData) {
           await setDoc(doc(itineraryCollectionRef, item.id), item);
         }
       } else {
-        // For now, if trips exist, just select the first one
         selectedTripId = tripsSnapshot.docs[0].id;
         console.log(`Existing trip found. Selecting trip ID: ${selectedTripId}`);
       }
@@ -126,9 +118,8 @@ function App() {
     if (db && userId && isAuthReady && !currentTripId) {
       initializeTrip();
     }
-  }, [db, userId, isAuthReady, currentTripId]); // Added isAuthReady to dependencies
+  }, [db, userId, isAuthReady, currentTripId]);
 
-  // Fetch itinerary items for the selected trip
   useEffect(() => {
     if (db && currentTripId) {
       // eslint-disable-next-line no-undef
@@ -181,7 +172,16 @@ function App() {
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
-    if (!auth) return;
+    if (!auth) {
+      console.error("Firebase Auth object not initialized.");
+      setAuthError("Authentication service not available.");
+      return;
+    }
+
+    console.log("Attempting authentication...");
+    console.log("Mode:", isLoginMode ? "Login" : "Sign Up");
+    console.log("Email:", email);
+    console.log("Password:", password ? "********" : "[empty]"); // Mask password in console
 
     try {
       if (isLoginMode) {
@@ -189,13 +189,15 @@ function App() {
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
       }
-      setShowAuthModal(false); // Close modal on success
+      setShowAuthModal(false);
       setEmail('');
       setPassword('');
       setAuthError('');
+      console.log("Authentication successful!");
     } catch (error) {
-      console.error("Auth error:", error);
-      setAuthError(error.message);
+      console.error("Auth error caught:", error);
+      setAuthError(error.message); // Display Firebase error message to user
+      console.log("Firebase error code:", error.code); // Log Firebase specific error code
     }
   };
 
@@ -203,11 +205,12 @@ function App() {
     if (auth) {
       try {
         await signOut(auth);
-        setUserId(null); // Clear userId on logout
-        setUserEmail(null); // Clear email on logout
-        setCurrentTripId(null); // Clear current trip
-        setTripItems([]); // Clear trip items
-        setLoadingInitialData(true); // Reset loading for next user
+        setUserId(null);
+        setUserEmail(null);
+        setCurrentTripId(null);
+        setTripItems([]);
+        setLoadingInitialData(true);
+        console.log("User logged out successfully.");
       } catch (error) {
         console.error("Error logging out:", error);
         setAuthError(error.message);
@@ -226,7 +229,6 @@ function App() {
       return;
     }
 
-    // Generate a new ID for the itinerary item
     // eslint-disable-next-line no-undef
     const itineraryCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
     const newItemRef = doc(itineraryCollectionRef);
