@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 // eslint-disable-next-line no-unused-vars
-import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore'; // Fix for 'getDocs' no-unused-vars
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
 
 function App() {
@@ -12,8 +12,9 @@ function App() {
   // eslint-disable-next-line no-unused-vars
   const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
+  const [currentTripId, setCurrentTripId] = useState(null); // New state to hold the ID of the currently active trip
   const [editingItem, setEditingItem] = useState(null);
-  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '' });
+  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
@@ -64,41 +65,71 @@ function App() {
     }
   }, []);
 
-  // Fetch data from Firestore once authenticated
+  // Effect to manage initial trip creation and selection
   useEffect(() => {
-    if (db && userId) {
-      // eslint-disable-next-line no-undef
-      const tripRef = collection(db, `artifacts/${__app_id}/public/data/tripItems`);
-      const q = query(tripRef);
+    const initializeTrip = async () => {
+      if (!db || !userId) return;
 
-      const unsubscribe = onSnapshot(q, async (snapshot) => {
+      setLoadingInitialData(true);
+      // eslint-disable-next-line no-undef
+      const tripsCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips`);
+      const tripsSnapshot = await getDocs(query(tripsCollectionRef));
+
+      let selectedTripId;
+
+      if (tripsSnapshot.empty) {
+        console.log("No trips found. Creating default 'Tasmania 2025' trip.");
+        // Create the main trip document
+        const newTripRef = doc(tripsCollectionRef); // Let Firestore generate a new ID for the trip
+        selectedTripId = newTripRef.id;
+
+        await setDoc(newTripRef, {
+          name: 'Tasmania 2025',
+          startDate: '2025-12-22',
+          endDate: '2026-01-13',
+          ownerId: userId, // Associate with the current user (even if anonymous for now)
+          createdAt: new Date(),
+        });
+
+        // Populate its subcollection with itinerary items
+        const itineraryCollectionRef = collection(newTripRef, 'itineraryItems');
+        for (const item of defaultTasmaniaTripData) {
+          await setDoc(doc(itineraryCollectionRef, item.id), item); // Use item.id as doc ID
+        }
+      } else {
+        // For now, if trips exist, just select the first one
+        selectedTripId = tripsSnapshot.docs[0].id;
+        console.log(`Existing trip found. Selecting trip ID: ${selectedTripId}`);
+      }
+      setCurrentTripId(selectedTripId);
+      setLoadingInitialData(false);
+    };
+
+    if (db && userId && !currentTripId) { // Only run if db and userId are ready, and no trip is selected yet
+      initializeTrip();
+    }
+  }, [db, userId, currentTripId]); // Added currentTripId to dependencies
+
+  // Fetch itinerary items for the selected trip
+  useEffect(() => {
+    if (db && currentTripId) {
+      // eslint-disable-next-line no-undef
+      const itineraryRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
+      const q = query(itineraryRef);
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
         const items = [];
         snapshot.forEach((doc) => {
           items.push({ id: doc.id, ...doc.data() });
         });
-
-        // If no data exists in Firestore, populate it from the imported default data
-        if (items.length === 0) {
-          console.log("Firestore collection empty. Populating with initial Tasmania trip data.");
-          for (const item of defaultTasmaniaTripData) {
-            // eslint-disable-next-line no-undef
-            const itemRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, item.id);
-            await setDoc(itemRef, item);
-          }
-          setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
-        } else {
-          // Data already exists in Firestore, so use it directly
-          setTripItems(items.sort((a, b) => new Date(a.date) - new Date(b.date)));
-        }
-        setLoadingInitialData(false);
+        setTripItems(items.sort((a, b) => new Date(a.date) - new Date(b.date)));
       }, (error) => {
-        console.error("Error fetching trip items: ", error);
-        setLoadingInitialData(false);
+        console.error("Error fetching trip itinerary: ", error);
       });
 
       return () => unsubscribe();
     }
-  }, [db, userId]);
+  }, [db, currentTripId]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -133,17 +164,20 @@ function App() {
       openModal('Please fill in all required fields (Date, Location, Accommodation).');
       return;
     }
+    if (!currentTripId) {
+      openModal('No trip selected. Please select or create a trip first.');
+      return;
+    }
 
-    const itemToAdd = { ...newItem, id: doc(collection(db, 'temp')).id };
+    // Generate a new ID for the itinerary item
+    // eslint-disable-next-line no-undef
+    const itineraryCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
+    const newItemRef = doc(itineraryCollectionRef); // Let Firestore generate a new ID for the itinerary item
+    const itemToAdd = { ...newItem, id: newItemRef.id };
+
     try {
-      if (db && userId) {
-        // eslint-disable-next-line no-undef
-        const docRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, itemToAdd.id);
-        await setDoc(docRef, itemToAdd);
-      } else {
-        setTripItems([...tripItems, itemToAdd].sort((a, b) => new Date(a.date) - new Date(b.date)));
-      }
-      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '' });
+      await setDoc(newItemRef, itemToAdd);
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
       openModal('Trip item added successfully!');
     } catch (error) {
       console.error("Error adding document: ", error);
@@ -160,15 +194,15 @@ function App() {
       openModal('Please fill in all required fields (Date, Location, Accommodation).');
       return;
     }
+    if (!currentTripId) {
+      openModal('No trip selected. Cannot save edits without a selected trip.');
+      return;
+    }
 
     try {
-      if (db && userId) {
-        // eslint-disable-next-line no-undef
-        const docRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, editingItem.id);
-        await updateDoc(docRef, editingItem);
-      } else {
-        setTripItems(tripItems.map((item) => (item.id === editingItem.id ? editingItem : item)).sort((a, b) => new Date(a.date) - new Date(b.date)));
-      }
+      // eslint-disable-next-line no-undef
+      const docRef = doc(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
+      await updateDoc(docRef, editingItem);
       setEditingItem(null);
       openModal('Trip item updated successfully!');
     } catch (error) {
@@ -179,14 +213,14 @@ function App() {
 
   const handleDeleteItem = (id) => {
     openModal('Are you sure you want to delete this trip item?', async () => {
+      if (!currentTripId) {
+        openModal('No trip selected. Cannot delete item.');
+        return;
+      }
       try {
-        if (db && userId) {
-          // eslint-disable-next-line no-undef
-          const docRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, id);
-          await deleteDoc(docRef);
-        } else {
-          setTripItems(tripItems.filter((item) => item.id !== id));
-        }
+        // eslint-disable-next-line no-undef
+        const docRef = doc(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`, id);
+        await deleteDoc(docRef);
         openModal('Trip item deleted successfully!');
       } catch (error) {
         console.error("Error deleting document: ", error);
@@ -212,7 +246,11 @@ function App() {
 
         {userId && (
           <div className="text-center text-sm text-gray-600 mb-6">
-            Share this app with others. The data is now publicly accessible within this app for all users. Your current User ID is: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span>
+            Your current User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span>
+            <br />
+            {currentTripId && (
+              <span className="text-sm text-gray-600">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
+            )}
           </div>
         )}
 
@@ -296,11 +334,19 @@ function App() {
               placeholder="Est. Travel Time (e.g., 2h 30m)"
               className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
+            <input
+              type="text"
+              name="activities"
+              value={newItem.activities}
+              onChange={handleInputChange}
+              placeholder="Activities for the day"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
             <textarea
               name="notes"
               value={newItem.notes}
               onChange={handleInputChange}
-              placeholder="Notes (e.g., activities, guest details)"
+              placeholder="Notes (e.g., guest details)"
               className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 col-span-1 md:col-span-2 lg:col-span-3"
               rows="2"
             ></textarea>
@@ -315,8 +361,8 @@ function App() {
 
         {/* Trip Items List */}
         <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Your Trip Itinerary</h2>
-        {tripItems.length === 0 ? (
-          <p className="text-center text-gray-500 text-xl py-8">No trip items yet. Add one above!</p>
+        {tripItems.length === 0 && !loadingInitialData ? (
+          <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
         ) : (
           <div className="space-y-6">
             {tripItems.map((item) => (
@@ -365,6 +411,14 @@ function App() {
                       placeholder="Est. Travel Time"
                       className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
                     />
+                    <input
+                      type="text"
+                      name="activities"
+                      value={editingItem.activities}
+                      onChange={handleInputChange}
+                      placeholder="Activities for the day"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
                     <textarea
                       name="notes"
                       value={editingItem.notes}
@@ -410,6 +464,11 @@ function App() {
                     {item.travelTime && (
                       <p className="text-md text-gray-600 mb-2">
                         <span className="font-medium">Est. Travel Time:</span> {item.travelTime}
+                      </p>
+                    )}
+                    {item.activities && (
+                      <p className="text-md text-gray-600 mb-2">
+                        <span className="font-medium">Activities:</span> {item.activities}
                       </p>
                     )}
                     {item.notes && (
