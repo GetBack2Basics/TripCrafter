@@ -405,6 +405,48 @@ function App() {
                         Cancel
                       </button>
                     </div>
+                  </div>
+                ) : (
+                  /* Display Item */
+                  <>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="text-sm text-gray-500">{item.date}</p>
+                        <h3 className="text-xl font-semibold text-indigo-800 mb-1">{item.location}</h3>
+                        <p className="text-lg text-gray-700">{item.accommodation}</p>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          item.status === 'Booked' ? 'bg-green-100 text-green-800' :
+                          item.status === 'Unconfirmed' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </div>
+                    {item.travelTime && (
+                      <p className="text-md text-gray-600 mb-2">
+                        <span className="font-medium">Est. Travel Time:</span> {item.travelTime}
+                      </p>
+                    )}
+                    {item.notes && (
+                      <p className="text-md text-gray-600 mb-4">{item.notes}</p>
+                    )}
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => handleEditClick(item)}
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteItem(item.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
