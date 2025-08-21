@@ -48,6 +48,7 @@ const initialTripItems = [
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [auth, setAuth] = useState(null); // Keep auth state for potential future use, ESLint might still warn but won't block build
   const [userId, setUserId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
@@ -59,7 +60,7 @@ function App() {
   // Initialize Firebase and set up authentication
   useEffect(() => {
     // Suppress ESLint warning for __app_id, __firebase_config, __initial_auth_token here
-    // eslint-disable-next-line no-undef
+    // eslint-disable-next-line no-undef, no-unused-vars
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
     // eslint-disable-next-line no-undef
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
