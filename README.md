@@ -1,4 +1,4 @@
-Trip Crafter ✈️
+Trip Crafter ✈️ tripcrafter.netlify.app
 Trip Crafter is a collaborative web application designed to help you plan and manage your travel itineraries. It allows users to create, update, and track various details of their trips, including dates, locations, accommodation, and booking statuses. The data is stored publicly within the application, making it easy to share and collaborate with travel companions.
 
 It has been created entirely using LLM's with some tech stacks the author had never used before. The prompts can be seen at https://gemini.google.com/app/9b31fbc8fff71c8c
