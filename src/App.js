@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // Define the shape of a trip item
 const initialTripItems = [
@@ -47,7 +47,7 @@ const initialTripItems = [
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null);
+  const [auth, setAuth] = useState(null); // Keep auth state for potential future use, ESLint might still warn but won't block build
   const [userId, setUserId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '' });
@@ -57,19 +57,24 @@ function App() {
 
   // Initialize Firebase and set up authentication
   useEffect(() => {
+    // Suppress ESLint warning for __app_id, __firebase_config, __initial_auth_token here
+    // eslint-disable-next-line no-undef
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    // eslint-disable-next-line no-undef
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 
     if (Object.keys(firebaseConfig).length > 0) {
       const app = initializeApp(firebaseConfig);
       const firestore = getFirestore(app);
-      const firebaseAuth = getAuth(app);
       setDb(firestore);
-      setAuth(firebaseAuth);
+      const firebaseAuth = getAuth(app); // Assign to a local variable as `auth` state isn't used directly
+      setAuth(firebaseAuth); // Still set the state for potential future use
 
       const signIn = async () => {
         try {
+          // eslint-disable-next-line no-undef
           if (typeof __initial_auth_token !== 'undefined') {
+            // eslint-disable-next-line no-undef
             await signInWithCustomToken(firebaseAuth, __initial_auth_token);
           } else {
             await signInAnonymously(firebaseAuth);
@@ -98,7 +103,7 @@ function App() {
   // Fetch data from Firestore once authenticated
   useEffect(() => {
     if (db && userId) {
-      // Changed collection path to 'public/data/tripItems' for shared access
+      // eslint-disable-next-line no-undef
       const tripRef = collection(db, `artifacts/${__app_id}/public/data/tripItems`);
       const q = query(tripRef);
 
@@ -116,6 +121,7 @@ function App() {
         // This will now write to the public collection
         if (tripItems.length === 0) {
           initialTripItems.forEach(async (item) => {
+            // eslint-disable-next-line no-undef
             const itemRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, item.id);
             await setDoc(itemRef, item);
           });
@@ -125,7 +131,8 @@ function App() {
 
       return () => unsubscribe();
     }
-  }, [db, userId]);
+    // Added tripItems.length to dependencies to satisfy react-hooks/exhaustive-deps
+  }, [db, userId, tripItems.length]); // Added tripItems.length here
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -164,7 +171,7 @@ function App() {
     const itemToAdd = { ...newItem, id: doc(collection(db, 'temp')).id }; // Generate a temporary ID
     try {
       if (db && userId) {
-        // Changed collection path to 'public/data/tripItems' for shared access
+        // eslint-disable-next-line no-undef
         const docRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, itemToAdd.id);
         await setDoc(docRef, itemToAdd);
       } else {
@@ -190,7 +197,7 @@ function App() {
 
     try {
       if (db && userId) {
-        // Changed collection path to 'public/data/tripItems' for shared access
+        // eslint-disable-next-line no-undef
         const docRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, editingItem.id);
         await updateDoc(docRef, editingItem);
       } else {
@@ -208,14 +215,15 @@ function App() {
     openModal('Are you sure you want to delete this trip item?', async () => {
       try {
         if (db && userId) {
-          // Changed collection path to 'public/data/tripItems' for shared access
+          // eslint-disable-next-line no-undef
           const docRef = doc(db, `artifacts/${__app_id}/public/data/tripItems`, id);
           await deleteDoc(docRef);
         } else {
           setTripItems(tripItems.filter((item) => item.id !== id));
         }
         openModal('Trip item deleted successfully!');
-      } catch (error) {
+      }
+       catch (error) {
         console.error("Error deleting document: ", error);
         openModal('Error deleting trip item. Please try again.');
       }
