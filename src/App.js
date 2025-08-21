@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+// Added 'doc' to the Firestore import list
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // Define the shape of a trip item
 const initialTripItems = [
