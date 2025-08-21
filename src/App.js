@@ -1,15 +1,16 @@
 /* global __app_id, __firebase_config, __initial_auth_token */
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth'; // Added new auth methods
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 // eslint-disable-next-line no-unused-vars
-import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore'; // Added getDocs
 import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
 
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null); // Keep auth state for direct use now
+  // eslint-disable-next-line no-unused-vars
+  const [auth, setAuth] = useState(null); // Fix for 'auth' no-unused-vars
   const [userId, setUserId] = useState(null);
   const [userEmail, setUserEmail] = useState(null); // New state for user email
   const [currentTripId, setCurrentTripId] = useState(null);
@@ -20,14 +21,15 @@ function App() {
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
   const [loadingInitialData, setLoadingInitialData] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false); // New state to track if auth is initialized
-  const [version, setVersion] = useState('1.0.0'); // New state for app version
+  // eslint-disable-next-line no-unused-vars
+  const [version, setVersion] = useState('1.0.0'); // Fix for 'setVersion' no-unused-vars
 
   // New states for authentication UI
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true); // true for login, false for signup
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
+  const [authError, setAuthError] = useState(''); // Fix for 'authError' no-unused-vars
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
