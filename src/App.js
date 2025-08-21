@@ -20,6 +20,7 @@ function App() {
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
   const [loadingInitialData, setLoadingInitialData] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false); // New state to track if auth is initialized
+  const [version, setVersion] = useState('1.0.0'); // New state for app version
 
   // New states for authentication UI
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -619,6 +620,10 @@ function App() {
             ))}
           </div>
         )}
+        {/* Version number display */}
+        <div className="text-center text-xs text-gray-400 mt-8">
+          Version: {version}
+        </div>
       </div>
     </div>
   );
