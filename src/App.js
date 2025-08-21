@@ -1,7 +1,7 @@
 /* global __app_id, __firebase_config, __initial_auth_token */
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth'; // Added new auth methods
 // eslint-disable-next-line no-unused-vars
 import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
@@ -9,18 +9,26 @@ import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
-  // eslint-disable-next-line no-unused-vars
-  const [auth, setAuth] = useState(null);
+  const [auth, setAuth] = useState(null); // Keep auth state for direct use now
   const [userId, setUserId] = useState(null);
-  const [currentTripId, setCurrentTripId] = useState(null); // New state to hold the ID of the currently active trip
+  const [userEmail, setUserEmail] = useState(null); // New state for user email
+  const [currentTripId, setCurrentTripId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
   const [loadingInitialData, setLoadingInitialData] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false); // New state to track if auth is initialized
 
-  // Initialize Firebase and set up authentication
+  // New states for authentication UI
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true); // true for login, false for signup
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Initialize Firebase and set up authentication listener
   useEffect(() => {
     // eslint-disable-next-line no-undef, no-unused-vars
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -34,67 +42,74 @@ function App() {
       const firebaseAuth = getAuth(app);
       setAuth(firebaseAuth);
 
-      const signIn = async () => {
-        try {
-          // eslint-disable-next-line no-undef
-          if (typeof __initial_auth_token !== 'undefined') {
-            // eslint-disable-next-line no-undef
-            await signInWithCustomToken(firebaseAuth, __initial_auth_token);
-          } else {
-            await signInAnonymously(firebaseAuth);
-          }
-        } catch (error) {
-          console.error("Error signing in:", error);
-        }
-      };
-
-      signIn();
-
-      onAuthStateChanged(firebaseAuth, (user) => {
+      // Listen for auth state changes
+      const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
         if (user) {
+          // User is signed in.
           setUserId(user.uid);
+          setUserEmail(user.email); // Set email if available
+          setIsAuthReady(true);
         } else {
-          setUserId(crypto.randomUUID());
+          // User is signed out. Sign in anonymously for initial data access.
+          try {
+            // eslint-disable-next-line no-undef
+            if (typeof __initial_auth_token !== 'undefined') {
+              // eslint-disable-next-line no-undef
+              await signInWithCustomToken(firebaseAuth, __initial_auth_token);
+            } else {
+              await signInAnonymously(firebaseAuth);
+            }
+          } catch (error) {
+            console.error("Error during anonymous sign-in:", error);
+            // Fallback if anonymous sign-in also fails
+            setUserId(crypto.randomUUID());
+          } finally {
+            setIsAuthReady(true);
+          }
         }
       });
+
+      return () => unsubscribeAuth(); // Cleanup auth listener
     } else {
       console.log("Firebase config not available, running without database persistence.");
-      // If Firebase config is not available, simulate initial data load immediately for display
       setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
       setLoadingInitialData(false);
+      setIsAuthReady(true); // Auth is "ready" as it's not being used
     }
   }, []);
 
-  // Effect to manage initial trip creation and selection
+  // Effect to manage initial trip creation and selection (runs AFTER auth is ready)
   useEffect(() => {
     const initializeTrip = async () => {
-      if (!db || !userId) return;
+      if (!db || !userId || !isAuthReady) return; // Wait for db, userId, and auth to be ready
 
       setLoadingInitialData(true);
       // eslint-disable-next-line no-undef
       const tripsCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips`);
-      const tripsSnapshot = await getDocs(query(tripsCollectionRef));
+      const q = query(tripsCollectionRef); // Query to get all trips
+
+      const tripsSnapshot = await getDocs(q);
 
       let selectedTripId;
 
       if (tripsSnapshot.empty) {
         console.log("No trips found. Creating default 'Tasmania 2025' trip.");
         // Create the main trip document
-        const newTripRef = doc(tripsCollectionRef); // Let Firestore generate a new ID for the trip
+        const newTripRef = doc(tripsCollectionRef);
         selectedTripId = newTripRef.id;
 
         await setDoc(newTripRef, {
           name: 'Tasmania 2025',
           startDate: '2025-12-22',
           endDate: '2026-01-13',
-          ownerId: userId, // Associate with the current user (even if anonymous for now)
+          ownerId: userId, // Associate with the current user
           createdAt: new Date(),
         });
 
         // Populate its subcollection with itinerary items
         const itineraryCollectionRef = collection(newTripRef, 'itineraryItems');
         for (const item of defaultTasmaniaTripData) {
-          await setDoc(doc(itineraryCollectionRef, item.id), item); // Use item.id as doc ID
+          await setDoc(doc(itineraryCollectionRef, item.id), item);
         }
       } else {
         // For now, if trips exist, just select the first one
@@ -105,10 +120,10 @@ function App() {
       setLoadingInitialData(false);
     };
 
-    if (db && userId && !currentTripId) { // Only run if db and userId are ready, and no trip is selected yet
+    if (db && userId && isAuthReady && !currentTripId) {
       initializeTrip();
     }
-  }, [db, userId, currentTripId]); // Added currentTripId to dependencies
+  }, [db, userId, isAuthReady, currentTripId]); // Added isAuthReady to dependencies
 
   // Fetch itinerary items for the selected trip
   useEffect(() => {
@@ -159,6 +174,45 @@ function App() {
     closeModal();
   };
 
+  // --- Authentication Handlers ---
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!auth) return;
+
+    try {
+      if (isLoginMode) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+      }
+      setShowAuthModal(false); // Close modal on success
+      setEmail('');
+      setPassword('');
+      setAuthError('');
+    } catch (error) {
+      console.error("Auth error:", error);
+      setAuthError(error.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (auth) {
+      try {
+        await signOut(auth);
+        setUserId(null); // Clear userId on logout
+        setUserEmail(null); // Clear email on logout
+        setCurrentTripId(null); // Clear current trip
+        setTripItems([]); // Clear trip items
+        setLoadingInitialData(true); // Reset loading for next user
+      } catch (error) {
+        console.error("Error logging out:", error);
+        setAuthError(error.message);
+      }
+    }
+  };
+  // --- End Authentication Handlers ---
+
   const handleAddItem = async () => {
     if (!newItem.date || !newItem.location || !newItem.accommodation) {
       openModal('Please fill in all required fields (Date, Location, Accommodation).');
@@ -172,7 +226,7 @@ function App() {
     // Generate a new ID for the itinerary item
     // eslint-disable-next-line no-undef
     const itineraryCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
-    const newItemRef = doc(itineraryCollectionRef); // Let Firestore generate a new ID for the itinerary item
+    const newItemRef = doc(itineraryCollectionRef);
     const itemToAdd = { ...newItem, id: newItemRef.id };
 
     try {
@@ -229,10 +283,11 @@ function App() {
     });
   };
 
-  if (loadingInitialData) {
+  // Display loading screen until Firebase Auth is ready and initial trip is set
+  if (!isAuthReady || loadingInitialData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 flex items-center justify-center">
-        <div className="text-indigo-700 text-2xl font-semibold">Loading your Trip Data...</div>
+        <div className="text-indigo-700 text-2xl font-semibold">Loading Trip Crafter...</div>
       </div>
     );
   }
@@ -244,17 +299,87 @@ function App() {
           Trip Crafter
         </h1>
 
-        {userId && (
-          <div className="text-center text-sm text-gray-600 mb-6">
-            Your current User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span>
-            <br />
-            {currentTripId && (
-              <span className="text-sm text-gray-600">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
-            )}
+        {/* Auth status and buttons */}
+        <div className="text-center text-sm text-gray-600 mb-6">
+          {userEmail ? (
+            <>
+              Logged in as: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userEmail}</span>
+              <button
+                onClick={handleLogout}
+                className="ml-4 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              You are currently anonymous.
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="ml-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Login / Sign Up
+              </button>
+            </>
+          )}
+          <br />
+          {userId && (
+            <span className="text-sm text-gray-600">Your User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span></span>
+          )}
+          {currentTripId && (
+            <span className="text-sm text-gray-600 ml-2">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
+          )}
+        </div>
+
+        {/* Authentication Modal */}
+        {showAuthModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+              <h2 className="text-2xl font-semibold text-indigo-600 mb-4 text-center">
+                {isLoginMode ? 'Login' : 'Sign Up'}
+              </h2>
+              <form onSubmit={handleAuthSubmit}>
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  required
+                />
+                {authError && <p className="text-red-500 text-sm mb-4">{authError}</p>}
+                <button
+                  type="submit"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  {isLoginMode ? 'Login' : 'Sign Up'}
+                </button>
+              </form>
+              <button
+                onClick={() => setIsLoginMode(!isLoginMode)}
+                className="w-full text-indigo-600 mt-4 text-sm hover:underline"
+              >
+                {isLoginMode ? 'Need an account? Sign Up' : 'Already have an account? Login'}
+              </button>
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className="w-full text-gray-500 mt-2 text-sm hover:underline"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Modal for messages and confirmations */}
+        {/* Standard Modal for messages and confirmations */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
