@@ -4,13 +4,14 @@ function TripMap({ tripItems, loadingInitialData }) {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [mapError, setMapError] = useState('');
+  const [geocodedLocations, setGeocodedLocations] = useState([]);
+  const directionsRendererRef = useRef(null); // Ref for DirectionsRenderer
 
-  // Load Google Maps API script
+  // Load Google Maps API script and initialize map
   useEffect(() => {
-    // Check if Google Maps API key is available
     const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-    const mapId = process.env.REACT_APP_GOOGLE_MAPS_MAP_ID; // Get custom Map ID
-    
+    const mapId = process.env.REACT_APP_GOOGLE_MAPS_MAP_ID;
+
     if (!apiKey) {
       setMapError("Google Maps API Key is missing. Please set REACT_APP_GOOGLE_MAPS_API_KEY in Netlify environment variables.");
       return;
@@ -20,16 +21,15 @@ function TripMap({ tripItems, loadingInitialData }) {
       return;
     }
 
-    if (window.google) {
-      // If script is already loaded, initialize map
+    if (window.google && window.google.maps) {
       if (!map) {
-        initMap(mapId); // Pass mapId to initMap
+        initMap(mapId);
       }
       return;
     }
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry`; // Added 'geometry' library
     script.async = true;
     script.defer = true;
     script.onerror = () => {
@@ -39,30 +39,126 @@ function TripMap({ tripItems, loadingInitialData }) {
 
     script.onload = () => {
       if (!map) {
-        initMap(mapId); // Pass mapId to initMap
+        initMap(mapId);
       }
     };
 
     return () => {
-      // Clean up script if component unmounts
       if (document.head.contains(script)) {
         document.head.removeChild(script);
       }
     };
-  }, [map]); // Re-run if map state changes
+  }, [map]);
 
-  const initMap = (mapId) => { // Accept mapId as argument
+  const initMap = (mapId) => {
     if (mapRef.current && window.google) {
       const defaultCenter = { lat: -41.6401, lng: 146.3159 }; // Center of Tasmania
       const newMap = new window.google.maps.Map(mapRef.current, {
         center: defaultCenter,
         zoom: 8,
-        mapId: mapId, // Use the provided custom Map ID
+        mapId: mapId,
       });
       setMap(newMap);
-      setMapError(''); // Clear any previous map errors
+      setMapError('');
+      directionsRendererRef.current = new window.google.maps.DirectionsRenderer(); // Initialize DirectionsRenderer
+      directionsRendererRef.current.setMap(newMap); // Link renderer to the map
     }
   };
+
+  // Effect to geocode locations and draw routes
+  useEffect(() => {
+    if (!map || !tripItems || tripItems.length === 0 || loadingInitialData) return;
+
+    const geocoder = new window.google.maps.Geocoder();
+    const directionsService = new window.google.maps.DirectionsService();
+    const newGeocodedLocations = [];
+    const markers = []; // To hold markers for cleanup
+
+    const processTrip = async () => {
+      for (const item of tripItems) {
+        if (!item.location) continue;
+
+        try {
+          const geocodeResult = await new Promise((resolve, reject) => {
+            geocoder.geocode({ address: item.location + ", Tasmania, Australia" }, (results, status) => {
+              if (status === "OK" && results[0]) {
+                resolve(results[0].geometry.location);
+              } else {
+                console.warn(`Geocoding failed for ${item.location}: ${status}`);
+                resolve(null); // Resolve with null if geocoding fails
+              }
+            });
+          });
+
+          if (geocodeResult) {
+            newGeocodedLocations.push({ ...item, latLng: geocodeResult });
+
+            // Add marker
+            const marker = new window.google.maps.Marker({
+              position: geocodeResult,
+              map: map,
+              title: `${item.location} (${item.accommodation})`,
+              label: item.date.substring(8, 10), // Day of month as label
+            });
+            markers.push(marker);
+          }
+        } catch (error) {
+          console.error("Error during geocoding:", error);
+        }
+      }
+      setGeocodedLocations(newGeocodedLocations);
+
+      // Draw routes if there are at least two geocoded locations
+      if (newGeocodedLocations.length > 1) {
+        const waypoints = newGeocodedLocations.slice(1, -1).map(loc => ({
+          location: loc.latLng,
+          stopover: true,
+        }));
+
+        const origin = newGeocodedLocations[0].latLng;
+        const destination = newGeocodedLocations[newGeocodedLocations.length - 1].latLng;
+
+        directionsService.route(
+          {
+            origin: origin,
+            destination: destination,
+            waypoints: waypoints,
+            travelMode: window.google.maps.TravelMode.DRIVING,
+          },
+          (response, status) => {
+            if (status === "OK" && response) {
+              directionsRendererRef.current.setDirections(response);
+              const route = response.routes[0];
+              let totalDuration = 0;
+              for (let i = 0; i < route.legs.length; i++) {
+                totalDuration += route.legs[i].duration.value; // duration in seconds
+              }
+              const totalDurationMinutes = Math.round(totalDuration / 60);
+              console.log(`Total estimated travel time for the trip: ${totalDurationMinutes} minutes`);
+              // TODO: Integrate this time back into Firestore for each segment
+            } else {
+              console.error("Directions request failed:", status);
+              setMapError(`Failed to load route: ${status}`);
+            }
+          }
+        );
+      } else if (newGeocodedLocations.length === 1) {
+        // If only one location, center map on it
+        map.setCenter(newGeocodedLocations[0].latLng);
+        map.setZoom(10);
+      }
+    };
+
+    processTrip();
+
+    // Cleanup function for markers and directions
+    return () => {
+      markers.forEach(marker => marker.setMap(null)); // Remove markers
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setDirections({ routes: [] }); // Clear directions
+      }
+    };
+  }, [map, tripItems, loadingInitialData]); // Re-run when map or tripItems change
 
   if (mapError) {
     return (
@@ -72,9 +168,9 @@ function TripMap({ tripItems, loadingInitialData }) {
     );
   }
 
-  if (loadingInitialData) {
+  if (loadingInitialData || !map) {
     return (
-      <div className="text-center text-gray-500 text-xl py-8">Loading map data...</div>
+      <div className="text-center text-gray-500 text-xl py-8">Loading map...</div>
     );
   }
 
