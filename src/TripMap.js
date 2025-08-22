@@ -88,7 +88,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
     } else {
       console.log("Map instance initialization useEffect skipped:", { mapLoaded, mapRefCurrent: !!mapRef.current, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
     }
-  }, [mapLoaded, map, mapRef]); // Added mapRef to dependencies
+  }, [mapLoaded, map, mapRef]);
 
   // Effect to geocode locations and draw routes
   useEffect(() => {
@@ -223,10 +223,19 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
     );
   }
 
-  if (loadingInitialData || !mapLoaded || !map) {
+  // Conditionally render the map container only when mapLoaded is true
+  if (!mapLoaded) {
     return (
       <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-inner overflow-hidden flex items-center justify-center">
-        <div className="text-center text-gray-500 text-xl py-8">Loading map...</div>
+        <div className="text-center text-gray-500 text-xl py-8">Loading Google Maps API...</div>
+      </div>
+    );
+  }
+
+  if (loadingInitialData || !map) {
+    return (
+      <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-inner overflow-hidden flex items-center justify-center">
+        <div className="text-center text-gray-500 text-xl py-8">Loading map data...</div>
       </div>
     );
   }
