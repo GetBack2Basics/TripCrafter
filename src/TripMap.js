@@ -4,7 +4,6 @@ function TripMap({ tripItems, loadingInitialData }) {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [mapError, setMapError] = useState('');
-  // Removed geocodedLocations state as it was not being used for rendering
   const directionsRendererRef = useRef(null); // Ref for DirectionsRenderer
 
   // Load Google Maps API script and initialize map
@@ -29,9 +28,10 @@ function TripMap({ tripItems, loadingInitialData }) {
     }
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry`; // Added 'geometry' library
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry`;
     script.async = true;
     script.defer = true;
+    script.setAttribute('loading', 'async'); // Added loading="async" attribute
     script.onerror = () => {
       setMapError("Failed to load Google Maps script. Check your API key and network connection.");
     };
