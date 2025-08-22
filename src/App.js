@@ -9,8 +9,7 @@ import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
-  // eslint-disable-next-line no-unused-vars
-  const [auth, setAuth] = useState(null);
+  const [auth, setAuth] = useState(null); // Keep auth state for direct use now
   const [userId, setUserId] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
   const [currentTripId, setCurrentTripId] = useState(null);
@@ -39,48 +38,66 @@ function App() {
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 
     if (Object.keys(firebaseConfig).length > 0) {
+      console.log("Initializing Firebase app...");
       const app = initializeApp(firebaseConfig);
       const firestore = getFirestore(app);
       setDb(firestore);
       const firebaseAuth = getAuth(app);
-      setAuth(firebaseAuth);
+      setAuth(firebaseAuth); // Set auth state here
 
+      console.log("Setting up onAuthStateChanged listener...");
       const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
         if (user) {
+          console.log("onAuthStateChanged: User is signed in.", user.uid);
           setUserId(user.uid);
           setUserEmail(user.email);
-          setIsAuthReady(true);
         } else {
+          console.log("onAuthStateChanged: No user signed in. Attempting anonymous sign-in...");
           try {
+            // Give Firebase a tiny moment to fully initialize before anonymous sign-in
+            // This can sometimes help with timing issues
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             // eslint-disable-next-line no-undef
             if (typeof __initial_auth_token !== 'undefined') {
               // eslint-disable-next-line no-undef
               await signInWithCustomToken(firebaseAuth, __initial_auth_token);
+              console.log("Signed in with custom token.");
             } else {
               await signInAnonymously(firebaseAuth);
+              console.log("Signed in anonymously.");
             }
           } catch (error) {
             console.error("Error during anonymous sign-in:", error);
-            setUserId(crypto.randomUUID());
-          } finally {
-            setIsAuthReady(true);
+            setUserId(crypto.randomUUID()); // Fallback if anonymous sign-in also fails
           }
         }
+        console.log("Auth initialization complete. Setting isAuthReady to true.");
+        setIsAuthReady(true); // Auth is ready after the initial check, regardless of user status
       });
 
-      return () => unsubscribeAuth();
+      return () => {
+        console.log("Cleaning up onAuthStateChanged listener.");
+        unsubscribeAuth(); // Cleanup auth listener
+      };
     } else {
       console.log("Firebase config not available, running without database persistence.");
       setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
       setLoadingInitialData(false);
-      setIsAuthReady(true);
+      setIsAuthReady(true); // Auth is "ready" as it's not being used
     }
-  }, []);
+  }, []); // Run only once on component mount
 
+  // Effect to manage initial trip creation and selection (runs AFTER auth is ready)
   useEffect(() => {
-    const initializeTrip = async () => {
-      if (!db || !userId || !isAuthReady) return;
+    // Ensure db, userId, and auth are ready before proceeding
+    if (!db || !userId || !isAuthReady || !auth) {
+      console.log("initializeTrip useEffect skipped: db, userId, isAuthReady, or auth not ready.", { db: !!db, userId: !!userId, isAuthReady, auth: !!auth });
+      return;
+    }
 
+    const initializeTrip = async () => {
+      console.log("Attempting to initialize trip data...");
       setLoadingInitialData(true);
       // eslint-disable-next-line no-undef
       const tripsCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips`);
@@ -91,7 +108,7 @@ function App() {
       let selectedTripId;
 
       if (tripsSnapshot.empty) {
-        console.log("No trips found. Creating default 'Tasmania 2025' trip.");
+        console.log("No trips found in Firestore. Creating default 'Tasmania 2025' trip and populating.");
         const newTripRef = doc(tripsCollectionRef);
         selectedTripId = newTripRef.id;
 
@@ -107,21 +124,25 @@ function App() {
         for (const item of defaultTasmaniaTripData) {
           await setDoc(doc(itineraryCollectionRef, item.id), item);
         }
+        console.log("Default Tasmania trip created in Firestore.");
       } else {
         selectedTripId = tripsSnapshot.docs[0].id;
         console.log(`Existing trip found. Selecting trip ID: ${selectedTripId}`);
       }
       setCurrentTripId(selectedTripId);
       setLoadingInitialData(false);
+      console.log("Trip initialization complete.");
     };
 
-    if (db && userId && isAuthReady && !currentTripId) {
+    if (!currentTripId) { // Only initialize if no trip is currently selected
       initializeTrip();
     }
-  }, [db, userId, isAuthReady, currentTripId]);
+  }, [db, userId, isAuthReady, auth, currentTripId]); // Added auth to dependencies
 
+  // Fetch itinerary items for the selected trip
   useEffect(() => {
     if (db && currentTripId) {
+      console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
       // eslint-disable-next-line no-undef
       const itineraryRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
       const q = query(itineraryRef);
@@ -132,11 +153,17 @@ function App() {
           items.push({ id: doc.id, ...doc.data() });
         });
         setTripItems(items.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        console.log("Itinerary items updated from Firestore.");
       }, (error) => {
         console.error("Error fetching trip itinerary: ", error);
       });
 
-      return () => unsubscribe();
+      return () => {
+        console.log("Cleaning up itinerary listener.");
+        unsubscribe();
+      };
+    } else {
+      console.log("Itinerary useEffect skipped: db or currentTripId not ready.", { db: !!db, currentTripId: !!currentTripId });
     }
   }, [db, currentTripId]);
 
@@ -173,8 +200,18 @@ function App() {
     e.preventDefault();
     setAuthError('');
     if (!auth) {
-      console.error("Firebase Auth object not initialized.");
-      setAuthError("Authentication service not available.");
+      console.error("CRITICAL ERROR: Firebase Auth object is NULL when handleAuthSubmit was called.");
+      setAuthError("Authentication service not available. Please try refreshing the page.");
+      // Attempt to re-initialize auth if it's null, as a last resort.
+      // This should ideally not happen if useEffect runs correctly.
+      try {
+        // eslint-disable-next-line no-undef
+        const app = initializeApp(JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'));
+        setAuth(getAuth(app));
+        console.log("Attempted re-initialization of auth within handleAuthSubmit.");
+      } catch (initError) {
+        console.error("Failed to re-initialize auth within handleAuthSubmit:", initError);
+      }
       return;
     }
 
