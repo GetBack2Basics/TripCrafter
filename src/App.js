@@ -22,6 +22,7 @@ function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const [version, setVersion] = useState('1.0.0');
+  const [appIdentifier, setAppIdentifier] = useState('default-app-id'); // New state for app identifier
 
   // New states for authentication UI
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -34,7 +35,7 @@ function App() {
   useEffect(() => {
     // Determine Firebase config based on environment
     let firebaseConfig = {};
-    let resolvedAppId = 'default-app-id'; // Use a distinct name to avoid conflict with outer scope currentAppId
+    let tempAppIdentifier = 'default-app-id'; // Temporary variable for logic within this useEffect
 
     // Check for Canvas environment variables first (for local dev/testing in Canvas)
     // eslint-disable-next-line no-undef
@@ -43,7 +44,7 @@ function App() {
         // eslint-disable-next-line no-undef
         firebaseConfig = JSON.parse(__firebase_config);
         // eslint-disable-next-line no-undef
-        resolvedAppId = __app_id;
+        tempAppIdentifier = __app_id;
         console.log("Using Canvas-provided Firebase config.");
       } catch (e) {
         console.error("Error parsing Canvas __firebase_config:", e);
@@ -61,8 +62,10 @@ function App() {
         measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
       };
       // For Netlify, the appId needs to be consistent, can use projectId as a base
-      resolvedAppId = process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id';
+      tempAppIdentifier = process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id';
     }
+
+    setAppIdentifier(tempAppIdentifier); // Set the state variable here
 
     // Check if Firebase config is valid before initializing
     if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey && firebaseConfig.projectId) {
@@ -111,19 +114,19 @@ function App() {
       setLoadingInitialData(false);
       setIsAuthReady(true);
     }
-  }, []);
+  }, []); // Run only once on component mount
 
   useEffect(() => {
-    if (!db || !userId || !isAuthReady || !auth) {
-      console.log("initializeTrip useEffect skipped: db, userId, isAuthReady, or auth not ready.", { db: !!db, userId: !!userId, isAuthReady, auth: !!auth });
+    if (!db || !userId || !isAuthReady || !auth || !appIdentifier) { // Added appIdentifier to check
+      console.log("initializeTrip useEffect skipped: db, userId, isAuthReady, auth, or appIdentifier not ready.", { db: !!db, userId: !!userId, isAuthReady, auth: !!auth, appIdentifier: !!appIdentifier });
       return;
     }
 
     const initializeTrip = async () => {
       console.log("Attempting to initialize trip data...");
       setLoadingInitialData(true);
-      // Use resolvedAppId here
-      const tripsCollectionRef = collection(db, `artifacts/${resolvedAppId}/public/data/trips`);
+      // Use appIdentifier here
+      const tripsCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips`);
       const q = query(tripsCollectionRef);
 
       const tripsSnapshot = await getDocs(q);
@@ -160,13 +163,13 @@ function App() {
     if (!currentTripId) {
       initializeTrip();
     }
-  }, [db, userId, isAuthReady, auth, currentTripId]);
+  }, [db, userId, isAuthReady, auth, currentTripId, appIdentifier]); // Added appIdentifier to dependencies
 
   useEffect(() => {
-    if (db && currentTripId) {
+    if (db && currentTripId && appIdentifier) { // Added appIdentifier to check
       console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
-      // Use resolvedAppId here
-      const itineraryRef = collection(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`);
+      // Use appIdentifier here
+      const itineraryRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
       const q = query(itineraryRef);
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -185,9 +188,9 @@ function App() {
         unsubscribe();
       };
     } else {
-      console.log("Itinerary useEffect skipped: db or currentTripId not ready.", { db: !!db, currentTripId: !!currentTripId });
+      console.log("Itinerary useEffect skipped: db, currentTripId, or appIdentifier not ready.", { db: !!db, currentTripId: !!currentTripId, appIdentifier: !!appIdentifier });
     }
-  }, [db, currentTripId]);
+  }, [db, currentTripId, appIdentifier]); // Added appIdentifier to dependencies
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -278,8 +281,8 @@ function App() {
       return;
     }
 
-    // Use resolvedAppId here
-    const itineraryCollectionRef = collection(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`);
+    // Use appIdentifier here
+    const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
     const newItemRef = doc(itineraryCollectionRef);
     const itemToAdd = { ...newItem, id: newItemRef.id };
 
@@ -308,8 +311,8 @@ function App() {
     }
 
     try {
-      // Use resolvedAppId here
-      const docRef = doc(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
+      // Use appIdentifier here
+      const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
       await updateDoc(docRef, editingItem);
       setEditingItem(null);
       openModal('Trip item updated successfully!');
@@ -326,8 +329,8 @@ function App() {
         return;
       }
       try {
-        // Use resolvedAppId here
-        const docRef = doc(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`, id);
+        // Use appIdentifier here
+        const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, id);
         await deleteDoc(docRef);
         openModal('Trip item deleted successfully!');
       } catch (error) {
