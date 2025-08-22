@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-function TripMap({ tripItems, loadingInitialData }) {
+// setLoadingInitialData needs to be destructured from props
+function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [mapError, setMapError] = useState('');
-  const [mapLoaded, setMapLoaded] = useState(false); // New state to track if Google Maps API is fully loaded
+  const [mapLoaded, setMapLoaded] = useState(false);
   const directionsRendererRef = useRef(null);
 
   // Load Google Maps API script
@@ -34,7 +35,7 @@ function TripMap({ tripItems, loadingInitialData }) {
     if (!mapLoaded) {
       console.log("Attempting to load Google Maps API script...");
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initGoogleMaps`; // Added callback
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initGoogleMaps`;
       script.async = true;
       script.defer = true;
       script.setAttribute('loading', 'async');
@@ -62,7 +63,7 @@ function TripMap({ tripItems, loadingInitialData }) {
       }
       delete window.initGoogleMaps; // Clean up global callback
     };
-  }, [mapLoaded]); // Depend on mapLoaded to ensure script is only loaded once
+  }, [mapLoaded]);
 
   // Effect to initialize the map once the API is loaded and ref is ready
   useEffect(() => {
@@ -88,7 +89,7 @@ function TripMap({ tripItems, loadingInitialData }) {
     } else {
       console.log("Map initialization useEffect skipped:", { mapLoaded, mapRefCurrent: !!mapRef.current, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
     }
-  }, [mapLoaded, map, mapRef]); // Depend on mapLoaded, map, and mapRef for re-evaluation
+  }, [mapLoaded, map, mapRef]);
 
   // Effect to geocode locations and draw routes
   useEffect(() => {
@@ -225,7 +226,7 @@ function TripMap({ tripItems, loadingInitialData }) {
       }
       console.log("Map markers and directions cleaned up.");
     };
-  }, [map, tripItems, loadingInitialData, mapLoaded]); // Added mapLoaded to dependencies
+  }, [map, tripItems, loadingInitialData, mapLoaded]);
 
   if (mapError) {
     return (
