@@ -8,6 +8,7 @@ import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the
 import TripForm from './TripForm'; // Import the new TripForm component
 import TripList from './TripList'; // Import the new TripList component
 import TripTable from './TripTable'; // Import the new TripTable component
+import TripMap from './TripMap'; // Import the new TripMap component
 
 function App() {
   const [tripItems, setTripItems] = useState([]);
@@ -501,6 +502,14 @@ function App() {
           >
             Add New Item
           </button>
+          <button
+            onClick={() => setViewMode('map')}
+            className={`px-6 py-2 rounded-full font-semibold transition duration-300 ${
+              viewMode === 'map' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Map View
+          </button>
         </div>
 
         {/* Trip Items Display */}
@@ -525,7 +534,7 @@ function App() {
               handleSaveEdit={handleSaveEdit}
               loadingInitialData={loadingInitialData}
             />
-          ) : ( // viewMode === 'form'
+          ) : viewMode === 'form' ? (
             <TripForm
               newItem={editingItem || newItem} // Use editingItem if present, else newItem
               handleInputChange={handleInputChange}
@@ -538,6 +547,11 @@ function App() {
               }}
               openModal={openModal}
               isEditing={!!editingItem} // Pass a flag to indicate edit mode
+            />
+          ) : ( // viewMode === 'map'
+            <TripMap
+              tripItems={tripItems}
+              loadingInitialData={loadingInitialData}
             />
           )
         )}
