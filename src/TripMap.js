@@ -226,7 +226,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
       }
       console.log("Map markers and directions cleaned up.");
     };
-  }, [map, tripItems, loadingInitialData, mapLoaded]);
+  }, [map, tripItems, loadingInitialData, mapLoaded, setLoadingInitialData]); // Added setLoadingInitialData to dependencies
 
   if (mapError) {
     return (
