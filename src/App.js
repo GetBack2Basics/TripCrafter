@@ -26,7 +26,7 @@ function App() {
   // eslint-disable-next-line no-unused-vars
   const [version, setVersion] = useState('1.0.0');
   const [appIdentifier, setAppIdentifier] = useState('default-app-id');
-  const [viewMode, setViewMode] = useState('table'); // New state for view mode: 'table' or 'list'
+  const [viewMode, setViewMode] = useState('table'); // Default to 'table' view
 
   // New states for authentication UI
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -293,8 +293,11 @@ function App() {
     }
   };
 
+  // This function is called by TripList/TripTable when an item's Edit button is clicked
   const handleEditClick = (item) => {
-    setEditingItem({ ...item });
+    setEditingItem(item); // Set the item to be edited
+    setNewItem(item); // Pre-fill the form with the item's data
+    setViewMode('form'); // Switch to form view for editing
   };
 
   const handleSaveEdit = async () => {
@@ -309,8 +312,10 @@ function App() {
 
     try {
       const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
-      await updateDoc(docRef, editingItem);
-      setEditingItem(null);
+      await updateDoc(docRef, editingItem); // Update the document with the editedItem state
+      setEditingItem(null); // Clear editing item state
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' }); // Clear form
+      setViewMode('table'); // Go back to table view after saving
       openModal('Trip item updated successfully!');
     } catch (error) {
       console.error("Error updating document: ", error);
@@ -346,7 +351,8 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 p-4 font-inter text-gray-800 flex justify-center items-center">
-      <div className="w-full max-w-4xl bg-white shadow-xl rounded-xl p-6 relative">
+      {/* Changed max-w-4xl to max-w-full and added px-4 for padding on smaller screens */}
+      <div className="w-full max-w-full bg-white shadow-xl rounded-xl p-6 relative lg:p-8">
         <h1 className="text-4xl font-bold text-center text-indigo-700 mb-8 tracking-wide">
           Trip Crafter
         </h1>
@@ -483,6 +489,18 @@ function App() {
           >
             List View
           </button>
+          <button
+            onClick={() => {
+              setEditingItem(null); // Clear any editing state
+              setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' }); // Clear form
+              setViewMode('form'); // Switch to form view
+            }}
+            className={`px-6 py-2 rounded-full font-semibold transition duration-300 ${
+              viewMode === 'form' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Add New Item
+          </button>
         </div>
 
         {/* Trip Items Display */}
@@ -497,7 +515,7 @@ function App() {
               handleDeleteItem={handleDeleteItem}
               loadingInitialData={loadingInitialData}
             />
-          ) : (
+          ) : viewMode === 'list' ? (
             <TripList
               tripItems={tripItems}
               editingItem={editingItem}
@@ -507,17 +525,23 @@ function App() {
               handleSaveEdit={handleSaveEdit}
               loadingInitialData={loadingInitialData}
             />
+          ) : ( // viewMode === 'form'
+            <TripForm
+              newItem={editingItem || newItem} // Use editingItem if present, else newItem
+              handleInputChange={handleInputChange}
+              onAddItem={handleAddItem} // This will now be used for adding
+              onSaveEdit={handleSaveEdit} // New prop for saving edits
+              onCancelEdit={() => { // New prop for canceling edits
+                setEditingItem(null);
+                setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
+                setViewMode('table'); // Go back to table view
+              }}
+              openModal={openModal}
+              isEditing={!!editingItem} // Pass a flag to indicate edit mode
+            />
           )
         )}
         
-        {/* Add New Item Form - Moved to bottom */}
-        <TripForm
-          newItem={newItem}
-          handleInputChange={handleInputChange}
-          onAddItem={handleAddItem}
-          openModal={openModal}
-        />
-
         {/* Version number display */}
         <div className="text-center text-xs text-gray-400 mt-8">
           Version: {version}
