@@ -7,6 +7,7 @@ import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, de
 import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
 import TripForm from './TripForm'; // Import the new TripForm component
 import TripList from './TripList'; // Import the new TripList component
+import TripTable from './TripTable'; // Import the new TripTable component
 
 function App() {
   const [tripItems, setTripItems] = useState([]);
@@ -25,6 +26,7 @@ function App() {
   // eslint-disable-next-line no-unused-vars
   const [version, setVersion] = useState('1.0.0');
   const [appIdentifier, setAppIdentifier] = useState('default-app-id');
+  const [viewMode, setViewMode] = useState('table'); // New state for view mode: 'table' or 'list'
 
   // New states for authentication UI
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -35,11 +37,10 @@ function App() {
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
-    // Determine Firebase config based on environment
     let firebaseConfig = {};
     let tempAppIdentifier = 'default-app-id';
 
-    // Check for Canvas environment variables first (for local dev/testing in Canvas)
+    // Check for Canvas environment variables first
     // eslint-disable-next-line no-undef
     if (typeof __firebase_config !== 'undefined' && typeof __app_id !== 'undefined') {
       try {
@@ -52,7 +53,6 @@ function App() {
         console.error("Error parsing Canvas __firebase_config:", e);
       }
     } else {
-      // Fallback for Netlify/production environment variables
       console.log("Using Netlify/production environment variables for Firebase config.");
       firebaseConfig = {
         apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -465,7 +465,52 @@ function App() {
           </div>
         )}
 
-        {/* Add New Item Form */}
+        {/* View Mode Toggle */}
+        <div className="flex justify-center space-x-4 mb-6">
+          <button
+            onClick={() => setViewMode('table')}
+            className={`px-6 py-2 rounded-full font-semibold transition duration-300 ${
+              viewMode === 'table' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Table View
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-6 py-2 rounded-full font-semibold transition duration-300 ${
+              viewMode === 'list' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            List View
+          </button>
+        </div>
+
+        {/* Trip Items Display */}
+        <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Your Trip Itinerary</h2>
+        {tripItems.length === 0 && !loadingInitialData ? (
+          <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
+        ) : (
+          viewMode === 'table' ? (
+            <TripTable
+              tripItems={tripItems}
+              handleEditClick={handleEditClick}
+              handleDeleteItem={handleDeleteItem}
+              loadingInitialData={loadingInitialData}
+            />
+          ) : (
+            <TripList
+              tripItems={tripItems}
+              editingItem={editingItem}
+              handleEditClick={handleEditClick}
+              handleDeleteItem={handleDeleteItem}
+              handleInputChange={handleInputChange}
+              handleSaveEdit={handleSaveEdit}
+              loadingInitialData={loadingInitialData}
+            />
+          )
+        )}
+        
+        {/* Add New Item Form - Moved to bottom */}
         <TripForm
           newItem={newItem}
           handleInputChange={handleInputChange}
@@ -473,21 +518,6 @@ function App() {
           openModal={openModal}
         />
 
-        {/* Trip Items List */}
-        <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Your Trip Itinerary</h2>
-        {tripItems.length === 0 && !loadingInitialData ? (
-          <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
-        ) : (
-          <TripList
-            tripItems={tripItems}
-            editingItem={editingItem}
-            handleEditClick={handleEditClick}
-            handleDeleteItem={handleDeleteItem}
-            handleInputChange={handleInputChange}
-            handleSaveEdit={handleSaveEdit}
-            loadingInitialData={loadingInitialData}
-          />
-        )}
         {/* Version number display */}
         <div className="text-center text-xs text-gray-400 mt-8">
           Version: {version}
