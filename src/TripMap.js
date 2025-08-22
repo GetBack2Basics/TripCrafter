@@ -4,7 +4,7 @@ function TripMap({ tripItems, loadingInitialData }) {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [mapError, setMapError] = useState('');
-  const [geocodedLocations, setGeocodedLocations] = useState([]);
+  // Removed geocodedLocations state as it was not being used for rendering
   const directionsRendererRef = useRef(null); // Ref for DirectionsRenderer
 
   // Load Google Maps API script and initialize map
@@ -48,7 +48,7 @@ function TripMap({ tripItems, loadingInitialData }) {
         document.head.removeChild(script);
       }
     };
-  }, [map]);
+  }, [map]); // Re-run if map state changes
 
   const initMap = (mapId) => {
     if (mapRef.current && window.google) {
@@ -71,8 +71,8 @@ function TripMap({ tripItems, loadingInitialData }) {
 
     const geocoder = new window.google.maps.Geocoder();
     const directionsService = new window.google.maps.DirectionsService();
-    const newGeocodedLocations = [];
     const markers = []; // To hold markers for cleanup
+    const validLocations = []; // To hold successfully geocoded locations for routing
 
     const processTrip = async () => {
       for (const item of tripItems) {
@@ -85,13 +85,13 @@ function TripMap({ tripItems, loadingInitialData }) {
                 resolve(results[0].geometry.location);
               } else {
                 console.warn(`Geocoding failed for ${item.location}: ${status}`);
-                resolve(null); // Resolve with null if geocoding fails
+                resolve(null);
               }
             });
           });
 
           if (geocodeResult) {
-            newGeocodedLocations.push({ ...item, latLng: geocodeResult });
+            validLocations.push({ ...item, latLng: geocodeResult });
 
             // Add marker
             const marker = new window.google.maps.Marker({
@@ -106,17 +106,17 @@ function TripMap({ tripItems, loadingInitialData }) {
           console.error("Error during geocoding:", error);
         }
       }
-      setGeocodedLocations(newGeocodedLocations);
+      // setGeocodedLocations(validLocations); // This state is no longer needed
 
-      // Draw routes if there are at least two geocoded locations
-      if (newGeocodedLocations.length > 1) {
-        const waypoints = newGeocodedLocations.slice(1, -1).map(loc => ({
+      // Draw routes if there are at least two valid locations
+      if (validLocations.length > 1) {
+        const waypoints = validLocations.slice(1, -1).map(loc => ({
           location: loc.latLng,
           stopover: true,
         }));
 
-        const origin = newGeocodedLocations[0].latLng;
-        const destination = newGeocodedLocations[newGeocodedLocations.length - 1].latLng;
+        const origin = validLocations[0].latLng;
+        const destination = validLocations[validLocations.length - 1].latLng;
 
         directionsService.route(
           {
@@ -142,9 +142,8 @@ function TripMap({ tripItems, loadingInitialData }) {
             }
           }
         );
-      } else if (newGeocodedLocations.length === 1) {
-        // If only one location, center map on it
-        map.setCenter(newGeocodedLocations[0].latLng);
+      } else if (validLocations.length === 1) {
+        map.setCenter(validLocations[0].latLng);
         map.setZoom(10);
       }
     };
@@ -158,7 +157,7 @@ function TripMap({ tripItems, loadingInitialData }) {
         directionsRendererRef.current.setDirections({ routes: [] }); // Clear directions
       }
     };
-  }, [map, tripItems, loadingInitialData]); // Re-run when map or tripItems change
+  }, [map, tripItems, loadingInitialData]);
 
   if (mapError) {
     return (
