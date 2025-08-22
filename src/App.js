@@ -28,13 +28,13 @@ function App() {
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState(''); // Semicolon added here
+  const [authError, setAuthError] = useState('');
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
     // Determine Firebase config based on environment
     let firebaseConfig = {};
-    let currentAppId = 'default-app-id'; // Fallback for appId
+    let resolvedAppId = 'default-app-id'; // Use a distinct name to avoid conflict with outer scope currentAppId
 
     // Check for Canvas environment variables first (for local dev/testing in Canvas)
     // eslint-disable-next-line no-undef
@@ -43,7 +43,7 @@ function App() {
         // eslint-disable-next-line no-undef
         firebaseConfig = JSON.parse(__firebase_config);
         // eslint-disable-next-line no-undef
-        currentAppId = __app_id;
+        resolvedAppId = __app_id;
         console.log("Using Canvas-provided Firebase config.");
       } catch (e) {
         console.error("Error parsing Canvas __firebase_config:", e);
@@ -61,7 +61,7 @@ function App() {
         measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
       };
       // For Netlify, the appId needs to be consistent, can use projectId as a base
-      currentAppId = process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id';
+      resolvedAppId = process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id';
     }
 
     // Check if Firebase config is valid before initializing
@@ -122,8 +122,8 @@ function App() {
     const initializeTrip = async () => {
       console.log("Attempting to initialize trip data...");
       setLoadingInitialData(true);
-      // eslint-disable-next-line no-undef
-      const tripsCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips`);
+      // Use resolvedAppId here
+      const tripsCollectionRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips`);
       const q = query(tripsCollectionRef);
 
       const tripsSnapshot = await getDocs(q);
@@ -165,8 +165,8 @@ function App() {
   useEffect(() => {
     if (db && currentTripId) {
       console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
-      // eslint-disable-next-line no-undef
-      const itineraryRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
+      // Use resolvedAppId here
+      const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`);
       const q = query(itineraryRef);
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -278,8 +278,8 @@ function App() {
       return;
     }
 
-    // eslint-disable-next-line no-undef
-    const itineraryCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
+    // Use resolvedAppId here
+    const itineraryCollectionRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`);
     const newItemRef = doc(itineraryCollectionRef);
     const itemToAdd = { ...newItem, id: newItemRef.id };
 
@@ -308,8 +308,8 @@ function App() {
     }
 
     try {
-      // eslint-disable-next-line no-undef
-      const docRef = doc(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
+      // Use resolvedAppId here
+      const docRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
       await updateDoc(docRef, editingItem);
       setEditingItem(null);
       openModal('Trip item updated successfully!');
@@ -326,8 +326,8 @@ function App() {
         return;
       }
       try {
-        // eslint-disable-next-line no-undef
-        const docRef = doc(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`, id);
+        // Use resolvedAppId here
+        const docRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`, id);
         await deleteDoc(docRef);
         openModal('Trip item deleted successfully!');
       } catch (error) {
