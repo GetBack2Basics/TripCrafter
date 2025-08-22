@@ -5,6 +5,7 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
 // eslint-disable-next-line no-unused-vars
 import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
+import TripForm from './TripForm'; // Import the new TripForm component
 
 function App() {
   const [tripItems, setTripItems] = useState([]);
@@ -22,7 +23,7 @@ function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const [version, setVersion] = useState('1.0.0');
-  const [appIdentifier, setAppIdentifier] = useState('default-app-id'); // New state for app identifier
+  const [appIdentifier, setAppIdentifier] = useState('default-app-id');
 
   // New states for authentication UI
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -35,15 +36,7 @@ function App() {
   useEffect(() => {
     // Determine Firebase config based on environment
     let firebaseConfig = {};
-    let tempAppIdentifier = 'default-app-id'; // Temporary variable for logic within this useEffect
-
-    // Debugging: Log environment variables
-    console.log("--- Environment Variables Check ---");
-    console.log("REACT_APP_FIREBASE_API_KEY:", process.env.REACT_APP_FIREBASE_API_KEY ? "SET" : "NOT SET");
-    console.log("REACT_APP_FIREBASE_PROJECT_ID:", process.env.REACT_APP_FIREBASE_PROJECT_ID ? "SET" : "NOT SET");
-    console.log("REACT_APP_FIREBASE_AUTH_DOMAIN:", process.env.REACT_APP_FIREBASE_AUTH_DOMAIN ? "SET" : "NOT SET");
-    console.log("--- End Environment Variables Check ---");
-
+    let tempAppIdentifier = 'default-app-id';
 
     // Check for Canvas environment variables first (for local dev/testing in Canvas)
     // eslint-disable-next-line no-undef
@@ -67,15 +60,13 @@ function App() {
         storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
         messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
         appId: process.env.REACT_APP_FIREBASE_APP_ID,
-        measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
+        measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
       };
-      // For Netlify, the appId needs to be consistent, can use projectId as a base
       tempAppIdentifier = process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id';
     }
 
-    setAppIdentifier(tempAppIdentifier); // Set the state variable here
+    setAppIdentifier(tempAppIdentifier);
 
-    // Check if Firebase config is valid before initializing
     if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey && firebaseConfig.projectId) {
       console.log("Firebase config found. Initializing app...");
       const app = initializeApp(firebaseConfig);
@@ -93,7 +84,7 @@ function App() {
         } else {
           console.log("onAuthStateChanged: No user signed in. Attempting anonymous sign-in...");
           try {
-            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+            await new Promise(resolve => setTimeout(resolve, 100));
             // eslint-disable-next-line no-undef
             if (typeof __initial_auth_token !== 'undefined') {
               // eslint-disable-next-line no-undef
@@ -122,10 +113,10 @@ function App() {
       setLoadingInitialData(false);
       setIsAuthReady(true);
     }
-  }, []); // Run only once on component mount
+  }, []);
 
   useEffect(() => {
-    if (!db || !userId || !isAuthReady || !auth || !appIdentifier) { // Added appIdentifier to check
+    if (!db || !userId || !isAuthReady || !auth || !appIdentifier) {
       console.log("initializeTrip useEffect skipped: db, userId, isAuthReady, auth, or appIdentifier not ready.", { db: !!db, userId: !!userId, isAuthReady, auth: !!auth, appIdentifier: !!appIdentifier });
       return;
     }
@@ -133,7 +124,6 @@ function App() {
     const initializeTrip = async () => {
       console.log("Attempting to initialize trip data...");
       setLoadingInitialData(true);
-      // Use appIdentifier here
       const tripsCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips`);
       const q = query(tripsCollectionRef);
 
@@ -171,12 +161,11 @@ function App() {
     if (!currentTripId) {
       initializeTrip();
     }
-  }, [db, userId, isAuthReady, auth, currentTripId, appIdentifier]); // Added appIdentifier to dependencies
+  }, [db, userId, isAuthReady, auth, currentTripId, appIdentifier]);
 
   useEffect(() => {
-    if (db && currentTripId && appIdentifier) { // Added appIdentifier to check
+    if (db && currentTripId && appIdentifier) {
       console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
-      // Use appIdentifier here
       const itineraryRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
       const q = query(itineraryRef);
 
@@ -198,7 +187,7 @@ function App() {
     } else {
       console.log("Itinerary useEffect skipped: db, currentTripId, or appIdentifier not ready.", { db: !!db, currentTripId: !!currentTripId, appIdentifier: !!appIdentifier });
     }
-  }, [db, currentTripId, appIdentifier]); // Added appIdentifier to dependencies
+  }, [db, currentTripId, appIdentifier]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -289,7 +278,6 @@ function App() {
       return;
     }
 
-    // Use appIdentifier here
     const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
     const newItemRef = doc(itineraryCollectionRef);
     const itemToAdd = { ...newItem, id: newItemRef.id };
@@ -319,7 +307,6 @@ function App() {
     }
 
     try {
-      // Use appIdentifier here
       const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
       await updateDoc(docRef, editingItem);
       setEditingItem(null);
@@ -337,7 +324,6 @@ function App() {
         return;
       }
       try {
-        // Use appIdentifier here
         const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, id);
         await deleteDoc(docRef);
         openModal('Trip item deleted successfully!');
@@ -479,75 +465,12 @@ function App() {
         )}
 
         {/* Add New Item Form */}
-        <div className="mb-8 p-6 bg-blue-50 rounded-lg shadow-inner">
-          <h2 className="text-2xl font-semibold text-indigo-600 mb-4">Add New Trip Item</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <input
-              type="date"
-              name="date"
-              value={newItem.date}
-              onChange={handleInputChange}
-              placeholder="Date"
-              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-            <input
-              type="text"
-              name="location"
-              value={newItem.location}
-              onChange={handleInputChange}
-              placeholder="Location"
-              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-            <input
-              type="text"
-              name="accommodation"
-              value={newItem.accommodation}
-              onChange={handleInputChange}
-              placeholder="Accommodation"
-              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-            <select
-              name="status"
-              value={newItem.status}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            >
-              <option value="Unconfirmed">Unconfirmed</option>
-              <option value="Booked">Booked</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-            <input
-              type="text"
-              name="travelTime"
-              value={newItem.travelTime}
-              onChange={handleInputChange}
-              placeholder="Est. Travel Time (e.g., 2h 30m)"
-              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-            <input
-              type="text"
-              name="activities"
-              value={newItem.activities}
-              onChange={handleInputChange}
-              placeholder="Activities for the day"
-              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-            <textarea
-              name="notes"
-              value={newItem.notes}
-              onChange={handleInputChange}
-              placeholder="Notes (e.g., guest details)"
-              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 col-span-1 md:col-span-2 lg:col-span-3"
-              rows="2"
-            ></textarea>
-          </div>
-          <button
-            onClick={handleAddItem}
-            className="mt-6 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-400"
-          >
-            Add Trip Item
-          </button>
-        </div>
+        <TripForm
+          newItem={newItem}
+          handleInputChange={handleInputChange}
+          onAddItem={handleAddItem}
+          openModal={openModal}
+        />
 
         {/* Trip Items List */}
         <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Your Trip Itinerary</h2>
