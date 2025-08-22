@@ -88,7 +88,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
     } else {
       console.log("Map instance initialization useEffect skipped:", { mapLoaded, mapRefCurrent: !!mapRef.current, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
     }
-  }, [mapLoaded, map, mapRef]); // Dependencies: mapLoaded, map state, and mapRef
+  }, [mapLoaded, map, mapRef.current]); // Crucial change: depend on mapRef.current directly
 
   // Effect to geocode locations and draw routes
   useEffect(() => {
@@ -225,7 +225,9 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
 
   if (loadingInitialData || !mapLoaded || !map) {
     return (
-      <div className="text-center text-gray-500 text-xl py-8">Loading map...</div>
+      <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-inner overflow-hidden flex items-center justify-center">
+        <div className="text-center text-gray-500 text-xl py-8">Loading map...</div>
+      </div>
     );
   }
 
