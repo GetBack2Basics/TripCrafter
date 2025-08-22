@@ -1,29 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitialData }) {
+  const [expandedRowId, setExpandedRowId] = useState(null); // State to track which row is expanded
+
   if (tripItems.length === 0 && !loadingInitialData) {
     return (
       <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
     );
   }
 
-  // Helper function to format date
-  const formatDate = (dateString) => {
-    const options = { weekday: 'short', day: 'numeric' };
+  // Helper function to format date: DayofWeek-Day (e.g., Tue-29)
+  // To show month if it changes, we'd need to compare with the previous item's date.
+  // For now, it formats each date independently.
+  const formatDate = (dateString, showMonth = false) => {
     const date = new Date(dateString);
-    // Check if month changes from previous item to include month
-    // This logic would ideally be done in App.js or a data processing utility
-    // For now, we'll just format each date independently.
+    const options = { weekday: 'short', day: 'numeric' };
+    if (showMonth) {
+      options.month = 'short';
+    }
     return date.toLocaleDateString('en-AU', options);
   };
 
-  // Helper component for truncated text with tooltip
-  const TruncatedText = ({ text, maxLength = 50 }) => {
-    const [showTooltip, setShowTooltip] = React.useState(false);
+  // Helper component for truncated text with tooltip, now more flexible
+  const TruncatedText = ({ text, maxLength = 30, fullWidth = false }) => {
+    const [showTooltip, setShowTooltip] = useState(false);
 
     if (!text) return null;
 
-    if (text.length <= maxLength) {
+    // If fullWidth is true, don't truncate and don't show tooltip
+    if (fullWidth || text.length <= maxLength) {
       return <span>{text}</span>;
     }
 
@@ -32,7 +37,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
         <span
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
-          className="cursor-help overflow-hidden text-ellipsis whitespace-nowrap block max-w-[150px] md:max-w-none"
+          className="cursor-help overflow-hidden text-ellipsis whitespace-nowrap block max-w-full" // max-w-full to allow container to control width
         >
           {text.substring(0, maxLength)}...
         </span>
@@ -45,77 +50,109 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
     );
   };
 
+  const toggleRowExpansion = (id) => {
+    setExpandedRowId(expandedRowId === id ? null : id);
+  };
+
   return (
     <div className="overflow-x-auto bg-white shadow-md rounded-lg p-4">
       {/* Font Awesome CDN for icons */}
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" xintegrity="sha512-iBBXm8fW90+nuLcSKlbmrPcLa0OT92xO1BIsZ+ywDWZCvqsWgccV3gFoRBv0z+8dLJgyAHIhR35VZc2oM/gI1w==" crossOrigin="anonymous" referrerPolicy="no-referrer" />
 
-      {/* Responsive table structure */}
-      <div className="hidden md:block"> {/* Desktop Table View */}
+      {/* Desktop Table View */}
+      <div className="hidden md:block">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-indigo-50">
             <tr>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-1/12 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Date
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-2/12 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Location
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-2/12 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Accommodation
               </th>
-              {/* Removed Status column */}
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Est. Travel Time
+              <th scope="col" className="w-1/12 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-2/12 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Activities
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-2/12 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Notes
               </th>
-              <th scope="col" className="relative px-4 py-3">
+              <th scope="col" className="w-1/12 relative px-4 py-3">
                 <span className="sr-only">Actions</span>
+              </th>
+              <th scope="col" className="w-auto relative px-4 py-3">
+                {/* Empty header for expand toggle */}
               </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {tripItems.map((item, index) => (
-              <tr key={item.id} className={item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''}>
-                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {formatDate(item.date)}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                  <TruncatedText text={item.location} maxLength={30} />
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                  <TruncatedText text={item.accommodation} maxLength={30} />
-                </td>
-                {/* Status is now indicated by row color */}
-                <td className="px-4 py-3 text-sm text-gray-700">
-                  <TruncatedText text={item.travelTime} maxLength={20} /> {/* Increased maxLength */}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-700">
-                  <TruncatedText text={item.activities} maxLength={50} />
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-700">
-                  <TruncatedText text={item.notes} maxLength={50} />
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                  <button
-                    onClick={() => handleEditClick(item)}
-                    className="text-indigo-600 hover:text-indigo-900 mr-3"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteItem(item.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
+              <React.Fragment key={item.id}>
+                <tr className={`${item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''} hover:bg-gray-100`}>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {formatDate(item.date)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    <TruncatedText text={item.location} maxLength={40} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    <TruncatedText text={item.accommodation} maxLength={40} />
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center text-sm">
+                    {item.status === 'Booked' && <i className="fas fa-check-circle text-green-500 text-lg" title="Booked"></i>}
+                    {item.status === 'Unconfirmed' && <i className="fas fa-exclamation-triangle text-yellow-500 text-lg" title="Unconfirmed"></i>}
+                    {item.status === 'Cancelled' && <i className="fas fa-times-circle text-red-500 text-lg" title="Cancelled"></i>}
+                    {item.status === 'Not booked' && <i className="fas fa-question-circle text-gray-500 text-lg" title="Not booked"></i>}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    <TruncatedText text={item.activities} maxLength={50} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    <TruncatedText text={item.notes} maxLength={50} />
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={() => handleEditClick(item)}
+                      className="text-indigo-600 hover:text-indigo-900 mr-3"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteItem(item.id)}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    <button onClick={() => toggleRowExpansion(item.id)} className="text-gray-500 hover:text-gray-700">
+                      <i className={`fas ${expandedRowId === item.id ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                    </button>
+                  </td>
+                </tr>
+                {expandedRowId === item.id && (
+                  <tr className={`${item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''} border-t border-gray-200`}>
+                    <td colSpan="8" className="px-4 py-3 text-sm text-gray-700">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {item.travelTime && (
+                          <div><span className="font-medium">Est. Travel Time:</span> <TruncatedText text={item.travelTime} fullWidth={true} /></div>
+                        )}
+                        {item.activities && (
+                          <div><span className="font-medium">Activities:</span> <TruncatedText text={item.activities} fullWidth={true} /></div>
+                        )}
+                        {item.notes && (
+                          <div><span className="font-medium">Notes:</span> <TruncatedText text={item.notes} fullWidth={true} /></div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -126,28 +163,27 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
         {tripItems.map((item) => (
           <div key={item.id} className={`shadow-md rounded-lg p-4 border-t-4 ${item.status === 'Booked' ? 'border-green-500' : item.status === 'Unconfirmed' ? 'border-yellow-500' : item.status === 'Cancelled' ? 'border-red-500' : 'border-gray-300'}`}>
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-semibold text-gray-900">{formatDate(item.date)}</span>
-              {/* Status icon for mobile view */}
-              {item.status === 'Booked' && <i className="fas fa-check-circle text-green-500 text-lg"></i>}
-              {item.status === 'Unconfirmed' && <i className="fas fa-exclamation-triangle text-yellow-500 text-lg"></i>}
-              {item.status === 'Cancelled' && <i className="fas fa-times-circle text-red-500 text-lg"></i>}
-              {item.status === 'Not booked' && <i className="fas fa-question-circle text-gray-500 text-lg"></i>}
+              <span className="text-sm font-semibold text-gray-900">{formatDate(item.date, true)}</span> {/* Show month on mobile */}
+              {item.status === 'Booked' && <i className="fas fa-check-circle text-green-500 text-lg" title="Booked"></i>}
+              {item.status === 'Unconfirmed' && <i className="fas fa-exclamation-triangle text-yellow-500 text-lg" title="Unconfirmed"></i>}
+              {item.status === 'Cancelled' && <i className="fas fa-times-circle text-red-500 text-lg" title="Cancelled"></i>}
+              {item.status === 'Not booked' && <i className="fas fa-question-circle text-gray-500 text-lg" title="Not booked"></i>}
             </div>
             <h3 className="text-lg font-bold text-indigo-800 mb-1">{item.location}</h3>
             <p className="text-sm text-gray-700 mb-2">{item.accommodation}</p>
             {item.travelTime && (
               <p className="text-xs text-gray-600 mb-1">
-                <span className="font-medium">Est. Travel Time:</span> <TruncatedText text={item.travelTime} maxLength={40} />
+                <span className="font-medium">Est. Travel Time:</span> <TruncatedText text={item.travelTime} maxLength={60} />
               </p>
             )}
             {item.activities && (
               <p className="text-xs text-gray-600 mb-1">
-                <span className="font-medium">Activities:</span> <TruncatedText text={item.activities} maxLength={80} />
+                <span className="font-medium">Activities:</span> <TruncatedText text={item.activities} maxLength={100} />
               </p>
             )}
             {item.notes && (
               <p className="text-xs text-gray-600 mb-2">
-                <span className="font-medium">Notes:</span> <TruncatedText text={item.notes} maxLength={80} />
+                <span className="font-medium">Notes:</span> <TruncatedText text={item.notes} maxLength={100} />
               </p>
             )}
             <div className="flex justify-end space-x-2 mt-3">
