@@ -123,7 +123,7 @@ function App() {
       console.log("Attempting to initialize trip data...");
       setLoadingInitialData(true);
       // Use resolvedAppId here
-      const tripsCollectionRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips`);
+      const tripsCollectionRef = collection(db, `artifacts/${resolvedAppId}/public/data/trips`);
       const q = query(tripsCollectionRef);
 
       const tripsSnapshot = await getDocs(q);
@@ -166,7 +166,7 @@ function App() {
     if (db && currentTripId) {
       console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
       // Use resolvedAppId here
-      const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`);
+      const itineraryRef = collection(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`);
       const q = query(itineraryRef);
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -279,7 +279,7 @@ function App() {
     }
 
     // Use resolvedAppId here
-    const itineraryCollectionRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`);
+    const itineraryCollectionRef = collection(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`);
     const newItemRef = doc(itineraryCollectionRef);
     const itemToAdd = { ...newItem, id: newItemRef.id };
 
@@ -309,7 +309,7 @@ function App() {
 
     try {
       // Use resolvedAppId here
-      const docRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
+      const docRef = doc(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
       await updateDoc(docRef, editingItem);
       setEditingItem(null);
       openModal('Trip item updated successfully!');
@@ -327,7 +327,7 @@ function App() {
       }
       try {
         // Use resolvedAppId here
-        const docRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id'}/public/data/trips/${currentTripId}/itineraryItems`, id);
+        const docRef = doc(db, `artifacts/${resolvedAppId}/public/data/trips/${currentTripId}/itineraryItems`, id);
         await deleteDoc(docRef);
         openModal('Trip item deleted successfully!');
       } catch (error) {
