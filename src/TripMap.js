@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-// setLoadingInitialData needs to be destructured from props
 function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
@@ -26,7 +25,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
 
     // Check if Google Maps API is already loaded
     if (window.google && window.google.maps && !mapLoaded) {
-      console.log("Google Maps API already loaded.");
+      console.log("Google Maps API already loaded (from window.google check).");
       setMapLoaded(true);
       return;
     }
@@ -55,20 +54,20 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
     }
 
     return () => {
-      // Cleanup script if component unmounts
       const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
       if (existingScript && document.head.contains(existingScript)) {
         document.head.removeChild(existingScript);
         console.log("Google Maps script removed on component unmount.");
       }
-      delete window.initGoogleMaps; // Clean up global callback
+      delete window.initGoogleMaps;
     };
   }, [mapLoaded]);
 
   // Effect to initialize the map once the API is loaded and ref is ready
   useEffect(() => {
+    // Only proceed if map API is loaded, mapRef is current, window.google.maps is available, and map hasn't been set yet
     if (mapLoaded && mapRef.current && window.google && window.google.maps && !map) {
-      console.log("Initializing map...");
+      console.log("Attempting to initialize the Google Map instance...");
       const mapId = process.env.REACT_APP_GOOGLE_MAPS_MAP_ID;
       try {
         const defaultCenter = { lat: -41.6401, lng: 146.3159 }; // Center of Tasmania
@@ -81,15 +80,15 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
         setMapError('');
         directionsRendererRef.current = new window.google.maps.DirectionsRenderer();
         directionsRendererRef.current.setMap(newMap);
-        console.log("Map initialized successfully.");
+        console.log("Google Map instance initialized successfully.");
       } catch (error) {
         setMapError(`Failed to initialize map: ${error.message}`);
-        console.error("Map initialization error:", error);
+        console.error("Map instance initialization error:", error);
       }
     } else {
-      console.log("Map initialization useEffect skipped:", { mapLoaded, mapRefCurrent: !!mapRef.current, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
+      console.log("Map instance initialization useEffect skipped:", { mapLoaded, mapRefCurrent: !!mapRef.current, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
     }
-  }, [mapLoaded, map, mapRef]);
+  }, [mapLoaded, map, mapRef]); // Dependencies: mapLoaded, map state, and mapRef
 
   // Effect to geocode locations and draw routes
   useEffect(() => {
@@ -102,7 +101,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
     const directionsService = new window.google.maps.DirectionsService();
     const markers = [];
     const validLocations = [];
-    const bounds = new window.google.maps.LatLngBounds(); // To fit all markers and route on map
+    const bounds = new window.google.maps.LatLngBounds();
 
     const processTrip = async () => {
       console.log("Starting geocoding and routing process...");
@@ -126,9 +125,8 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
 
           if (geocodeResult) {
             validLocations.push({ ...item, latLng: geocodeResult });
-            bounds.extend(geocodeResult); // Extend bounds for each valid location
+            bounds.extend(geocodeResult);
 
-            // Add marker
             const marker = new window.google.maps.Marker({
               position: geocodeResult,
               map: map,
@@ -137,7 +135,6 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
             });
             markers.push(marker);
 
-            // Add Info Window
             const infoWindow = new window.google.maps.InfoWindow({
               content: `
                 <div class="p-2">
@@ -159,7 +156,6 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
         }
       }
 
-      // Draw routes if there are at least two valid locations
       if (validLocations.length > 1) {
         console.log("Drawing route between valid locations...");
         const waypoints = validLocations.slice(1, -1).map(loc => ({
@@ -183,20 +179,13 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
               const route = response.routes[0];
               let totalDuration = 0;
               for (let i = 0; i < route.legs.length; i++) {
-                totalDuration += route.legs[i].duration.value; // duration in seconds
-                // Update individual trip item travel time in Firestore
-                // This is a more complex operation, requires matching legs to tripItems
-                // For now, we'll just log the duration for each leg
+                totalDuration += route.legs[i].duration.value;
                 const legDurationMinutes = Math.round(route.legs[i].duration.value / 60);
                 console.log(`Leg ${i + 1} (${route.legs[i].start_address} to ${route.legs[i].end_address}): ${legDurationMinutes} minutes`);
-
-                // TODO: Store this leg duration back to the corresponding trip item in Firestore
-                // This would require a more sophisticated matching logic and Firestore update calls.
               }
               const totalDurationMinutes = Math.round(totalDuration / 60);
               console.log(`Total estimated travel time for the entire trip: ${totalDurationMinutes} minutes`);
 
-              // Fit map to route bounds
               map.fitBounds(route.bounds);
             } else {
               console.error("Directions request failed:", status);
@@ -209,16 +198,14 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
         map.setZoom(10);
       } else {
         console.log("No valid locations to draw route or markers.");
-        // If no locations, ensure map is centered on Tasmania
         map.setCenter({ lat: -41.6401, lng: 146.3159 });
         map.setZoom(8);
       }
-      setLoadingInitialData(false); // Ensure loading is false after map processing
+      setLoadingInitialData(false);
     };
 
     processTrip();
 
-    // Cleanup function for markers and directions
     return () => {
       markers.forEach(marker => marker.setMap(null));
       if (directionsRendererRef.current) {
@@ -226,7 +213,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
       }
       console.log("Map markers and directions cleaned up.");
     };
-  }, [map, tripItems, loadingInitialData, mapLoaded, setLoadingInitialData]); // Added setLoadingInitialData to dependencies
+  }, [map, tripItems, loadingInitialData, mapLoaded, setLoadingInitialData]);
 
   if (mapError) {
     return (
@@ -236,7 +223,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
     );
   }
 
-  if (loadingInitialData || !mapLoaded || !map) { // Check mapLoaded here
+  if (loadingInitialData || !mapLoaded || !map) {
     return (
       <div className="text-center text-gray-500 text-xl py-8">Loading map...</div>
     );
