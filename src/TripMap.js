@@ -1,11 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
-  const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [mapError, setMapError] = useState('');
   const [mapLoaded, setMapLoaded] = useState(false);
   const directionsRendererRef = useRef(null);
+  const [mapContainerEl, setMapContainerEl] = useState(null); // New state to hold the map container DOM element
+
+  // Callback ref to get the actual DOM node
+  const setRef = useCallback(node => {
+    if (node) {
+      setMapContainerEl(node);
+      console.log("mapRef.current (via useCallback) is now available:", node);
+    } else {
+      setMapContainerEl(null);
+      console.log("mapRef.current (via useCallback) is null (component unmounted or ref changed).");
+    }
+  }, []);
+
 
   // Load Google Maps API script
   useEffect(() => {
@@ -63,15 +75,15 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
     };
   }, [mapLoaded]);
 
-  // Effect to initialize the map once the API is loaded and ref is ready
+  // Effect to initialize the map once the API is loaded and mapContainerEl is ready
   useEffect(() => {
-    // Only proceed if map API is loaded, mapRef is current, window.google.maps is available, and map hasn't been set yet
-    if (mapLoaded && mapRef.current && window.google && window.google.maps && !map) {
+    // Only proceed if map API is loaded, mapContainerEl is available, window.google.maps is available, and map hasn't been set yet
+    if (mapLoaded && mapContainerEl && window.google && window.google.maps && !map) {
       console.log("Attempting to initialize the Google Map instance...");
       const mapId = process.env.REACT_APP_GOOGLE_MAPS_MAP_ID;
       try {
         const defaultCenter = { lat: -41.6401, lng: 146.3159 }; // Center of Tasmania
-        const newMap = new window.google.maps.Map(mapRef.current, {
+        const newMap = new window.google.maps.Map(mapContainerEl, { // Use mapContainerEl here
           center: defaultCenter,
           zoom: 8,
           mapId: mapId,
@@ -86,9 +98,9 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
         console.error("Map instance initialization error:", error);
       }
     } else {
-      console.log("Map instance initialization useEffect skipped:", { mapLoaded, mapRefCurrent: !!mapRef.current, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
+      console.log("Map instance initialization useEffect skipped:", { mapLoaded, mapContainerEl: !!mapContainerEl, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
     }
-  }, [mapLoaded, map, mapRef]);
+  }, [mapLoaded, map, mapContainerEl]); // Depend on mapContainerEl
 
   // Effect to geocode locations and draw routes
   useEffect(() => {
@@ -242,7 +254,7 @@ function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
 
   return (
     <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-inner overflow-hidden">
-      <div ref={mapRef} className="w-full h-full" aria-label="Trip Map">
+      <div ref={setRef} className="w-full h-full" aria-label="Trip Map"> {/* Use setRef here */}
         {/* Map will render here */}
       </div>
     </div>
