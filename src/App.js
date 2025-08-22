@@ -37,6 +37,14 @@ function App() {
     let firebaseConfig = {};
     let tempAppIdentifier = 'default-app-id'; // Temporary variable for logic within this useEffect
 
+    // Debugging: Log environment variables
+    console.log("--- Environment Variables Check ---");
+    console.log("REACT_APP_FIREBASE_API_KEY:", process.env.REACT_APP_FIREBASE_API_KEY ? "SET" : "NOT SET");
+    console.log("REACT_APP_FIREBASE_PROJECT_ID:", process.env.REACT_APP_FIREBASE_PROJECT_ID ? "SET" : "NOT SET");
+    console.log("REACT_APP_FIREBASE_AUTH_DOMAIN:", process.env.REACT_APP_FIREBASE_AUTH_DOMAIN ? "SET" : "NOT SET");
+    console.log("--- End Environment Variables Check ---");
+
+
     // Check for Canvas environment variables first (for local dev/testing in Canvas)
     // eslint-disable-next-line no-undef
     if (typeof __firebase_config !== 'undefined' && typeof __app_id !== 'undefined') {
