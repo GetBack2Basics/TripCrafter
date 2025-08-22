@@ -9,7 +9,7 @@ import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the
 function App() {
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null); // Keep auth state for direct use now
+  const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
   const [currentTripId, setCurrentTripId] = useState(null);
@@ -34,16 +34,25 @@ function App() {
   useEffect(() => {
     // eslint-disable-next-line no-undef, no-unused-vars
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    // eslint-disable-next-line no-undef
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    let firebaseConfig = {};
+    try {
+      // eslint-disable-next-line no-undef
+      firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+      if (Object.keys(firebaseConfig).length === 0) {
+        console.warn("Firebase config is empty after parsing. Check __firebase_config variable.");
+      }
+    } catch (e) {
+      console.error("Error parsing __firebase_config:", e);
+      firebaseConfig = {}; // Ensure it's an empty object if parsing fails
+    }
 
-    if (Object.keys(firebaseConfig).length > 0) {
-      console.log("Initializing Firebase app...");
+    if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey) {
+      console.log("Initializing Firebase app with provided config...");
       const app = initializeApp(firebaseConfig);
       const firestore = getFirestore(app);
       setDb(firestore);
       const firebaseAuth = getAuth(app);
-      setAuth(firebaseAuth); // Set auth state here
+      setAuth(firebaseAuth);
 
       console.log("Setting up onAuthStateChanged listener...");
       const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
@@ -54,10 +63,7 @@ function App() {
         } else {
           console.log("onAuthStateChanged: No user signed in. Attempting anonymous sign-in...");
           try {
-            // Give Firebase a tiny moment to fully initialize before anonymous sign-in
-            // This can sometimes help with timing issues
-            await new Promise(resolve => setTimeout(resolve, 100));
-
+            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
             // eslint-disable-next-line no-undef
             if (typeof __initial_auth_token !== 'undefined') {
               // eslint-disable-next-line no-undef
@@ -69,28 +75,26 @@ function App() {
             }
           } catch (error) {
             console.error("Error during anonymous sign-in:", error);
-            setUserId(crypto.randomUUID()); // Fallback if anonymous sign-in also fails
+            setUserId(crypto.randomUUID());
           }
         }
         console.log("Auth initialization complete. Setting isAuthReady to true.");
-        setIsAuthReady(true); // Auth is ready after the initial check, regardless of user status
+        setIsAuthReady(true);
       });
 
       return () => {
         console.log("Cleaning up onAuthStateChanged listener.");
-        unsubscribeAuth(); // Cleanup auth listener
+        unsubscribeAuth();
       };
     } else {
-      console.log("Firebase config not available, running without database persistence.");
+      console.error("Firebase config is invalid or missing API Key. Running without database persistence and authentication.");
       setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
       setLoadingInitialData(false);
-      setIsAuthReady(true); // Auth is "ready" as it's not being used
+      setIsAuthReady(true);
     }
-  }, []); // Run only once on component mount
+  }, []);
 
-  // Effect to manage initial trip creation and selection (runs AFTER auth is ready)
   useEffect(() => {
-    // Ensure db, userId, and auth are ready before proceeding
     if (!db || !userId || !isAuthReady || !auth) {
       console.log("initializeTrip useEffect skipped: db, userId, isAuthReady, or auth not ready.", { db: !!db, userId: !!userId, isAuthReady, auth: !!auth });
       return;
@@ -134,12 +138,11 @@ function App() {
       console.log("Trip initialization complete.");
     };
 
-    if (!currentTripId) { // Only initialize if no trip is currently selected
+    if (!currentTripId) {
       initializeTrip();
     }
-  }, [db, userId, isAuthReady, auth, currentTripId]); // Added auth to dependencies
+  }, [db, userId, isAuthReady, auth, currentTripId]);
 
-  // Fetch itinerary items for the selected trip
   useEffect(() => {
     if (db && currentTripId) {
       console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
@@ -200,25 +203,15 @@ function App() {
     e.preventDefault();
     setAuthError('');
     if (!auth) {
-      console.error("CRITICAL ERROR: Firebase Auth object is NULL when handleAuthSubmit was called.");
-      setAuthError("Authentication service not available. Please try refreshing the page.");
-      // Attempt to re-initialize auth if it's null, as a last resort.
-      // This should ideally not happen if useEffect runs correctly.
-      try {
-        // eslint-disable-next-line no-undef
-        const app = initializeApp(JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'));
-        setAuth(getAuth(app));
-        console.log("Attempted re-initialization of auth within handleAuthSubmit.");
-      } catch (initError) {
-        console.error("Failed to re-initialize auth within handleAuthSubmit:", initError);
-      }
+      console.error("CRITICAL ERROR: Firebase Auth object is NULL when handleAuthSubmit was called. This indicates a deeper initialization issue.");
+      setAuthError("Authentication service not available. Please try refreshing the page and ensure Firebase is configured correctly.");
       return;
     }
 
     console.log("Attempting authentication...");
     console.log("Mode:", isLoginMode ? "Login" : "Sign Up");
     console.log("Email:", email);
-    console.log("Password:", password ? "********" : "[empty]"); // Mask password in console
+    console.log("Password:", password ? "********" : "[empty]");
 
     try {
       if (isLoginMode) {
@@ -233,8 +226,8 @@ function App() {
       console.log("Authentication successful!");
     } catch (error) {
       console.error("Auth error caught:", error);
-      setAuthError(error.message); // Display Firebase error message to user
-      console.log("Firebase error code:", error.code); // Log Firebase specific error code
+      setAuthError(error.message);
+      console.log("Firebase error code:", error.code);
     }
   };
 
@@ -316,6 +309,1507 @@ function App() {
       try {
         // eslint-disable-next-line no-undef
         const docRef = doc(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`, id);
+        await deleteDoc(docRef);
+        openModal('Trip item deleted successfully!');
+      } catch (error) {
+        console.error("Error deleting document: ", error);
+        openModal('Error deleting trip item. Please try again.');
+      }
+    });
+  };
+
+  // Display loading screen until Firebase Auth is ready and initial trip is set
+  if (!isAuthReady || loadingInitialData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 flex items-center justify-center">
+        <div className="text-indigo-700 text-2xl font-semibold">Loading Trip Crafter...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 p-4 font-inter text-gray-800 flex justify-center items-center">
+      <div className="w-full max-w-4xl bg-white shadow-xl rounded-xl p-6 relative">
+        <h1 className="text-4xl font-bold text-center text-indigo-700 mb-8 tracking-wide">
+          Trip Crafter
+        </h1>
+
+        {/* Auth status and buttons */}
+        <div className="text-center text-sm text-gray-600 mb-6">
+          {userEmail ? (
+            <>
+              Logged in as: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userEmail}</span>
+              <button
+                onClick={handleLogout}
+                className="ml-4 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              You are currently anonymous.
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="ml-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Login / Sign Up
+              </button>
+            </>
+          )}
+          <br />
+          {userId && (
+            <span className="text-sm text-gray-600">Your User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span></span>
+          )}
+          {currentTripId && (
+            <span className="text-sm text-gray-600 ml-2">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
+          )}
+        </div>
+
+        {/* Authentication Modal */}
+        {showAuthModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+              <h2 className="text-2xl font-semibold text-indigo-600 mb-4 text-center">
+                {isLoginMode ? 'Login' : 'Sign Up'}
+              </h2>
+              <form onSubmit={handleAuthSubmit}>
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  required
+                />
+                {authError && <p className="text-red-500 text-sm mb-4">{authError}</p>}
+                <button
+                  type="submit"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  {isLoginMode ? 'Login' : 'Sign Up'}
+                </button>
+              </form>
+              <button
+                onClick={() => setIsLoginMode(!isLoginMode)}
+                className="w-full text-indigo-600 mt-4 text-sm hover:underline"
+              >
+                {isLoginMode ? 'Need an account? Sign Up' : 'Already have an account? Login'}
+              </button>
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className="w-full text-gray-500 mt-2 text-sm hover:underline"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Standard Modal for messages and confirmations */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+              <p className="text-lg text-center mb-6">{modalMessage}</p>
+              <div className="flex justify-around">
+                {modalConfirmAction ? (
+                  <>
+                    <button
+                      onClick={handleConfirmAction}
+                      className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={closeModal}
+                      className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={closeModal}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                  >
+                    OK
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add New Item Form */}
+        <div className="mb-8 p-6 bg-blue-50 rounded-lg shadow-inner">
+          <h2 className="text-2xl font-semibold text-indigo-600 mb-4">Add New Trip Item</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <input
+              type="date"
+              name="date"
+              value={newItem.date}
+              onChange={handleInputChange}
+              placeholder="Date"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <input
+              type="text"
+              name="location"
+              value={newItem.location}
+              onChange={handleInputChange}
+              placeholder="Location"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <input
+              type="text"
+              name="accommodation"
+              value={newItem.accommodation}
+              onChange={handleInputChange}
+              placeholder="Accommodation"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <select
+              name="status"
+              value={newItem.status}
+              onChange={handleInputChange}
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="Unconfirmed">Unconfirmed</option>
+              <option value="Booked">Booked</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <input
+              type="text"
+              name="travelTime"
+              value={newItem.travelTime}
+              onChange={handleInputChange}
+              placeholder="Est. Travel Time (e.g., 2h 30m)"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <input
+              type="text"
+              name="activities"
+              value={newItem.activities}
+              onChange={handleInputChange}
+              placeholder="Activities for the day"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <textarea
+              name="notes"
+              value={newItem.notes}
+              onChange={handleInputChange}
+              placeholder="Notes (e.g., guest details)"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 col-span-1 md:col-span-2 lg:col-span-3"
+              rows="2"
+            ></textarea>
+          </div>
+          <button
+            onClick={handleAddItem}
+            className="mt-6 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-400"
+          >
+            Add Trip Item
+          </button>
+        </div>
+
+        {/* Trip Items List */}
+        <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Your Trip Itinerary</h2>
+        {tripItems.length === 0 && !loadingInitialData ? (
+          <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
+        ) : (
+          <div className="space-y-6">
+            {tripItems.map((item) => (
+              <div key={item.id} className="bg-white p-6 rounded-lg shadow-md border-t-4 border-indigo-500">
+                {editingItem && editingItem.id === item.id ? (
+                  /* Edit Form */
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input
+                      type="date"
+                      name="date"
+                      value={editingItem.date}
+                      onChange={handleInputChange}
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      type="text"
+                      name="location"
+                      value={editingItem.location}
+                      onChange={handleInputChange}
+                      placeholder="Location"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      type="text"
+                      name="accommodation"
+                      value={editingItem.accommodation}
+                      onChange={handleInputChange}
+                      placeholder="Accommodation"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <select
+                      name="status"
+                      value={editingItem.status}
+                      onChange={handleInputChange}
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      <option value="Unconfirmed">Unconfirmed</option>
+                      <option value="Booked">Booked</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <input
+                      type="text"
+                      name="travelTime"
+                      value={editingItem.travelTime}
+                      onChange={handleInputChange}
+                      placeholder="Est. Travel Time"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      type="text"
+                      name="activities"
+                      value={editingItem.activities}
+                      onChange={handleInputChange}
+                      placeholder="Activities for the day"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <textarea
+                      name="notes"
+                      value={editingItem.notes}
+                      onChange={handleInputChange}
+                      placeholder="Notes"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 col-span-full"
+                      rows="2"
+                    ></textarea>
+                    <div className="flex justify-end space-x-2 mt-4 col-span-full">
+                      <button
+                        onClick={handleSaveEdit}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingItem(null)}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-full shadow-md transition duration-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Display Item */
+                  <>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="text-sm text-gray-500">{item.date}</p>
+                        <h3 className="text-xl font-semibold text-indigo-800 mb-1">{item.location}</h3>
+                        <p className="text-lg text-gray-700">{item.accommodation}</p>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          item.status === 'Booked' ? 'bg-green-100 text-green-800' :
+                          item.status === 'Unconfirmed' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </div>
+                    {item.travelTime && (
+                      <p className="text-md text-gray-600 mb-2">
+                        <span className="font-medium">Est. Travel Time:</span> {item.travelTime}
+                      </p>
+                    )}
+                    {item.activities && (
+                      <p className="text-md text-gray-600 mb-2">
+                        <span className="font-medium">Activities:</span> {item.activities}
+                      </p>
+                    )}
+                    {item.notes && (
+                      <p className="text-md text-gray-600 mb-4">{item.notes}</p>
+                    )}
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => handleEditClick(item)}
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteItem(item.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Version number display */}
+        <div className="text-center text-xs text-gray-400 mt-8">
+          Version: {version}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+```
+You're still getting the "Firebase Auth object is NULL when handleAuthSubmit was called" error, even with the recent changes. This is a tough one, but the console output is giving us the precise clues we need!
+
+The crucial part of your console output is:
+`Failed to re-initialize auth within handleAuthSubmit: FirebaseError: Firebase: Error (auth/invalid-api-key).`
+
+This error is happening in the fallback re-initialization logic *inside* `handleAuthSubmit` (which I had added as a last resort). The `auth/invalid-api-key` error means that the `firebaseConfig` being used at that specific moment is either missing the `apiKey` or has an incorrect one.
+
+This indicates that the `__firebase_config` global variable, which is supposed to be injected by the Canvas environment, is either **not available** or is **empty/malformed** when your app is running in the Netlify environment.
+
+---
+
+## The Root Cause: `__firebase_config` Not Being Injected by Netlify ❌
+
+The `__firebase_config` and `__app_id` variables are specific to the **Canvas environment** where I'm running. They are **not automatically available** when you deploy your React app to a generic hosting service like Netlify.
+
+When you deploy to Netlify, your app runs as a standard React application, and it doesn't have these special global variables. So, when your code tries to do `JSON.parse(__firebase_config)`, it's likely trying to parse an `undefined` or empty string, leading to an empty `firebaseConfig` object and thus the `auth/invalid-api-key` error.
+
+---
+
+## The Fix: Use Environment Variables for Firebase Config on Netlify ✅
+
+To make your Firebase integration work on Netlify, you need to provide your Firebase project's configuration details using **Netlify Environment Variables**. This is the standard and secure way to handle API keys and sensitive configuration in deployed applications.
+
+Here's how we'll fix this:
+
+### Step 1: Get Your Firebase Project Configuration 🔑
+
+1.  **Go to your Firebase Console:** [https://console.firebase.google.com/](https://console.firebase.google.com/)
+2.  **Select your "Trip Crafter" project.**
+3.  On the project overview page, click the **"Project settings"** gear icon (⚙️) next to "Project overview" in the left menu.
+4.  Go to the **"General"** tab.
+5.  Scroll down to the **"Your apps"** section.
+6.  If you haven't already, click the **"</>" web icon** to add a web app. Follow the steps, register your app (you can use "Trip Crafter Web" as the nickname), and then you'll see your Firebase SDK configuration.
+7.  **Copy the entire `firebaseConfig` object.** It will look something like this:
+    ```javascript
+    const firebaseConfig = {
+      apiKey: "AIzaSy...",
+      authDomain: "trip-crafter-8db5b.firebaseapp.com",
+      projectId: "trip-crafter-8db5b",
+      storageBucket: "trip-crafter-8db5b.appspot.com",
+      messagingSenderId: "...",
+      appId: "1:...",
+      measurementId: "G-..." // Optional
+    };
+    ```
+    **You need all the key-value pairs from this object.**
+
+### Step 2: Add Environment Variables to Netlify 🌐
+
+1.  **Go to your Netlify Dashboard:** [https://app.netlify.com/](https://app.netlify.com/)
+2.  **Select your "Trip Crafter" site.**
+3.  Go to **"Site settings"** (at the top).
+4.  In the left sidebar, navigate to **"Build & deploy"** -> **"Environment variables"**.
+5.  Click **"Add a variable"**.
+6.  You'll need to create a separate environment variable for *each* key-value pair from your `firebaseConfig`. For example:
+    * **Key:** `REACT_APP_FIREBASE_API_KEY`
+        **Value:** `AIzaSy...` (your actual API key)
+    * **Key:** `REACT_APP_FIREBASE_AUTH_DOMAIN`
+        **Value:** `trip-crafter-8db5b.firebaseapp.com`
+    * **Key:** `REACT_APP_FIREBASE_PROJECT_ID`
+        **Value:** `trip-crafter-8db5b`
+    * ... and so on for `storageBucket`, `messagingSenderId`, `appId`, `measurementId` (if present).
+
+    **Important Naming Convention:** For Create React App to automatically pick up environment variables at build time, they **must be prefixed with `REACT_APP_`**.
+
+### Step 3: Update `App.js` to Use Environment Variables 💻
+
+Now, we'll modify your `App.js` to read these environment variables instead of the Canvas-specific `__firebase_config`.
+
+
+```react
+/* global __app_id, __firebase_config, __initial_auth_token */
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+// eslint-disable-next-line no-unused-vars
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
+
+function App() {
+  const [tripItems, setTripItems] = useState([]);
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
+  const [currentTripId, setCurrentTripId] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
+  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalConfirmAction, setModalConfirmAction] = useState(null);
+  const [loadingInitialData, setLoadingInitialData] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [version, setVersion] = useState('1.0.0');
+
+  // New states for authentication UI
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Initialize Firebase and set up authentication listener
+  useEffect(() => {
+    // Determine Firebase config based on environment
+    let firebaseConfig = {};
+    let currentAppId = 'default-app-id'; // Fallback for appId
+
+    // Check for Canvas environment variables first
+    // eslint-disable-next-line no-undef
+    if (typeof __firebase_config !== 'undefined' && typeof __app_id !== 'undefined') {
+      try {
+        // eslint-disable-next-line no-undef
+        firebaseConfig = JSON.parse(__firebase_config);
+        // eslint-disable-next-line no-undef
+        currentAppId = __app_id;
+        console.log("Using Canvas-provided Firebase config.");
+      } catch (e) {
+        console.error("Error parsing Canvas __firebase_config:", e);
+      }
+    } else {
+      // Fallback for Netlify/production environment variables
+      console.log("Using Netlify/production environment variables for Firebase config.");
+      firebaseConfig = {
+        apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+        authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+        projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+        storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+        appId: process.env.REACT_APP_FIREBASE_APP_ID,
+        measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
+      };
+      // For Netlify, the appId needs to be consistent, can use projectId as a base
+      currentAppId = process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id';
+    }
+
+    // Check if Firebase config is valid before initializing
+    if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey && firebaseConfig.projectId) {
+      const app = initializeApp(firebaseConfig);
+      const firestore = getFirestore(app);
+      setDb(firestore);
+      const firebaseAuth = getAuth(app);
+      setAuth(firebaseAuth);
+
+      const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
+        if (user) {
+          console.log("onAuthStateChanged: User is signed in.", user.uid);
+          setUserId(user.uid);
+          setUserEmail(user.email);
+        } else {
+          console.log("onAuthStateChanged: No user signed in. Attempting anonymous sign-in...");
+          try {
+            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+            // eslint-disable-next-line no-undef
+            if (typeof __initial_auth_token !== 'undefined') { // Only use for Canvas
+              // eslint-disable-next-line no-undef
+              await signInWithCustomToken(firebaseAuth, __initial_auth_token);
+              console.log("Signed in with custom token (Canvas).");
+            } else { // For Netlify, just sign in anonymously
+              await signInAnonymously(firebaseAuth);
+              console.log("Signed in anonymously (Netlify/Production).");
+            }
+          } catch (error) {
+            console.error("Error during anonymous sign-in:", error);
+            setUserId(crypto.randomUUID());
+          }
+        }
+        console.log("Auth initialization complete. Setting isAuthReady to true.");
+        setIsAuthReady(true);
+      });
+
+      return () => {
+        console.log("Cleaning up onAuthStateChanged listener.");
+        unsubscribeAuth();
+      };
+    } else {
+      console.error("Firebase config is invalid or missing critical keys (apiKey, projectId). Running without database persistence and authentication.");
+      setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      setLoadingInitialData(false);
+      setIsAuthReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!db || !userId || !isAuthReady || !auth) {
+      console.log("initializeTrip useEffect skipped: db, userId, isAuthReady, or auth not ready.", { db: !!db, userId: !!userId, isAuthReady, auth: !!auth });
+      return;
+    }
+
+    const initializeTrip = async () => {
+      console.log("Attempting to initialize trip data...");
+      setLoadingInitialData(true);
+      // eslint-disable-next-line no-undef
+      const tripsCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips`);
+      const q = query(tripsCollectionRef);
+
+      const tripsSnapshot = await getDocs(q);
+
+      let selectedTripId;
+
+      if (tripsSnapshot.empty) {
+        console.log("No trips found in Firestore. Creating default 'Tasmania 2025' trip and populating.");
+        const newTripRef = doc(tripsCollectionRef);
+        selectedTripId = newTripRef.id;
+
+        await setDoc(newTripRef, {
+          name: 'Tasmania 2025',
+          startDate: '2025-12-22',
+          endDate: '2026-01-13',
+          ownerId: userId,
+          createdAt: new Date(),
+        });
+
+        const itineraryCollectionRef = collection(newTripRef, 'itineraryItems');
+        for (const item of defaultTasmaniaTripData) {
+          await setDoc(doc(itineraryCollectionRef, item.id), item);
+        }
+        console.log("Default Tasmania trip created in Firestore.");
+      } else {
+        selectedTripId = tripsSnapshot.docs[0].id;
+        console.log(`Existing trip found. Selecting trip ID: ${selectedTripId}`);
+      }
+      setCurrentTripId(selectedTripId);
+      setLoadingInitialData(false);
+      console.log("Trip initialization complete.");
+    };
+
+    if (!currentTripId) {
+      initializeTrip();
+    }
+  }, [db, userId, isAuthReady, auth, currentTripId]);
+
+  useEffect(() => {
+    if (db && currentTripId) {
+      console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
+      // eslint-disable-next-line no-undef
+      const itineraryRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
+      const q = query(itineraryRef);
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const items = [];
+        snapshot.forEach((doc) => {
+          items.push({ id: doc.id, ...doc.data() });
+        });
+        setTripItems(items.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        console.log("Itinerary items updated from Firestore.");
+      }, (error) => {
+        console.error("Error fetching trip itinerary: ", error);
+      });
+
+      return () => {
+        console.log("Cleaning up itinerary listener.");
+        unsubscribe();
+      };
+    } else {
+      console.log("Itinerary useEffect skipped: db or currentTripId not ready.", { db: !!db, currentTripId: !!currentTripId });
+    }
+  }, [db, currentTripId]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    if (editingItem) {
+      setEditingItem({ ...editingItem, [name]: value });
+    } else {
+      setNewItem({ ...newItem, [name]: value });
+    }
+  };
+
+  const openModal = (message, confirmAction = null) => {
+    setModalMessage(message);
+    setModalConfirmAction(() => confirmAction);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setModalMessage('');
+    setModalConfirmAction(null);
+  };
+
+  const handleConfirmAction = () => {
+    if (modalConfirmAction) {
+      modalConfirmAction();
+    }
+    closeModal();
+  };
+
+  // --- Authentication Handlers ---
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!auth) {
+      console.error("CRITICAL ERROR: Firebase Auth object is NULL when handleAuthSubmit was called. This indicates a deeper initialization issue.");
+      setAuthError("Authentication service not available. Please try refreshing the page and ensure Firebase is configured correctly.");
+      return;
+    }
+
+    console.log("Attempting authentication...");
+    console.log("Mode:", isLoginMode ? "Login" : "Sign Up");
+    console.log("Email:", email);
+    console.log("Password:", password ? "********" : "[empty]");
+
+    try {
+      if (isLoginMode) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+      }
+      setShowAuthModal(false);
+      setEmail('');
+      setPassword('');
+      setAuthError('');
+      console.log("Authentication successful!");
+    } catch (error) {
+      console.error("Auth error caught:", error);
+      setAuthError(error.message);
+      console.log("Firebase error code:", error.code);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (auth) {
+      try {
+        await signOut(auth);
+        setUserId(null);
+        setUserEmail(null);
+        setCurrentTripId(null);
+        setTripItems([]);
+        setLoadingInitialData(true);
+        console.log("User logged out successfully.");
+      } catch (error) {
+        console.error("Error logging out:", error);
+        setAuthError(error.message);
+      }
+    }
+  };
+  // --- End Authentication Handlers ---
+
+  const handleAddItem = async () => {
+    if (!newItem.date || !newItem.location || !newItem.accommodation) {
+      openModal('Please fill in all required fields (Date, Location, Accommodation).');
+      return;
+    }
+    if (!currentTripId) {
+      openModal('No trip selected. Please select or create a trip first.');
+      return;
+    }
+
+    // eslint-disable-next-line no-undef
+    const itineraryCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
+    const newItemRef = doc(itineraryCollectionRef);
+    const itemToAdd = { ...newItem, id: newItemRef.id };
+
+    try {
+      await setDoc(newItemRef, itemToAdd);
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
+      openModal('Trip item added successfully!');
+    } catch (error) {
+      console.error("Error adding document: ", error);
+      openModal('Error adding trip item. Please try again.');
+    }
+  };
+
+  const handleEditClick = (item) => {
+    setEditingItem({ ...item });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem.date || !editingItem.location || !editingItem.accommodation) {
+      openModal('Please fill in all required fields (Date, Location, Accommodation).');
+      return;
+    }
+    if (!currentTripId) {
+      openModal('No trip selected. Cannot save edits without a selected trip.');
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line no-undef
+      const docRef = doc(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
+      await updateDoc(docRef, editingItem);
+      setEditingItem(null);
+      openModal('Trip item updated successfully!');
+    } catch (error) {
+      console.error("Error updating document: ", error);
+      openModal('Error updating trip item. Please try again.');
+    }
+  };
+
+  const handleDeleteItem = (id) => {
+    openModal('Are you sure you want to delete this trip item?', async () => {
+      if (!currentTripId) {
+        openModal('No trip selected. Cannot delete item.');
+        return;
+      }
+      try {
+        // eslint-disable-next-line no-undef
+        const docRef = doc(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`, id);
+        await deleteDoc(docRef);
+        openModal('Trip item deleted successfully!');
+      } catch (error) {
+        console.error("Error deleting document: ", error);
+        openModal('Error deleting trip item. Please try again.');
+      }
+    });
+  };
+
+  // Display loading screen until Firebase Auth is ready and initial trip is set
+  if (!isAuthReady || loadingInitialData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 flex items-center justify-center">
+        <div className="text-indigo-700 text-2xl font-semibold">Loading Trip Crafter...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 p-4 font-inter text-gray-800 flex justify-center items-center">
+      <div className="w-full max-w-4xl bg-white shadow-xl rounded-xl p-6 relative">
+        <h1 className="text-4xl font-bold text-center text-indigo-700 mb-8 tracking-wide">
+          Trip Crafter
+        </h1>
+
+        {/* Auth status and buttons */}
+        <div className="text-center text-sm text-gray-600 mb-6">
+          {userEmail ? (
+            <>
+              Logged in as: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userEmail}</span>
+              <button
+                onClick={handleLogout}
+                className="ml-4 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              You are currently anonymous.
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="ml-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Login / Sign Up
+              </button>
+            </>
+          )}
+          <br />
+          {userId && (
+            <span className="text-sm text-gray-600">Your User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span></span>
+          )}
+          {currentTripId && (
+            <span className="text-sm text-gray-600 ml-2">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
+          )}
+        </div>
+
+        {/* Authentication Modal */}
+        {showAuthModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+              <h2 className="text-2xl font-semibold text-indigo-600 mb-4 text-center">
+                {isLoginMode ? 'Login' : 'Sign Up'}
+              </h2>
+              <form onSubmit={handleAuthSubmit}>
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  required
+                />
+                {authError && <p className="text-red-500 text-sm mb-4">{authError}</p>}
+                <button
+                  type="submit"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  {isLoginMode ? 'Login' : 'Sign Up'}
+                </button>
+              </form>
+              <button
+                onClick={() => setIsLoginMode(!isLoginMode)}
+                className="w-full text-indigo-600 mt-4 text-sm hover:underline"
+              >
+                {isLoginMode ? 'Need an account? Sign Up' : 'Already have an account? Login'}
+              </button>
+              <button
+                onClick={() => setShowAuthModal(false)}
+                className="w-full text-gray-500 mt-2 text-sm hover:underline"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Standard Modal for messages and confirmations */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+              <p className="text-lg text-center mb-6">{modalMessage}</p>
+              <div className="flex justify-around">
+                {modalConfirmAction ? (
+                  <>
+                    <button
+                      onClick={handleConfirmAction}
+                      className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={closeModal}
+                      className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={closeModal}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                  >
+                    OK
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add New Item Form */}
+        <div className="mb-8 p-6 bg-blue-50 rounded-lg shadow-inner">
+          <h2 className="text-2xl font-semibold text-indigo-600 mb-4">Add New Trip Item</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <input
+              type="date"
+              name="date"
+              value={newItem.date}
+              onChange={handleInputChange}
+              placeholder="Date"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <input
+              type="text"
+              name="location"
+              value={newItem.location}
+              onChange={handleInputChange}
+              placeholder="Location"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <input
+              type="text"
+              name="accommodation"
+              value={newItem.accommodation}
+              onChange={handleInputChange}
+              placeholder="Accommodation"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <select
+              name="status"
+              value={newItem.status}
+              onChange={handleInputChange}
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="Unconfirmed">Unconfirmed</option>
+              <option value="Booked">Booked</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <input
+              type="text"
+              name="travelTime"
+              value={newItem.travelTime}
+              onChange={handleInputChange}
+              placeholder="Est. Travel Time (e.g., 2h 30m)"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <input
+              type="text"
+              name="activities"
+              value={newItem.activities}
+              onChange={handleInputChange}
+              placeholder="Activities for the day"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <textarea
+              name="notes"
+              value={newItem.notes}
+              onChange={handleInputChange}
+              placeholder="Notes (e.g., guest details)"
+              className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 col-span-1 md:col-span-2 lg:col-span-3"
+              rows="2"
+            ></textarea>
+          </div>
+          <button
+            onClick={handleAddItem}
+            className="mt-6 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-400"
+          >
+            Add Trip Item
+          </button>
+        </div>
+
+        {/* Trip Items List */}
+        <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Your Trip Itinerary</h2>
+        {tripItems.length === 0 && !loadingInitialData ? (
+          <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
+        ) : (
+          <div className="space-y-6">
+            {tripItems.map((item) => (
+              <div key={item.id} className="bg-white p-6 rounded-lg shadow-md border-t-4 border-indigo-500">
+                {editingItem && editingItem.id === item.id ? (
+                  /* Edit Form */
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input
+                      type="date"
+                      name="date"
+                      value={editingItem.date}
+                      onChange={handleInputChange}
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      type="text"
+                      name="location"
+                      value={editingItem.location}
+                      onChange={handleInputChange}
+                      placeholder="Location"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      type="text"
+                      name="accommodation"
+                      value={editingItem.accommodation}
+                      onChange={handleInputChange}
+                      placeholder="Accommodation"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <select
+                      name="status"
+                      value={editingItem.status}
+                      onChange={handleInputChange}
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      <option value="Unconfirmed">Unconfirmed</option>
+                      <option value="Booked">Booked</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                    <input
+                      type="text"
+                      name="travelTime"
+                      value={editingItem.travelTime}
+                      onChange={handleInputChange}
+                      placeholder="Est. Travel Time"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      type="text"
+                      name="activities"
+                      value={editingItem.activities}
+                      onChange={handleInputChange}
+                      placeholder="Activities for the day"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <textarea
+                      name="notes"
+                      value={editingItem.notes}
+                      onChange={handleInputChange}
+                      placeholder="Notes"
+                      className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 col-span-full"
+                      rows="2"
+                    ></textarea>
+                    <div className="flex justify-end space-x-2 mt-4 col-span-full">
+                      <button
+                        onClick={handleSaveEdit}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingItem(null)}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-full shadow-md transition duration-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Display Item */
+                  <>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="text-sm text-gray-500">{item.date}</p>
+                        <h3 className="text-xl font-semibold text-indigo-800 mb-1">{item.location}</h3>
+                        <p className="text-lg text-gray-700">{item.accommodation}</p>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          item.status === 'Booked' ? 'bg-green-100 text-green-800' :
+                          item.status === 'Unconfirmed' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </div>
+                    {item.travelTime && (
+                      <p className="text-md text-gray-600 mb-2">
+                        <span className="font-medium">Est. Travel Time:</span> {item.travelTime}
+                      </p>
+                    )}
+                    {item.activities && (
+                      <p className="text-md text-gray-600 mb-2">
+                        <span className="font-medium">Activities:</span> {item.activities}
+                      </p>
+                    )}
+                    {item.notes && (
+                      <p className="text-md text-gray-600 mb-4">{item.notes}</p>
+                    )}
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => handleEditClick(item)}
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteItem(item.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Version number display */}
+        <div className="text-center text-xs text-gray-400 mt-8">
+          Version: {version}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+```
+You're absolutely right to point that out! My apologies. The error message "Firebase Auth object is NULL when handleAuthSubmit was called" followed by "Failed to re-initialize auth within handleAuthSubmit: FirebaseError: Firebase: Error (auth/invalid-api-key)" is a **critical clue**.
+
+This confirms that the `__firebase_config` global variable, which is crucial for initializing Firebase, is **not being correctly provided or parsed** when your app runs on Netlify. The `auth/invalid-api-key` error happens because the fallback re-initialization logic inside `handleAuthSubmit` is trying to use an empty or invalid `firebaseConfig` object.
+
+The `__firebase_config` and `__app_id` variables are specific to the **Canvas environment** where I operate. They are **not automatically available** when you deploy your React app to a generic hosting service like Netlify.
+
+---
+
+## The Solution: Use Netlify Environment Variables for Firebase Config ✅
+
+To fix this, you need to provide your Firebase project's configuration details to Netlify using **Environment Variables**. This is the standard, secure, and correct way to handle API keys and sensitive configuration in deployed web applications.
+
+Here's a step-by-step guide:
+
+### Step 1: Get Your Firebase Project Configuration 🔑
+
+1.  **Go to your Firebase Console:** Open your web browser and navigate to [https://console.firebase.google.com/](https://console.firebase.google.com/).
+2.  **Select your "Trip Crafter" project.**
+3.  On the project overview page, click the **"Project settings"** gear icon (⚙️) next to "Project overview" in the left menu.
+4.  Go to the **"General"** tab.
+5.  Scroll down to the **"Your apps"** section.
+6.  If you haven't already, click the **"</>" web icon** to add a web app. Follow the steps, register your app (you can use "Trip Crafter Web" as the nickname), and then you'll see your Firebase SDK configuration.
+7.  **Copy the entire `firebaseConfig` object.** It will look something like this:
+    ```javascript
+    const firebaseConfig = {
+      apiKey: "AIzaSy...",
+      authDomain: "trip-crafter-8db5b.firebaseapp.com",
+      projectId: "trip-crafter-8db5b",
+      storageBucket: "trip-crafter-8db5b.appspot.com",
+      messagingSenderId: "...",
+      appId: "1:...",
+      measurementId: "G-..." // Optional
+    };
+    ```
+    **You need all the key-value pairs from this object.**
+
+### Step 2: Add Environment Variables to Netlify 🌐
+
+1.  **Go to your Netlify Dashboard:** [https://app.netlify.com/](https://app.netlify.com/)
+2.  **Select your "Trip Crafter" site.**
+3.  Go to **"Site settings"** (at the top).
+4.  In the left sidebar, navigate to **"Build & deploy"** -> **"Environment variables"**.
+5.  Click **"Add a variable"**.
+6.  You'll need to create a **separate environment variable for *each* key-value pair** from your `firebaseConfig`. For example:
+    * **Key:** `REACT_APP_FIREBASE_API_KEY`
+        **Value:** `AIzaSy...` (your actual API key from Firebase)
+    * **Key:** `REACT_APP_FIREBASE_AUTH_DOMAIN`
+        **Value:** `trip-crafter-8db5b.firebaseapp.com` (your actual auth domain)
+    * **Key:** `REACT_APP_FIREBASE_PROJECT_ID`
+        **Value:** `trip-crafter-8db5b` (your actual project ID)
+    * ... and so on for `storageBucket`, `messagingSenderId`, `appId`, `measurementId` (if present).
+
+    **Important Naming Convention:** For Create React App to automatically pick up environment variables at build time, they **must be prefixed with `REACT_APP_`**.
+
+### Step 3: Update `App.js` to Use Environment Variables 💻
+
+Now, we'll modify your `App.js` to read these environment variables instead of the Canvas-specific `__firebase_config`. I've also removed the problematic re-initialization logic from `handleAuthSubmit`.
+
+
+```react
+/* global __app_id, __firebase_config, __initial_auth_token */
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+// eslint-disable-next-line no-unused-vars
+import { getFirestore, doc, setDoc, collection, query, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import defaultTasmaniaTripData from './Trip-Default_Tasmania2025'; // Import the default trip data
+
+function App() {
+  const [tripItems, setTripItems] = useState([]);
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
+  const [currentTripId, setCurrentTripId] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
+  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalConfirmAction, setModalConfirmAction] = useState(null);
+  const [loadingInitialData, setLoadingInitialData] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [version, setVersion] = useState('1.0.0');
+
+  // New states for authentication UI
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Initialize Firebase and set up authentication listener
+  useEffect(() => {
+    // Determine Firebase config based on environment
+    let firebaseConfig = {};
+    let currentAppId = 'default-app-id'; // Fallback for appId
+
+    // Check for Canvas environment variables first (for local dev/testing in Canvas)
+    // eslint-disable-next-line no-undef
+    if (typeof __firebase_config !== 'undefined' && typeof __app_id !== 'undefined') {
+      try {
+        // eslint-disable-next-line no-undef
+        firebaseConfig = JSON.parse(__firebase_config);
+        // eslint-disable-next-line no-undef
+        currentAppId = __app_id;
+        console.log("Using Canvas-provided Firebase config.");
+      } catch (e) {
+        console.error("Error parsing Canvas __firebase_config:", e);
+      }
+    } else {
+      // Fallback for Netlify/production environment variables
+      console.log("Using Netlify/production environment variables for Firebase config.");
+      firebaseConfig = {
+        apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+        authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+        projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+        storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+        appId: process.env.REACT_APP_FIREBASE_APP_ID,
+        measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID // Optional
+      };
+      // For Netlify, the appId needs to be consistent, can use projectId as a base
+      currentAppId = process.env.REACT_APP_FIREBASE_PROJECT_ID || 'netlify-app-id';
+    }
+
+    // Check if Firebase config is valid before initializing
+    if (Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey && firebaseConfig.projectId) {
+      console.log("Firebase config found. Initializing app...");
+      const app = initializeApp(firebaseConfig);
+      const firestore = getFirestore(app);
+      setDb(firestore);
+      const firebaseAuth = getAuth(app);
+      setAuth(firebaseAuth);
+
+      console.log("Setting up onAuthStateChanged listener...");
+      const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
+        if (user) {
+          console.log("onAuthStateChanged: User is signed in.", user.uid);
+          setUserId(user.uid);
+          setUserEmail(user.email);
+        } else {
+          console.log("onAuthStateChanged: No user signed in. Attempting anonymous sign-in...");
+          try {
+            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+            // eslint-disable-next-line no-undef
+            if (typeof __initial_auth_token !== 'undefined') { // Only use for Canvas
+              // eslint-disable-next-line no-undef
+              await signInWithCustomToken(firebaseAuth, __initial_auth_token);
+              console.log("Signed in with custom token (Canvas).");
+            } else { // For Netlify, just sign in anonymously
+              await signInAnonymously(firebaseAuth);
+              console.log("Signed in anonymously (Netlify/Production).");
+            }
+          } catch (error) {
+            console.error("Error during anonymous sign-in:", error);
+            setUserId(crypto.randomUUID());
+          }
+        }
+        console.log("Auth initialization complete. Setting isAuthReady to true.");
+        setIsAuthReady(true);
+      });
+
+      return () => {
+        console.log("Cleaning up onAuthStateChanged listener.");
+        unsubscribeAuth();
+      };
+    } else {
+      console.error("Firebase config is invalid or missing critical keys (apiKey, projectId). Running without database persistence and authentication.");
+      setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      setLoadingInitialData(false);
+      setIsAuthReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!db || !userId || !isAuthReady || !auth) {
+      console.log("initializeTrip useEffect skipped: db, userId, isAuthReady, or auth not ready.", { db: !!db, userId: !!userId, isAuthReady, auth: !!auth });
+      return;
+    }
+
+    const initializeTrip = async () => {
+      console.log("Attempting to initialize trip data...");
+      setLoadingInitialData(true);
+      // eslint-disable-next-line no-undef
+      const tripsCollectionRef = collection(db, `artifacts/${__app_id}/public/data/trips`);
+      const q = query(tripsCollectionRef);
+
+      const tripsSnapshot = await getDocs(q);
+
+      let selectedTripId;
+
+      if (tripsSnapshot.empty) {
+        console.log("No trips found in Firestore. Creating default 'Tasmania 2025' trip and populating.");
+        const newTripRef = doc(tripsCollectionRef);
+        selectedTripId = newTripRef.id;
+
+        await setDoc(newTripRef, {
+          name: 'Tasmania 2025',
+          startDate: '2025-12-22',
+          endDate: '2026-01-13',
+          ownerId: userId,
+          createdAt: new Date(),
+        });
+
+        const itineraryCollectionRef = collection(newTripRef, 'itineraryItems');
+        for (const item of defaultTasmaniaTripData) {
+          await setDoc(doc(itineraryCollectionRef, item.id), item);
+        }
+        console.log("Default Tasmania trip created in Firestore.");
+      } else {
+        selectedTripId = tripsSnapshot.docs[0].id;
+        console.log(`Existing trip found. Selecting trip ID: ${selectedTripId}`);
+      }
+      setCurrentTripId(selectedTripId);
+      setLoadingInitialData(false);
+      console.log("Trip initialization complete.");
+    };
+
+    if (!currentTripId) {
+      initializeTrip();
+    }
+  }, [db, userId, isAuthReady, auth, currentTripId]);
+
+  useEffect(() => {
+    if (db && currentTripId) {
+      console.log(`Fetching itinerary for currentTripId: ${currentTripId}`);
+      // eslint-disable-next-line no-undef
+      const itineraryRef = collection(db, `artifacts/${__app_id}/public/data/trips/${currentTripId}/itineraryItems`);
+      const q = query(itineraryRef);
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const items = [];
+        snapshot.forEach((doc) => {
+          items.push({ id: doc.id, ...doc.data() });
+        });
+        setTripItems(items.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        console.log("Itinerary items updated from Firestore.");
+      }, (error) => {
+        console.error("Error fetching trip itinerary: ", error);
+      });
+
+      return () => {
+        console.log("Cleaning up itinerary listener.");
+        unsubscribe();
+      };
+    } else {
+      console.log("Itinerary useEffect skipped: db or currentTripId not ready.", { db: !!db, currentTripId: !!currentTripId });
+    }
+  }, [db, currentTripId]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    if (editingItem) {
+      setEditingItem({ ...editingItem, [name]: value });
+    } else {
+      setNewItem({ ...newItem, [name]: value });
+    }
+  };
+
+  const openModal = (message, confirmAction = null) => {
+    setModalMessage(message);
+    setModalConfirmAction(() => confirmAction);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setModalMessage('');
+    setModalConfirmAction(null);
+  };
+
+  const handleConfirmAction = () => {
+    if (modalConfirmAction) {
+      modalConfirmAction();
+    }
+    closeModal();
+  };
+
+  // --- Authentication Handlers ---
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!auth) {
+      console.error("CRITICAL ERROR: Firebase Auth object is NULL when handleAuthSubmit was called. This indicates a deeper initialization issue.");
+      setAuthError("Authentication service not available. Please try refreshing the page and ensure Firebase is configured correctly.");
+      return; // Exit if auth is not available
+    }
+
+    console.log("Attempting authentication...");
+    console.log("Mode:", isLoginMode ? "Login" : "Sign Up");
+    console.log("Email:", email);
+    console.log("Password:", password ? "********" : "[empty]");
+
+    try {
+      if (isLoginMode) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+      }
+      setShowAuthModal(false);
+      setEmail('');
+      setPassword('');
+      setAuthError('');
+      console.log("Authentication successful!");
+    } catch (error) {
+      console.error("Auth error caught:", error);
+      setAuthError(error.message);
+      console.log("Firebase error code:", error.code);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (auth) {
+      try {
+        await signOut(auth);
+        setUserId(null);
+        setUserEmail(null);
+        setCurrentTripId(null);
+        setTripItems([]);
+        setLoadingInitialData(true);
+        console.log("User logged out successfully.");
+      } catch (error) {
+        console.error("Error logging out:", error);
+        setAuthError(error.message);
+      }
+    }
+  };
+  // --- End Authentication Handlers ---
+
+  const handleAddItem = async () => {
+    if (!newItem.date || !newItem.location || !newItem.accommodation) {
+      openModal('Please fill in all required fields (Date, Location, Accommodation).');
+      return;
+    }
+    if (!currentTripId) {
+      openModal('No trip selected. Please select or create a trip first.');
+      return;
+    }
+
+    // eslint-disable-next-line no-undef
+    const itineraryCollectionRef = collection(db, `artifacts/${currentAppId}/public/data/trips/${currentTripId}/itineraryItems`);
+    const newItemRef = doc(itineraryCollectionRef);
+    const itemToAdd = { ...newItem, id: newItemRef.id };
+
+    try {
+      await setDoc(newItemRef, itemToAdd);
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '' });
+      openModal('Trip item added successfully!');
+    } catch (error) {
+      console.error("Error adding document: ", error);
+      openModal('Error adding trip item. Please try again.');
+    }
+  };
+
+  const handleEditClick = (item) => {
+    setEditingItem({ ...item });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem.date || !editingItem.location || !editingItem.accommodation) {
+      openModal('Please fill in all required fields (Date, Location, Accommodation).');
+      return;
+    }
+    if (!currentTripId) {
+      openModal('No trip selected. Cannot save edits without a selected trip.');
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line no-undef
+      const docRef = doc(db, `artifacts/${currentAppId}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
+      await updateDoc(docRef, editingItem);
+      setEditingItem(null);
+      openModal('Trip item updated successfully!');
+    } catch (error) {
+      console.error("Error updating document: ", error);
+      openModal('Error updating trip item. Please try again.');
+    }
+  };
+
+  const handleDeleteItem = (id) => {
+    openModal('Are you sure you want to delete this trip item?', async () => {
+      if (!currentTripId) {
+        openModal('No trip selected. Cannot delete item.');
+        return;
+      }
+      try {
+        // eslint-disable-next-line no-undef
+        const docRef = doc(db, `artifacts/${currentAppId}/public/data/trips/${currentTripId}/itineraryItems`, id);
         await deleteDoc(docRef);
         openModal('Trip item deleted successfully!');
       } catch (error) {
