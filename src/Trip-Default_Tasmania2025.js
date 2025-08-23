@@ -13,8 +13,8 @@ const defaultTasmaniaTripData = [
     notes: 'Depart Geelong 08:30, Arrive Devonport 19:00. Passengers: 4 Adult, 2 Recliner (Accessible), 2 Day Ticket. Vehicle: 1 LDV T60 (6m, over 2.1m high), DO32JP. Booking #15661503.',
     travelTime: '10h 30m',
     activities: 'Ferry crossing, scenic views of Bass Strait.',
-    type: 'enroute',
-    activityLink: 'https://www.google.com/search?q=things%20to%20do%20TT-Line%20Company%20Ferry%20Terminal%20Tasmania%20Australia%20activities%20attractions',
+    type: 'note',
+    activityLink: 'https://www.google.com/search?q=things%20to%20do%20in%20Geelong%20Victoria%20Australia',
   },
   // George Town - Dec 22-23 (from CSV, adjusted to fit after ferry arrival)
   {
@@ -210,8 +210,8 @@ const defaultTasmaniaTripData = [
     notes: 'Depart Devonport 08:30, Arrive Geelong 19:00. Passengers: 3 Adult, 1 Recliner, 2 Day Ticket. Vehicle: 1 LDV T60 (6m, over 2.1m high), DO32JP. Booking #15661503.',
     travelTime: '10h 30m',
     activities: 'Ferry crossing, reflection on the trip.',
-  type: 'enroute',
-  activityLink: 'https://www.google.com/search?q=things%20to%20do%20TT-Line%20Company%20Ferry%20Terminal%20Tasmania%20Australia%20activities%20attractions',
+    type: 'note',
+    activityLink: 'https://www.google.com/search?q=things%20to%20do%20in%20Devonport%20Tasmania%20Australia',
   },
 ];
 

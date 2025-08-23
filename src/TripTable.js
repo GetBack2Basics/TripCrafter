@@ -181,6 +181,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                       item.type === 'roofed' ? 'bg-blue-100 text-blue-800' :
                       item.type === 'camp' ? 'bg-green-100 text-green-800' :
                       item.type === 'enroute' ? 'bg-orange-100 text-orange-800' :
+                      item.type === 'note' ? 'bg-purple-100 text-purple-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
                       {item.type || 'roofed'}
@@ -196,9 +197,9 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 underline text-xs"
-                        title={`Open ${item.type === 'roofed' ? 'Booking.com' : item.type === 'camp' ? 'Google camping search' : 'Google activities'} search`}
+                        title={`Open ${item.type === 'roofed' ? 'Booking.com' : item.type === 'camp' ? 'Google camping search' : item.type === 'note' ? 'Google things to do search' : 'Google activities'} search`}
                       >
-                        {item.type === 'roofed' ? 'Book Stay' : item.type === 'camp' ? 'Find Camps' : 'Find Activities'}
+                        {item.type === 'roofed' ? 'Book Stay' : item.type === 'camp' ? 'Find Camps' : item.type === 'note' ? 'Things to Do' : 'Find Activities'}
                       </a>
                     ) : (
                       <span className="text-gray-400 text-xs">No link</span>
@@ -314,7 +315,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
             {item.activityLink && (
               <p className="text-xs text-gray-600 mb-2">
                 <span className="font-medium">
-                  {item.type === 'roofed' ? 'Booking:' : item.type === 'camp' ? 'Camping:' : 'Activities:'}
+                  {item.type === 'roofed' ? 'Booking:' : item.type === 'camp' ? 'Camping:' : item.type === 'note' ? 'Things to Do:' : 'Activities:'}
                 </span> 
                 <a 
                   href={item.activityLink} 
@@ -324,6 +325,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                 >
                   {item.type === 'roofed' ? 'View accommodation options' : 
                    item.type === 'camp' ? 'Find camping spots on Google' : 
+                   item.type === 'note' ? 'Discover things to do' :
                    'Discover local activities'}
                 </a>
               </p>

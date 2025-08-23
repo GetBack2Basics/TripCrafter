@@ -119,6 +119,7 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                 <option value="roofed">Roofed</option>
                 <option value="camp">Camp</option>
                 <option value="enroute">Enroute</option>
+                <option value="note">Note</option>
               </select>
               <input
                 type="text"
@@ -203,6 +204,7 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                     item.type === 'roofed' ? 'bg-blue-100 text-blue-800' :
                     item.type === 'camp' ? 'bg-green-100 text-green-800' :
                     item.type === 'enroute' ? 'bg-orange-100 text-orange-800' :
+                    item.type === 'note' ? 'bg-purple-100 text-purple-800' :
                     'bg-gray-100 text-gray-800'
                   }`}>
                     {item.type || 'roofed'}
@@ -225,7 +227,7 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
               {item.activityLink && (
                 <p className="text-md text-gray-600 mb-4">
                   <span className="font-medium">
-                    {item.type === 'roofed' ? 'Booking:' : item.type === 'camp' ? 'Camping:' : 'Activities:'}
+                    {item.type === 'roofed' ? 'Booking:' : item.type === 'camp' ? 'Camping:' : item.type === 'note' ? 'Things to Do:' : 'Activities:'}
                   </span> 
                   <a 
                     href={item.activityLink} 
@@ -235,6 +237,7 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                   >
                     {item.type === 'roofed' ? 'View accommodation options on Booking.com' : 
                      item.type === 'camp' ? 'Find camping spots on Google' : 
+                     item.type === 'note' ? 'Discover things to do on Google' :
                      'Discover local activities on Google'}
                   </a>
                 </p>

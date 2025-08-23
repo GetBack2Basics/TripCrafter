@@ -244,6 +244,9 @@ function Map({ tripItems, onUpdateTravelTime }) {
 function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
+  // Filter out "note" type items from mapping
+  const mappableItems = tripItems.filter(item => item.type !== 'note');
+
   if (loadingInitialData) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -270,11 +273,15 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
     );
   }
 
-  if (tripItems.length === 0) {
+  if (mappableItems.length === 0) {
     return (
       <div className="text-center text-gray-500 py-8">
-        <p className="text-xl mb-4">No locations to display on map</p>
-        <p>Add some trip items with locations to see them on the map!</p>
+        <p className="text-xl mb-4">No mappable locations to display</p>
+        {tripItems.length > 0 ? (
+          <p>Your trip items are notes only. Add locations with type 'Roofed', 'Camp', or 'Enroute' to see them on the map!</p>
+        ) : (
+          <p>Add some trip items with locations to see them on the map!</p>
+        )}
       </div>
     );
   }
@@ -284,9 +291,12 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
       <div className="mb-4">
         <h3 className="text-xl font-semibold text-indigo-700 mb-2">Trip Route Map</h3>
         <p className="text-gray-600 text-sm">
-          {tripItems.length === 1 
-            ? `Showing location: ${tripItems[0].location}`
-            : `Route through ${tripItems.length} locations: ${tripItems.map(item => item.location).join(' → ')}`
+          {mappableItems.length === 1 
+            ? `Showing location: ${mappableItems[0].location}`
+            : `Route through ${mappableItems.length} locations: ${mappableItems.map(item => item.location).join(' → ')}`
+          }
+          {tripItems.length > mappableItems.length && 
+            ` (${tripItems.length - mappableItems.length} note items excluded from map)`
           }
         </p>
         <p className="text-blue-600 text-xs mt-1">
@@ -300,7 +310,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
           render={render}
           libraries={['geometry']}
         >
-          <Map tripItems={tripItems} onUpdateTravelTime={onUpdateTravelTime} />
+          <Map tripItems={mappableItems} onUpdateTravelTime={onUpdateTravelTime} />
         </Wrapper>
       </div>
       
@@ -308,19 +318,30 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
         <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Timeline</h4>
         <div className="space-y-2">
           {tripItems.map((item, index) => (
-            <div key={item.id} className="bg-gray-50 p-3 rounded-lg border flex items-center space-x-3">
-              <span className="bg-indigo-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold flex-shrink-0">
+            <div key={item.id} className={`p-3 rounded-lg border flex items-center space-x-3 ${
+              item.type === 'note' ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'
+            }`}>
+              <span className={`text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                item.type === 'note' ? 'bg-purple-500' : 'bg-indigo-600'
+              }`}>
                 {index + 1}
               </span>
               <div className="flex-grow">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="font-semibold text-gray-800">{item.location}</p>
+                    <p className="font-semibold text-gray-800">
+                      {item.location}
+                      {item.type === 'note' && (
+                        <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                          Note (not mapped)
+                        </span>
+                      )}
+                    </p>
                     <p className="text-sm text-gray-600">{item.accommodation}</p>
                   </div>
                   <div className="text-sm text-gray-600 mt-1 sm:mt-0">
                     <div>{item.date}</div>
-                    {item.travelTime && (
+                    {item.travelTime && item.type !== 'note' && (
                       <div className="text-xs text-blue-600 mt-1">
                         🚗 {item.travelTime}{item.distance ? ` (${item.distance})` : ''}
                       </div>

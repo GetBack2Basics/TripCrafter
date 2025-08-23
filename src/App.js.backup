@@ -69,11 +69,6 @@ const generateActivityLink = (type, location, checkinDate, checkoutDate = null, 
       const searchQuery = encodeURIComponent(`things to do ${cityName} ${state} ${country} activities attractions`);
       return `https://www.google.com/search?q=${searchQuery}`;
       
-    case 'note':
-      // Generate Google search for things to do in location
-      const noteSearchQuery = encodeURIComponent(`things to do in ${cityName} ${state} ${country}`);
-      return `https://www.google.com/search?q=${noteSearchQuery}`;
-      
     default:
       return '';
   }
@@ -797,139 +792,175 @@ function App() {
         )}
 
         {/* Help Modal */}
-        {showHelp && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-lg max-w-4xl w-full m-4 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-2xl font-bold mb-4 text-indigo-700">TripCrafter - User Guide</h2>
-              
-              <div className="space-y-6">
-                {/* Overview */}
-                <section>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">📍 Overview</h3>
-                  <p className="text-gray-600">
-                    TripCrafter helps you plan and organize your trip itinerary with intelligent activity links, 
-                    route ordering, and map visualization. Each trip item automatically generates relevant links 
-                    based on its type (accommodation, camping, or activities).
-                  </p>
+        <TripHelpModal 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+        />
+
+        {/* Authentication Modal */}
+        {showAuthModal && (
+                        <li>Click the "🤖 AI Import" button (available on any view)</li>
+                        <li>Choose your source:
+                          <ul className="list-disc list-inside ml-4 mt-1">
+                            <li><strong>🌐 Website URL:</strong> Paste booking confirmation page links</li>
+                            <li><strong>📄 PDF File:</strong> Upload booking confirmations, tickets, itineraries</li>
+                            <li><strong>📝 Text:</strong> Copy and paste from emails or documents</li>
+                          </ul>
+                        </li>
+                        <li>Let AI extract the details (dates, locations, accommodations)</li>
+                        <li>Review and edit the information if needed</li>
+                        <li>Click "🚀 Import with AI" to add to your trip</li>
+                      </ol>
+                      <div className="mt-3 text-sm bg-purple-100 p-2 rounded">
+                        <strong>💡 Pro tip:</strong> Works great with hotel bookings, ferry tickets, camping reservations, 
+                        and activity confirmations. Try the sample buttons to see how it works!
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
-                {/* Getting Started */}
+                {/* Quick Start */}
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🚀 Getting Started</h3>
-                  <ol className="list-decimal list-inside text-gray-600 space-y-1">
-                    <li><strong>Configure Trip Settings:</strong> Click "Trip Settings" to set your trip's state and country for accurate search results</li>
-                    <li><strong>Add Trip Items:</strong> Use the form to add locations, dates, and accommodations</li>
-                    <li><strong>Set Item Types:</strong> Choose the correct type for each item to get relevant activity links</li>
-                    <li><strong>Reorder Items:</strong> Use move up/down buttons to organize your route</li>
-                    <li><strong>View on Map:</strong> Switch to Map view to see your route and travel times</li>
-                  </ol>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🚀 Quick Start Guide</h3>
+                  <div className="bg-green-50 p-4 rounded-md">
+                    <ol className="list-decimal list-inside text-gray-700 space-y-2">
+                      <li><strong>Set Your Trip Location:</strong> Click "Settings" and enter your trip's state/country for better search results</li>
+                      <li><strong>Add Your First Stop:</strong> 
+                        <ul className="list-disc list-inside ml-4 text-sm mt-1">
+                          <li>Use "🤖 AI Import" if you have booking confirmations</li>
+                          <li>Or click "Add New Item" to enter details manually</li>
+                        </ul>
+                      </li>
+                      <li><strong>Choose the Right Type:</strong> Select Roofed (hotels), Camp (camping), or Enroute (activities/transport)</li>
+                      <li><strong>Organize Your Route:</strong> Use the up/down arrows to arrange items in travel order</li>
+                      <li><strong>Explore Your Trip:</strong> Switch between Table, List, and Map views to see different perspectives</li>
+                    </ol>
+                  </div>
                 </section>
 
-                {/* Trip Item Types */}
+                {/* Understanding Trip Types */}
                 <section>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">🏨 Trip Item Types</h3>
                   <div className="grid md:grid-cols-3 gap-4">
-                    <div className="bg-green-50 p-3 rounded-md">
+                    <div className="bg-green-50 p-3 rounded-md border border-green-200">
                       <div className="font-semibold text-green-700 mb-1">🏨 Roofed</div>
-                      <div className="text-sm text-gray-600">Hotels, B&Bs, apartments</div>
-                      <div className="text-xs text-blue-600 mt-1">→ Generates Booking.com links</div>
+                      <div className="text-sm text-gray-600 mb-2">Hotels, motels, B&Bs, apartments</div>
+                      <div className="text-xs text-blue-600">✨ Creates Booking.com search links with your dates</div>
                     </div>
-                    <div className="bg-orange-50 p-3 rounded-md">
+                    <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
                       <div className="font-semibold text-orange-700 mb-1">⛺ Camp</div>
-                      <div className="text-sm text-gray-600">Camping, RV parks, outdoor stays</div>
-                      <div className="text-xs text-blue-600 mt-1">→ Generates Google camping search</div>
+                      <div className="text-sm text-gray-600 mb-2">Camping, RV parks, caravan sites</div>
+                      <div className="text-xs text-blue-600">✨ Finds nearby campgrounds and outdoor stays</div>
                     </div>
-                    <div className="bg-blue-50 p-3 rounded-md">
+                    <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
                       <div className="font-semibold text-blue-700 mb-1">🚗 Enroute</div>
-                      <div className="text-sm text-gray-600">Transit, activities, stops</div>
-                      <div className="text-xs text-blue-600 mt-1">→ Generates Google activities search</div>
+                      <div className="text-sm text-gray-600 mb-2">Transport, activities, day trips</div>
+                      <div className="text-xs text-blue-600">✨ Discovers local attractions and things to do</div>
                     </div>
                   </div>
                 </section>
 
-                {/* Views */}
+                {/* Views Explained */}
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">👀 Views</h3>
-                  <div className="grid md:grid-cols-3 gap-4">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">👀 Different Ways to View Your Trip</h3>
+                  <div className="space-y-3">
                     <div className="bg-gray-50 p-3 rounded-md">
                       <div className="font-semibold text-gray-700 mb-1">📋 Table View</div>
-                      <div className="text-sm text-gray-600">Compact overview with all details, move buttons, and activity links</div>
+                      <div className="text-sm text-gray-600">Perfect for desktop - see all details at once, reorder items, and access activity links quickly</div>
                     </div>
                     <div className="bg-gray-50 p-3 rounded-md">
                       <div className="font-semibold text-gray-700 mb-1">📱 List View</div>
-                      <div className="text-sm text-gray-600">Card-based mobile-friendly view with editing capabilities</div>
+                      <div className="text-sm text-gray-600">Mobile-friendly cards that are easy to read and edit on smaller screens</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">✏️ Add New Item</div>
+                      <div className="text-sm text-gray-600">Form view for adding trips manually or editing existing items</div>
                     </div>
                     <div className="bg-gray-50 p-3 rounded-md">
                       <div className="font-semibold text-gray-700 mb-1">🗺️ Map View</div>
-                      <div className="text-sm text-gray-600">Visual route with travel times and distance calculations</div>
+                      <div className="text-sm text-gray-600">See your route visually with automatic travel times and turn-by-turn directions</div>
                     </div>
                   </div>
                 </section>
 
-                {/* Key Features */}
+                {/* Smart Features */}
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">⭐ Key Features</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🎯 Smart Features That Help You</h3>
                   <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="font-semibold text-gray-700 mb-2">🔗 Smart Activity Links</h4>
+                    <div className="bg-blue-50 p-3 rounded-md">
+                      <h4 className="font-semibold text-blue-700 mb-2">🔗 Automatic Activity Links</h4>
                       <ul className="text-sm text-gray-600 space-y-1">
-                        <li>• Auto-generated based on location and type</li>
-                        <li>• Include state/country for accuracy</li>
-                        <li>• Update automatically when location changes</li>
+                        <li>• Hotels link to Booking.com with your dates</li>
+                        <li>• Camping spots show nearby campgrounds</li>
+                        <li>• Activities reveal local attractions</li>
+                        <li>• All links include your trip location</li>
                       </ul>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-700 mb-2">📍 Route Management</h4>
+                    <div className="bg-yellow-50 p-3 rounded-md">
+                      <h4 className="font-semibold text-yellow-700 mb-2">�️ Route Planning</h4>
                       <ul className="text-sm text-gray-600 space-y-1">
-                        <li>• Move items up/down to reorder route</li>
-                        <li>• Map view shows optimized travel path</li>
-                        <li>• Automatic travel time calculations</li>
+                        <li>• Drag items up/down to reorder your route</li>
+                        <li>• Map view calculates travel times</li>
+                        <li>• See total trip distance</li>
+                        <li>• Get turn-by-turn directions</li>
                       </ul>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-700 mb-2">☁️ Cloud Sync</h4>
+                    <div className="bg-green-50 p-3 rounded-md">
+                      <h4 className="font-semibold text-green-700 mb-2">☁️ Automatic Saving</h4>
                       <ul className="text-sm text-gray-600 space-y-1">
-                        <li>• Real-time synchronization across devices</li>
-                        <li>• Anonymous or email-based accounts</li>
-                        <li>• Automatic backup of all changes</li>
+                        <li>• Changes save automatically to the cloud</li>
+                        <li>• Access your trip from any device</li>
+                        <li>• Share with travel companions</li>
+                        <li>• Never lose your planning work</li>
                       </ul>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-700 mb-2">✏️ Easy Editing</h4>
+                    <div className="bg-purple-50 p-3 rounded-md">
+                      <h4 className="font-semibold text-purple-700 mb-2">📊 Trip Tracking</h4>
                       <ul className="text-sm text-gray-600 space-y-1">
-                        <li>• Click any item to edit details</li>
-                        <li>• Bulk actions for status updates</li>
-                        <li>• Drag-and-drop reordering (coming soon)</li>
+                        <li>• Mark bookings as confirmed or cancelled</li>
+                        <li>• Track accommodation and activity status</li>
+                        <li>• Add notes for special requirements</li>
+                        <li>• Store booking reference numbers</li>
                       </ul>
                     </div>
                   </div>
                 </section>
 
-                {/* Tips */}
+                {/* Pro Tips */}
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">💡 Pro Tips</h3>
-                  <div className="bg-yellow-50 p-4 rounded-md">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">💡 Pro Tips for Better Trip Planning</h3>
+                  <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200">
                     <ul className="text-sm text-gray-700 space-y-2">
-                      <li><strong>🎯 Precise Locations:</strong> Use full addresses or landmark names for better search results</li>
-                      <li><strong>📅 Date Planning:</strong> Activity links for accommodations include your check-in dates</li>
-                      <li><strong>🗺️ Route Optimization:</strong> Arrange items in geographic order using move buttons</li>
-                      <li><strong>⚙️ Trip Settings:</strong> Set correct state/country to avoid location confusion (e.g., "Paris, Texas" vs "Paris, France")</li>
-                      <li><strong>🔄 Real-time Updates:</strong> Changes sync automatically - no need to save manually</li>
+                      <li><strong>🎯 Use Specific Locations:</strong> "Hobart City Center" works better than just "Hobart"</li>
+                      <li><strong>📅 Plan in Chronological Order:</strong> Arrange items by travel date for the best route visualization</li>
+                      <li><strong>� Try AI Import First:</strong> Import your existing bookings before adding items manually</li>
+                      <li><strong>⚙️ Set Trip Settings:</strong> Tell us your destination country to avoid location mix-ups</li>
+                      <li><strong>💾 Create an Account:</strong> Login to keep your trips permanently and access from anywhere</li>
+                      <li><strong>� Use Different Views:</strong> Table for planning, List for mobile, Map for navigation</li>
                     </ul>
                   </div>
                 </section>
 
-                {/* Workflow */}
+                {/* Common Questions */}
                 <section>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🔄 Recommended Workflow</h3>
-                  <div className="bg-blue-50 p-4 rounded-md">
-                    <ol className="text-sm text-gray-700 space-y-2">
-                      <li><strong>1. Plan:</strong> Configure trip settings and add all your destinations</li>
-                      <li><strong>2. Organize:</strong> Set correct types and reorder items for logical travel flow</li>
-                      <li><strong>3. Research:</strong> Use activity links to find and book accommodations/activities</li>
-                      <li><strong>4. Navigate:</strong> Use map view during travel to see route and travel times</li>
-                      <li><strong>5. Update:</strong> Mark items as "Booked" or "Confirmed" as you make reservations</li>
-                    </ol>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">❓ Common Questions</h3>
+                  <div className="space-y-3">
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">Q: How does AI Import work?</div>
+                      <div className="text-sm text-gray-600">AI Import reads your booking confirmations and automatically extracts dates, locations, and accommodation details. It works with websites, PDFs, and text from emails.</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">Q: Can I share my trip with others?</div>
+                      <div className="text-sm text-gray-600">Yes! All trips are stored in the cloud. Anyone with access to the app can view and edit the same trip in real-time.</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">Q: What if I make a mistake?</div>
+                      <div className="text-sm text-gray-600">Every item can be edited by clicking on it. You can also delete items or reorder them easily with the move buttons.</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">Q: Do I need to create an account?</div>
+                      <div className="text-sm text-gray-600">No, but we recommend it! Anonymous users can use the app, but creating an account ensures your trips are saved permanently.</div>
+                    </div>
                   </div>
                 </section>
               </div>
@@ -1029,7 +1060,7 @@ function App() {
         )}
 
         {/* View Mode Toggle */}
-        <div className="flex justify-center space-x-4 mb-6">
+        <div className="flex justify-center items-center space-x-4 mb-6 flex-wrap gap-2">
           <button
             onClick={() => setViewMode('table')}
             className={`px-6 py-2 rounded-full font-semibold transition duration-300 ${
@@ -1124,12 +1155,6 @@ function App() {
             />
           )
         )}
-        
-        {/* Help Modal */}
-        <TripHelpModal 
-          isOpen={showHelp} 
-          onClose={() => setShowHelp(false)} 
-        />
         
         {/* AI Import Modal */}
         <AIImportModal
