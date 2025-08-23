@@ -105,9 +105,7 @@ Return only JSON:`;
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     const dateRegex = /^(\d{1,2} [A-Za-z]{3,9} \d{4})$/;
     const items = [];
-    let lastPlace = null;
-    let lastAddress = null;
-    let lastAccommodation = null;
+  // Removed unused variables lastPlace, lastAddress, lastAccommodation
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (dateRegex.test(line)) {
@@ -142,9 +140,7 @@ Return only JSON:`;
           activities: '',
           notes: 'Extracted from itinerary text.'
         });
-        lastPlace = place;
-        lastAddress = address;
-        lastAccommodation = accommodation;
+  // (no-op: removed unused assignments)
       }
     }
     // Fallback: if no items found, return a single generic item
