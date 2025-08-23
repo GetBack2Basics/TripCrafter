@@ -155,35 +155,36 @@ function App() {
         selectedTripId = tripsSnapshot.docs[0].id;
         console.log(`Existing trip found. Selecting trip ID: ${selectedTripId}`);
         
-        // Check if we need to update location names for Tasmania locations
+        // Check if we need to update with the new full trip data
         const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${selectedTripId}/itineraryItems`);
         const itinerarySnapshot = await getDocs(itineraryCollectionRef);
         
-        let needsLocationUpdate = false;
+        // Check if current data matches the new default structure
+        const currentItems = [];
         itinerarySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.location && !data.location.includes('Tasmania, Australia')) {
-            needsLocationUpdate = true;
-          }
+          currentItems.push({ id: doc.id, ...doc.data() });
         });
         
-        if (needsLocationUpdate) {
-          console.log("Updating location names to include Tasmania, Australia...");
-          itinerarySnapshot.forEach(async (docSnapshot) => {
-            const data = docSnapshot.data();
-            const locationUpdates = {
-              'Devonport': 'Devonport, Tasmania, Australia',
-              'Ross': 'Ross, Tasmania, Australia', 
-              'Hobart': 'Hobart, Tasmania, Australia'
-            };
-            
-            if (locationUpdates[data.location]) {
-              await updateDoc(docSnapshot.ref, {
-                location: locationUpdates[data.location]
-              });
-              console.log(`Updated ${data.location} to ${locationUpdates[data.location]}`);
-            }
+        const needsFullUpdate = currentItems.length !== defaultTasmaniaTripData.length || 
+          currentItems.some((item, index) => {
+            const defaultItem = defaultTasmaniaTripData[index];
+            return !defaultItem || item.accommodation !== defaultItem.accommodation;
           });
+        
+        if (needsFullUpdate) {
+          console.log("Updating trip data with full Tasmania itinerary...");
+          
+          // Delete existing items
+          for (const docSnapshot of itinerarySnapshot.docs) {
+            await deleteDoc(docSnapshot.ref);
+          }
+          
+          // Add new items with proper structure
+          for (const item of defaultTasmaniaTripData) {
+            await setDoc(doc(itineraryCollectionRef, item.id), item);
+          }
+          
+          console.log("Trip data updated successfully with new structure and addresses.");
         }
       }
       setCurrentTripId(selectedTripId);
