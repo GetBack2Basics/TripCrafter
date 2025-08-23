@@ -73,6 +73,8 @@ function Map({ tripItems }) {
           avoidTolls: false
         };
 
+        console.log('Requesting directions for:', { origin, destination, waypoints });
+
         directionsService.route(request, (result, status) => {
           if (status === window.google.maps.DirectionsStatus.OK) {
             directionsRenderer.setDirections(result);
@@ -84,8 +86,27 @@ function Map({ tripItems }) {
               bounds.extend(leg.end_location);
             });
             map.fitBounds(bounds);
+            console.log('Directions successfully loaded');
           } else {
             console.error('Directions request failed due to ' + status);
+            console.log('Trying to add individual markers instead...');
+            
+            // Fallback: Add individual markers for each location
+            const geocoder = new window.google.maps.Geocoder();
+            locations.forEach((location, index) => {
+              geocoder.geocode({ address: location }, (results, geocodeStatus) => {
+                if (geocodeStatus === 'OK') {
+                  new window.google.maps.Marker({
+                    position: results[0].geometry.location,
+                    map: map,
+                    title: location,
+                    label: (index + 1).toString()
+                  });
+                } else {
+                  console.error('Geocode failed for ' + location + ': ' + geocodeStatus);
+                }
+              });
+            });
           }
         });
       }

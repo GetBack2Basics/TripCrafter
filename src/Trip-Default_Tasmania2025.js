@@ -5,7 +5,7 @@ const defaultTasmaniaTripData = [
   {
     id: 'devonport-debug',
     date: '2025-12-22',
-    location: 'Devonport',
+    location: 'Devonport, Tasmania, Australia',
     accommodation: 'Spirit of Tasmania Terminal',
     status: 'Booked',
     notes: 'Starting point in Tasmania.',
@@ -15,7 +15,7 @@ const defaultTasmaniaTripData = [
   {
     id: 'ross-debug',
     date: '2025-12-23',
-    location: 'Ross',
+    location: 'Ross, Tasmania, Australia',
     accommodation: 'Ross Caravan Park',
     status: 'Booked',
     notes: 'Historic village.',
@@ -25,7 +25,7 @@ const defaultTasmaniaTripData = [
   {
     id: 'hobart-debug',
     date: '2025-12-24',
-    location: 'Hobart',
+    location: 'Hobart, Tasmania, Australia',
     accommodation: 'Hobart City Hotel',
     status: 'Unconfirmed',
     notes: 'Capital city.',
