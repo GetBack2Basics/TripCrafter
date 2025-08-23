@@ -102,7 +102,16 @@ Return only JSON:`;
   mockParse(text) {
     console.log('Using improved mock parser for text:', text.substring(0, 200) + '...');
     // Split lines and scan for date lines
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    // Remove summary, 'View site details', 'km', and other non-place lines
+    const lines = text.split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0)
+      .filter(l =>
+        !l.match(/^\d+ ?km( to end of trip)?$/i) &&
+        !l.match(/^View site details$/i) &&
+        !l.match(/^routing$/i) &&
+        !l.match(/^(\d+ Places|\d{1,2} [A-Za-z]{3,9} \d{4} to \d{1,2} [A-Za-z]{3,9} \d{4}|\d+km to end of trip)$/i)
+      );
     const dateRegex = /^(\d{1,2} [A-Za-z]{3,9} \d{4})$/;
     const items = [];
   // Removed unused variables lastPlace, lastAddress, lastAccommodation
