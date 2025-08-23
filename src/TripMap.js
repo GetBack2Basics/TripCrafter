@@ -180,7 +180,7 @@ function Map({ tripItems }) {
     } finally {
       setIsProcessing(false);
     }
-  }, [map, tripItems]);
+  }, [map, tripItems, isProcessing]);
 
   // Process locations when map and data are ready
   useEffect(() => {
