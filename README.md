@@ -14,6 +14,8 @@ Status Tracking: Keep tabs on your bookings by setting their status to "Booked,"
 
 Real-time Collaboration: All trip data is stored in a publicly accessible Firebase Firestore collection, allowing everyone with access to the app to view and update the same itinerary in real-time.
 
+Interactive Map View: Visualize your trip route on Google Maps with turn-by-turn directions between locations.
+
 Initial Tasmania Trip: The app comes pre-populated with an example Tasmania trip itinerary to get you started!
 
 Responsive Design: Optimized for viewing on various devices (mobile, tablet, desktop).
@@ -25,6 +27,8 @@ Firebase Firestore: A NoSQL cloud database used for real-time data storage and s
 
 Firebase Authentication: Used for anonymous user authentication to enable data persistence.
 
+Google Maps API: Integrated for displaying interactive maps and routing between trip locations.
+
 Tailwind CSS: A utility-first CSS framework for rapid UI development and responsive design.
 
 🚀 Getting Started
@@ -32,6 +36,23 @@ This application is designed to be easily deployed using services like Netlify, 
 
 Prerequisites
 You don't need to install anything locally on your computer to run this app, as it's designed for cloud-based development and deployment.
+
+Google Maps API Setup
+1. Get a Google Maps API Key:
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/google/maps-apis/overview)
+   - Create a new project or select an existing one
+   - Enable the following APIs:
+     - Maps JavaScript API
+     - Directions API
+     - Geocoding API (optional)
+   - Create credentials (API Key)
+   - Restrict the API key to your domain for security
+
+2. Set up Environment Variables:
+   - Copy `.env.example` to `.env`
+   - Add your Google Maps API key: `REACT_APP_GOOGLE_MAPS_API_KEY=your_api_key_here`
+
+For Netlify deployment, add the environment variable in your Netlify site settings under "Environment variables".
 
 Deployment with Netlify
 Repository Setup: Ensure this GitHub repository (https://github.com/GetBack2Basics/TripCrafter) contains the full React project structure (including public/, src/, package.json, etc.).

@@ -1,261 +1,175 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Wrapper, Status } from '@googlemaps/react-wrapper';
 
-function TripMap({ tripItems, loadingInitialData, setLoadingInitialData }) {
+const render = (status) => {
+  switch (status) {
+    case Status.LOADING:
+      return <div className="flex justify-center items-center h-64">Loading Google Maps...</div>;
+    case Status.FAILURE:
+      return <div className="flex justify-center items-center h-64 text-red-500">Error loading Google Maps. Please check your API key.</div>;
+    case Status.SUCCESS:
+      return null;
+    default:
+      return <div className="flex justify-center items-center h-64">Initializing map...</div>;
+  }
+};
+
+// Map component that will render the actual Google Map
+function Map({ tripItems }) {
+  const ref = useRef(null);
   const [map, setMap] = useState(null);
-  const [mapError, setMapError] = useState('');
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const directionsRendererRef = useRef(null);
-  const [mapContainerEl, setMapContainerEl] = useState(null); // New state to hold the map container DOM element
+  const [directionsService, setDirectionsService] = useState(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState(null);
 
-  // Callback ref to get the actual DOM node
-  const setRef = useCallback(node => {
-    if (node) {
-      setMapContainerEl(node);
-      console.log("mapRef.current (via useCallback) is now available:", node);
-    } else {
-      setMapContainerEl(null);
-      console.log("mapRef.current (via useCallback) is null (component unmounted or ref changed).");
-    }
-  }, []);
-
-
-  // Load Google Maps API script
   useEffect(() => {
-    const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-    const mapId = process.env.REACT_APP_GOOGLE_MAPS_MAP_ID;
-
-    if (!apiKey) {
-      setMapError("Google Maps API Key is missing. Please set REACT_APP_GOOGLE_MAPS_API_KEY in Netlify environment variables.");
-      console.error("Map initialization failed: API Key missing.");
-      return;
+    if (ref.current && !map) {
+      // Initialize the map
+      const newMap = new window.google.maps.Map(ref.current, {
+        center: { lat: -41.4545, lng: 147.1595 }, // Roughly center of Tasmania
+        zoom: 8,
+        mapTypeId: 'roadmap',
+      });
+      
+      setMap(newMap);
+      
+      // Initialize directions service and renderer
+      const service = new window.google.maps.DirectionsService();
+      const renderer = new window.google.maps.DirectionsRenderer({
+        draggable: false,
+        suppressMarkers: false,
+      });
+      
+      setDirectionsService(service);
+      setDirectionsRenderer(renderer);
+      
+      renderer.setMap(newMap);
     }
-    if (!mapId) {
-      setMapError("Google Maps Map ID is missing. Please set REACT_APP_GOOGLE_MAPS_MAP_ID in Netlify environment variables.");
-      console.error("Map initialization failed: Map ID missing.");
-      return;
-    }
+  }, [ref, map]);
 
-    // Check if Google Maps API is already loaded
-    if (window.google && window.google.maps && !mapLoaded) {
-      console.log("Google Maps API already loaded (from window.google check).");
-      setMapLoaded(true);
-      return;
-    }
-
-    // If not loaded, append script to head
-    if (!mapLoaded) {
-      console.log("Attempting to load Google Maps API script...");
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initGoogleMaps`;
-      script.async = true;
-      script.defer = true;
-      script.setAttribute('loading', 'async');
-      script.onerror = () => {
-        setMapError("Failed to load Google Maps script. Check your API key and network connection.");
-        console.error("Google Maps script loading failed.");
-      };
-      document.head.appendChild(script);
-
-      // Define the callback function globally
-      window.initGoogleMaps = () => {
-        console.log("Google Maps API script loaded successfully via callback.");
-        setMapLoaded(true);
-        // Clear the global callback to avoid re-execution
-        delete window.initGoogleMaps;
-      };
-    }
-
-    return () => {
-      const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
-      if (existingScript && document.head.contains(existingScript)) {
-        document.head.removeChild(existingScript);
-        console.log("Google Maps script removed on component unmount.");
-      }
-      delete window.initGoogleMaps;
-    };
-  }, [mapLoaded]);
-
-  // Effect to initialize the map once the API is loaded and mapContainerEl is ready
   useEffect(() => {
-    // Only proceed if map API is loaded, mapContainerEl is available, window.google.maps is available, and map hasn't been set yet
-    if (mapLoaded && mapContainerEl && window.google && window.google.maps && !map) {
-      console.log("Attempting to initialize the Google Map instance...");
-      const mapId = process.env.REACT_APP_GOOGLE_MAPS_MAP_ID;
-      try {
-        const defaultCenter = { lat: -41.6401, lng: 146.3159 }; // Center of Tasmania
-        const newMap = new window.google.maps.Map(mapContainerEl, { // Use mapContainerEl here
-          center: defaultCenter,
-          zoom: 8,
-          mapId: mapId,
-        });
-        setMap(newMap);
-        setMapError('');
-        directionsRendererRef.current = new window.google.maps.DirectionsRenderer();
-        directionsRendererRef.current.setMap(newMap);
-        console.log("Google Map instance initialized successfully.");
-      } catch (error) {
-        setMapError(`Failed to initialize map: ${error.message}`);
-        console.error("Map instance initialization error:", error);
-      }
-    } else {
-      console.log("Map instance initialization useEffect skipped:", { mapLoaded, mapContainerEl: !!mapContainerEl, windowGoogleMaps: !!(window.google && window.google.maps), map: !!map });
-    }
-  }, [mapLoaded, map, mapContainerEl]); // Depend on mapContainerEl
-
-  // Effect to geocode locations and draw routes
-  useEffect(() => {
-    if (!map || !tripItems || tripItems.length === 0 || loadingInitialData || !mapLoaded) {
-      console.log("Geocoding/Routing useEffect skipped: map, tripItems, loadingInitialData, or mapLoaded not ready.", { map: !!map, tripItemsLength: tripItems.length, loadingInitialData, mapLoaded });
-      return;
-    }
-
-    const geocoder = new window.google.maps.Geocoder();
-    const directionsService = new window.google.maps.DirectionsService();
-    const markers = [];
-    const validLocations = [];
-    const bounds = new window.google.maps.LatLngBounds();
-
-    const processTrip = async () => {
-      console.log("Starting geocoding and routing process...");
-      for (const item of tripItems) {
-        if (!item.location) {
-          console.warn(`Skipping geocoding for item with no location: ${item.id}`);
-          continue;
-        }
-
-        try {
-          const geocodeResult = await new Promise((resolve) => {
-            geocoder.geocode({ address: item.location + ", Tasmania, Australia" }, (results, status) => {
-              if (status === "OK" && results[0]) {
-                resolve(results[0].geometry.location);
-              } else {
-                console.warn(`Geocoding failed for "${item.location}": ${status}`);
-                resolve(null);
-              }
-            });
-          });
-
-          if (geocodeResult) {
-            validLocations.push({ ...item, latLng: geocodeResult });
-            bounds.extend(geocodeResult);
-
-            const marker = new window.google.maps.Marker({
-              position: geocodeResult,
-              map: map,
-              title: `${item.location} (${item.accommodation})`,
-              label: item.date.substring(8, 10),
-            });
-            markers.push(marker);
-
-            const infoWindow = new window.google.maps.InfoWindow({
-              content: `
-                <div class="p-2">
-                  <h4 class="font-bold text-indigo-700 text-base">${item.location}</h4>
-                  <p class="text-sm text-gray-800"><strong>Accommodation:</strong> ${item.accommodation}</p>
-                  ${item.activities ? `<p class="text-sm text-gray-700"><strong>Activities:</strong> ${item.activities}</p>` : ''}
-                  ${item.travelTime ? `<p class="text-sm text-gray-700"><strong>Est. Travel Time:</strong> ${item.travelTime}</p>` : ''}
-                  ${item.notes ? `<p class="text-sm text-gray-700"><strong>Notes:</strong> ${item.notes}</p>` : ''}
-                </div>
-              `,
-            });
-
-            marker.addListener('click', () => {
-              infoWindow.open(map, marker);
-            });
-          }
-        } catch (error) {
-          console.error("Error during geocoding for item:", item.id, error);
-        }
-      }
-
-      if (validLocations.length > 1) {
-        console.log("Drawing route between valid locations...");
-        const waypoints = validLocations.slice(1, -1).map(loc => ({
-          location: loc.latLng,
-          stopover: true,
+    if (map && directionsService && directionsRenderer && tripItems.length > 1) {
+      // Clear existing routes
+      directionsRenderer.setDirections({ routes: [] });
+      
+      // Create waypoints from trip items
+      const locations = tripItems.map(item => item.location);
+      
+      // If we have at least 2 locations, create a route
+      if (locations.length >= 2) {
+        const origin = locations[0];
+        const destination = locations[locations.length - 1];
+        const waypoints = locations.slice(1, -1).map(location => ({
+          location: location,
+          stopover: true
         }));
 
-        const origin = validLocations[0].latLng;
-        const destination = validLocations[validLocations.length - 1].latLng;
+        const request = {
+          origin: origin,
+          destination: destination,
+          waypoints: waypoints,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+          unitSystem: window.google.maps.UnitSystem.METRIC,
+          avoidHighways: false,
+          avoidTolls: false
+        };
 
-        directionsService.route(
-          {
-            origin: origin,
-            destination: destination,
-            waypoints: waypoints,
-            travelMode: window.google.maps.TravelMode.DRIVING,
-          },
-          (response, status) => {
-            if (status === "OK" && response) {
-              directionsRendererRef.current.setDirections(response);
-              const route = response.routes[0];
-              let totalDuration = 0;
-              for (let i = 0; i < route.legs.length; i++) {
-                totalDuration += route.legs[i].duration.value;
-                const legDurationMinutes = Math.round(route.legs[i].duration.value / 60);
-                console.log(`Leg ${i + 1} (${route.legs[i].start_address} to ${route.legs[i].end_address}): ${legDurationMinutes} minutes`);
-              }
-              const totalDurationMinutes = Math.round(totalDuration / 60);
-              console.log(`Total estimated travel time for the entire trip: ${totalDurationMinutes} minutes`);
-
-              map.fitBounds(route.bounds);
-            } else {
-              console.error("Directions request failed:", status);
-              setMapError(`Failed to load route: ${status}`);
-            }
+        directionsService.route(request, (result, status) => {
+          if (status === window.google.maps.DirectionsStatus.OK) {
+            directionsRenderer.setDirections(result);
+            
+            // Optionally adjust the map bounds to fit the route
+            const bounds = new window.google.maps.LatLngBounds();
+            result.routes[0].legs.forEach(leg => {
+              bounds.extend(leg.start_location);
+              bounds.extend(leg.end_location);
+            });
+            map.fitBounds(bounds);
+          } else {
+            console.error('Directions request failed due to ' + status);
           }
-        );
-      } else if (validLocations.length === 1) {
-        map.setCenter(validLocations[0].latLng);
-        map.setZoom(10);
-      } else {
-        console.log("No valid locations to draw route or markers.");
-        map.setCenter({ lat: -41.6401, lng: 146.3159 });
-        map.setZoom(8);
+        });
       }
-      setLoadingInitialData(false);
-    };
+    }
+  }, [map, directionsService, directionsRenderer, tripItems]);
 
-    processTrip();
+  return <div ref={ref} style={{ width: '100%', height: '500px' }} />;
+}
 
-    return () => {
-      markers.forEach(marker => marker.setMap(null));
-      if (directionsRendererRef.current) {
-        directionsRendererRef.current.setDirections({ routes: [] });
-      }
-      console.log("Map markers and directions cleaned up.");
-    };
-  }, [map, tripItems, loadingInitialData, mapLoaded, setLoadingInitialData]);
+// Main TripMap component
+function TripMap({ tripItems, loadingInitialData }) {
+  // You'll need to replace this with your actual Google Maps API key
+  // For development, you can set it as an environment variable: REACT_APP_GOOGLE_MAPS_API_KEY
+  const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
-  if (mapError) {
+  if (loadingInitialData) {
     return (
-      <div className="text-center text-red-500 text-xl py-8">
-        Map Error: {mapError}
+      <div className="flex justify-center items-center h-64">
+        <div className="text-indigo-700 text-xl">Loading trip data...</div>
       </div>
     );
   }
 
-  // Conditionally render the map container only when mapLoaded is true
-  if (!mapLoaded) {
+  if (!apiKey) {
     return (
-      <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-inner overflow-hidden flex items-center justify-center">
-        <div className="text-center text-gray-500 text-xl py-8">Loading Google Maps API...</div>
+      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4">
+        <p className="font-bold">Google Maps API Key Required</p>
+        <p>Please set your Google Maps API key in the environment variable: REACT_APP_GOOGLE_MAPS_API_KEY</p>
+        <p className="text-sm mt-2">
+          You can get an API key from the{' '}
+          <a 
+            href="https://console.cloud.google.com/google/maps-apis/overview" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="underline hover:text-yellow-800"
+          >
+            Google Cloud Console
+          </a>
+        </p>
       </div>
     );
   }
 
-  if (loadingInitialData || !map) {
+  if (tripItems.length === 0) {
     return (
-      <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-inner overflow-hidden flex items-center justify-center">
-        <div className="text-center text-gray-500 text-xl py-8">Loading map data...</div>
+      <div className="text-center text-gray-500 py-8">
+        <p className="text-xl mb-4">No locations to display on map</p>
+        <p>Add some trip items with locations to see them on the map!</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-inner overflow-hidden">
-      <div ref={setRef} className="w-full h-full" aria-label="Trip Map"> {/* Use setRef here */}
-        {/* Map will render here */}
+    <div className="w-full">
+      <div className="mb-4">
+        <h3 className="text-xl font-semibold text-indigo-700 mb-2">Trip Route Map</h3>
+        <p className="text-gray-600 text-sm">
+          Showing route through {tripItems.length} locations: {tripItems.map(item => item.location).join(' → ')}
+        </p>
+      </div>
+      
+      <div className="border rounded-lg overflow-hidden shadow-lg">
+        <Wrapper apiKey={apiKey} render={render}>
+          <Map tripItems={tripItems} />
+        </Wrapper>
+      </div>
+      
+      <div className="mt-4">
+        <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Locations</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {tripItems.map((item, index) => (
+            <div key={item.id} className="bg-gray-50 p-3 rounded-lg border">
+              <div className="flex items-center space-x-2">
+                <span className="bg-indigo-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">
+                  {index + 1}
+                </span>
+                <div>
+                  <p className="font-semibold text-gray-800">{item.location}</p>
+                  <p className="text-sm text-gray-600">{item.date}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
