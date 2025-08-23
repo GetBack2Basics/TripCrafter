@@ -1,13 +1,13 @@
 // AI Import handlers for App.js
-import { collection, doc, setDoc } from 'firebase/firestore';
+// import { collection, doc, setDoc } from 'firebase/firestore'; // (Removed, now unused)
 
 export const createAIImportHandlers = (appState) => {
   const {
-    db,
-    currentTripId,
-    appIdentifier,
-    tripSettings,
-    generateActivityLink,
+    // db,
+    // currentTripId,
+    // appIdentifier,
+    // tripSettings,
+    // generateActivityLink,
     openModal
   } = appState;
 

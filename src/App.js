@@ -14,7 +14,7 @@ import AIImportButton from './components/AIImportButton'; // Import AI Import bu
 import AIImportModal from './components/AIImportModal'; // Import AI Import modal
 import ImportConflictModal from './components/ImportConflictModal';
 import TripHelpModal from './components/TripHelpModal'; // Import the help modal
-import { createAIImportHandlers } from './handlers/aiImportHandlers'; // Import AI Import handlers
+// import { createAIImportHandlers } from './handlers/aiImportHandlers'; // (Removed, now unused)
 
 // Utility function to generate activity links based on type
 const generateActivityLink = (type, location, checkinDate, checkoutDate = null, adults = 4, tripSettings = {}) => {
