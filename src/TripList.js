@@ -161,7 +161,7 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                     className="text-blue-600 hover:text-blue-800 underline ml-1"
                   >
                     {item.type === 'roofed' ? 'View accommodation options on Booking.com' : 
-                     item.type === 'camp' ? 'Find camping spots on FindACamp' : 
+                     item.type === 'camp' ? 'Find camping spots on Google' : 
                      'Discover local activities on Google'}
                   </a>
                 </p>

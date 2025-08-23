@@ -11,15 +11,19 @@ import TripTable from './TripTable'; // Import the new TripTable component
 import TripMap from './TripMap'; // Import the new TripMap component
 
 // Utility function to generate activity links based on type
-const generateActivityLink = (type, location, checkinDate, checkoutDate = null, adults = 4) => {
+const generateActivityLink = (type, location, checkinDate, checkoutDate = null, adults = 4, tripSettings = {}) => {
   if (!location) return '';
   
   const locationParts = location.split(',');
   const cityName = locationParts[0].trim();
   
+  // Extract state and country from trip settings or default to Tasmania, Australia
+  const state = tripSettings.state || 'Tasmania';
+  const country = tripSettings.country || 'Australia';
+  
   switch(type) {
     case 'roofed':
-      // Generate Booking.com URL
+      // Generate Booking.com URL with state and country context
       if (!checkinDate) return '';
       
       const checkin = new Date(checkinDate);
@@ -40,8 +44,9 @@ const generateActivityLink = (type, location, checkinDate, checkoutDate = null, 
       const checkoutDay = checkout.getDate();
       
       const baseUrl = 'https://www.booking.com/searchresults.html';
+      const searchLocation = `${cityName}, ${state}, ${country}`;
       const params = new URLSearchParams({
-        ss: cityName,
+        ss: searchLocation,
         checkin: `${checkinYear}-${String(checkinMonth).padStart(2, '0')}-${String(checkinDay).padStart(2, '0')}`,
         checkout: `${checkoutYear}-${String(checkoutMonth).padStart(2, '0')}-${String(checkoutDay).padStart(2, '0')}`,
         group_adults: adults.toString()
@@ -50,13 +55,13 @@ const generateActivityLink = (type, location, checkinDate, checkoutDate = null, 
       return `${baseUrl}?${params.toString()}`;
       
     case 'camp':
-      // Generate findacamp.com.au URL
-      const campSearchTerm = encodeURIComponent(cityName.toLowerCase().replace(' ', '+'));
-      return `http://www.findacamp.com.au/camp-site.php?pc=${campSearchTerm}&dis=25`;
+      // Generate Google search for campsites with state context
+      const campSearchQuery = encodeURIComponent(`campsites near ${cityName} ${state} ${country}`);
+      return `https://www.google.com/search?q=${campSearchQuery}`;
       
     case 'enroute':
-      // Generate Google search for activities
-      const searchQuery = encodeURIComponent(`things to do ${cityName} Tasmania activities attractions`);
+      // Generate Google search for activities with state context
+      const searchQuery = encodeURIComponent(`things to do ${cityName} ${state} ${country} activities attractions`);
       return `https://www.google.com/search?q=${searchQuery}`;
       
     default:
@@ -66,6 +71,11 @@ const generateActivityLink = (type, location, checkinDate, checkoutDate = null, 
 
 function App() {
   const [tripItems, setTripItems] = useState([]);
+  const [tripSettings, setTripSettings] = useState({ 
+    state: 'Tasmania', 
+    country: 'Australia',
+    name: 'Tasmania 2025 Trip'
+  });
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
@@ -78,6 +88,7 @@ function App() {
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
   const [loadingInitialData, setLoadingInitialData] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [showTripSettings, setShowTripSettings] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const [version, setVersion] = useState('1.0.0');
   const [appIdentifier, setAppIdentifier] = useState('default-app-id');
@@ -312,6 +323,55 @@ function App() {
     }
   }, [db, currentTripId, appIdentifier]);
 
+  // Load and save trip settings
+  useEffect(() => {
+    if (db && currentTripId && appIdentifier) {
+      console.log(`Loading trip settings for: ${currentTripId}`);
+      const settingsRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/settings`);
+      
+      // Try to load existing settings
+      const unsubscribe = onSnapshot(settingsRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const settings = docSnapshot.data();
+          setTripSettings({
+            state: settings.state || 'Tasmania',
+            country: settings.country || 'Australia', 
+            name: settings.name || 'Trip'
+          });
+          console.log("Trip settings loaded from Firestore:", settings);
+        } else {
+          console.log("No trip settings found, using defaults");
+          // Save default settings
+          setDoc(settingsRef, {
+            state: 'Tasmania',
+            country: 'Australia', 
+            name: 'Trip'
+          }, { merge: true }).catch(error => {
+            console.error("Error saving default trip settings:", error);
+          });
+        }
+      }, (error) => {
+        console.error("Error loading trip settings:", error);
+      });
+
+      return () => unsubscribe();
+    }
+  }, [db, currentTripId, appIdentifier]);
+
+  // Save trip settings when they change
+  const saveTripSettings = async (newSettings) => {
+    if (db && currentTripId && appIdentifier) {
+      try {
+        const settingsRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/settings`);
+        await setDoc(settingsRef, newSettings, { merge: true });
+        setTripSettings(newSettings);
+        console.log("Trip settings saved:", newSettings);
+      } catch (error) {
+        console.error("Error saving trip settings:", error);
+      }
+    }
+  };
+
   // Function to update travel time for a trip item
   const handleUpdateTravelTime = useCallback(async (itemId, duration, distance) => {
     if (!currentTripId || !db) {
@@ -345,7 +405,9 @@ function App() {
           updatedItem.type, 
           updatedItem.location, 
           updatedItem.date, 
-          nextDayDate.toISOString().split('T')[0]
+          nextDayDate.toISOString().split('T')[0],
+          4,
+          tripSettings
         );
       }
       
@@ -361,7 +423,9 @@ function App() {
           updatedItem.type, 
           updatedItem.location, 
           updatedItem.date, 
-          nextDayDate.toISOString().split('T')[0]
+          nextDayDate.toISOString().split('T')[0],
+          4,
+          tripSettings
         );
       }
       
@@ -578,37 +642,112 @@ function App() {
           Trip Crafter
         </h1>
 
-        {/* Auth status and buttons */}
-        <div className="text-center text-sm text-gray-600 mb-6">
-          {userEmail ? (
-            <>
-              Logged in as: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userEmail}</span>
-              <button
-                onClick={handleLogout}
-                className="ml-4 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              You are currently anonymous.
-              <button
-                onClick={() => setShowAuthModal(true)}
-                className="ml-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
-              >
-                Login / Sign Up
-              </button>
-            </>
-          )}
-          <br />
-          {userId && (
-            <span className="text-sm text-gray-600">Your User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span></span>
-          )}
-          {currentTripId && (
-            <span className="text-sm text-gray-600 ml-2">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
-          )}
+        {/* Trip Settings and Auth status */}
+        <div className="flex justify-between items-center mb-6">
+          <button
+            onClick={() => setShowTripSettings(true)}
+            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+          >
+            Trip Settings
+          </button>
+          <div className="text-center text-sm text-gray-600">
+            {userEmail ? (
+              <>
+                Logged in as: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userEmail}</span>
+                <button
+                  onClick={handleLogout}
+                  className="ml-4 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                You are currently anonymous.
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  className="ml-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                >
+                  Login / Sign Up
+                </button>
+              </>
+            )}
+            <br />
+            {userId && (
+              <span className="text-sm text-gray-600">Your User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span></span>
+            )}
+            {currentTripId && (
+              <span className="text-sm text-gray-600 ml-2">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
+            )}
+          </div>
         </div>
+
+        {/* Trip Settings Modal */}
+        {showTripSettings && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full m-4">
+              <h2 className="text-xl font-bold mb-4">Trip Settings</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Trip Name
+                  </label>
+                  <input
+                    type="text"
+                    value={tripSettings.name}
+                    onChange={(e) => setTripSettings({...tripSettings, name: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    placeholder="e.g., Tasmania 2025 Trip"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    State/Province
+                  </label>
+                  <input
+                    type="text"
+                    value={tripSettings.state}
+                    onChange={(e) => setTripSettings({...tripSettings, state: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    placeholder="e.g., Tasmania, California, New South Wales"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    value={tripSettings.country}
+                    onChange={(e) => setTripSettings({...tripSettings, country: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    placeholder="e.g., Australia, USA, Canada"
+                  />
+                </div>
+                <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
+                  <strong>Why this matters:</strong> State and country are added to all Booking.com and Google searches to ensure accurate location results. For example, searches will be for "Hobart, Tasmania, Australia" instead of just "Hobart".
+                </div>
+              </div>
+              <div className="flex space-x-2 mt-6">
+                <button
+                  onClick={() => {
+                    saveTripSettings(tripSettings);
+                    setShowTripSettings(false);
+                  }}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition duration-300"
+                >
+                  Save Settings
+                </button>
+                <button
+                  onClick={() => setShowTripSettings(false)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold py-2 px-4 rounded-md transition duration-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Authentication Modal */}
         {showAuthModal && (

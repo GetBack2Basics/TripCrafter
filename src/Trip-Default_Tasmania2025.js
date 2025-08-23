@@ -14,7 +14,7 @@ const defaultTasmaniaTripData = [
     travelTime: '10h 30m',
     activities: 'Ferry crossing, scenic views of Bass Strait.',
     type: 'enroute',
-    activityLink: '',
+    activityLink: 'https://www.google.com/search?q=things%20to%20do%20TT-Line%20Company%20Ferry%20Terminal%20Tasmania%20Australia%20activities%20attractions',
   },
   // George Town - Dec 22-23 (from CSV, adjusted to fit after ferry arrival)
   {
@@ -27,7 +27,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~30m from Devonport', // Estimated drive from Devonport port
     activities: 'Arrival in Tasmania, settle in George Town.',
     type: 'camp',
-    activityLink: 'http://www.findacamp.com.au/camp-site.php?pc=george+town&dis=25',
+    activityLink: 'https://www.google.com/search?q=campsites%20near%20George%20Town%20Tasmania%20Australia',
   },
   // Bay of Fires / NE Coast (Binalong Bay) - Dec 23-24 (from CSV)
   {
@@ -40,7 +40,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~3h 15m from Devonport',
     activities: 'Beaches, Eddystone Point day trip, coastal walks.',
     type: 'camp',
-    activityLink: 'http://www.findacamp.com.au/camp-site.php?pc=binalong+bay&dis=25',
+    activityLink: 'https://www.google.com/search?q=campsites%20near%20Binalong%20Bay%20Tasmania%20Australia',
   },
   // Ross / Midlands (Christmas - booked) - Dec 24-26 (from CSV, overlapping with Scamander)
   // Scamander Sanctuary (from PDF booking) is Dec 24-25, so we'll adjust Ross to start after.
@@ -54,7 +54,7 @@ const defaultTasmaniaTripData = [
     travelTime: 'Approx. 1h from Bay of Fires', // Estimated based on map
     activities: 'Travel to Scamander, settle for Christmas Eve.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Scamander%20Sanctuary%20Holiday%20Park%2C%20Tasmania%2C%20Australia&checkin=2025-12-24&checkout=2025-12-25&group_adults=4',
   },
   {
     id: 'ross-midlands-2025-12-25',
@@ -66,7 +66,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~1h from Scamander', // Estimated drive from Scamander to Ross
     activities: 'Christmas service, historic village walks.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Ross%2C%20Tasmania%2C%20Australia&checkin=2025-12-25&checkout=2025-12-26&group_adults=4',
   },
   // Freycinet / East Coast - Dec 26-28 (from CSV)
   {
@@ -79,7 +79,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~1h 30m from Ross', // Estimated drive
     activities: 'Wineglass Bay hike, coastal activities.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Coles%20Bay%2C%20Tasmania%2C%20Australia&checkin=2025-12-26&checkout=2025-12-27&group_adults=4',
   },
   // Hobart / South East - Dec 28-30 (from CSV)
   {
@@ -92,7 +92,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~2h from Freycinet',
     activities: 'MONA, Salamanca, Port Arthur day trip, Richmond.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Hobart%2C%20Tasmania%2C%20Australia&checkin=2025-12-28&checkout=2025-12-29&group_adults=4',
   },
   // Huon Valley / South West - Dec 30-Jan 1 (from CSV)
   {
@@ -104,6 +104,8 @@ const defaultTasmaniaTripData = [
     notes: 'Tahune Airwalk, Hastings Caves, New Year\'s Eve.',
     travelTime: '~1h from Hobart',
     activities: 'Tahune Airwalk, Hastings Caves, New Year\'s Eve.',
+    type: 'roofed',
+    activityLink: 'https://www.booking.com/searchresults.html?ss=Geeveston%2C%20Tasmania%2C%20Australia&checkin=2025-12-30&checkout=2025-12-31&group_adults=4',
   },
   // Mount Field / Central Highlands - Jan 1-3 (from CSV)
   {
@@ -116,7 +118,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~1h 30m from Huon Valley',
     activities: 'Waterfalls, Tall Trees Walk, Lake St Clair.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=National%20Park%2C%20Tasmania%2C%20Australia&checkin=2026-01-01&checkout=2026-01-02&group_adults=4',
   },
   // Queenstown / West Coast - Jan 3-5 (from CSV)
   {
@@ -129,7 +131,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~2h from Mount Field',
     activities: 'Mining history, Gordon River Cruise (Strahan).',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Queenstown%2C%20Tasmania%2C%20Australia&checkin=2026-01-03&checkout=2026-01-04&group_adults=4',
   },
   // Strahan / West Coast - Jan 5-7 (from CSV)
   {
@@ -142,7 +144,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~45m from Queenstown',
     activities: 'Gordon River Cruise, Henty Dunes.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Strahan%2C%20Tasmania%2C%20Australia&checkin=2026-01-05&checkout=2026-01-06&group_adults=4',
   },
   // Stanley / NW Coast / Tarkine - Jan 7-9 (from CSV)
   {
@@ -155,7 +157,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~3-4h from Strahan to Stanley',
     activities: 'The Nut, Tarkine Drive, Edge of the World walks.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Stanley%2C%20Tasmania%2C%20Australia&checkin=2026-01-07&checkout=2026-01-08&group_adults=4',
   },
   // Cethana Campground (from PDF booking) - Jan 9-11 (overlaps with CSV's Transit to Cradle Mountain)
   // We'll keep Cethana as the primary booking for these dates.
@@ -168,8 +170,8 @@ const defaultTasmaniaTripData = [
     notes: 'Trip dates: Fri, Jan 9th to Sun, Jan 11th. Group size: 3 Adults, 1 Vehicle (car, 5 meters length). Booking #3585929. Located near the Cradle Mountain area, providing a good base for exploring.',
     travelTime: 'Approx. 2h from Stanley', // Estimated drive to Cethana
     activities: 'Camping, exploring local area, relaxing, day trips to nearby attractions like Cradle Mountain.',
-  type: 'roofed',
-  activityLink: '',
+  type: 'camp',
+  activityLink: 'https://www.google.com/search?q=campsites%20near%20Cethana%20Power%20Station%20Access%20Rd%20Tasmania%20Australia',
   },
   // Cradle Mountain - Jan 10-12 (from CSV, adjusted to fit Cethana booking)
   // This entry is adjusted to represent activities during the Cethana stay.
@@ -182,8 +184,8 @@ const defaultTasmaniaTripData = [
     notes: 'Canyoning with Cradle Mountain Canyons, guided caving, alpine hikes.',
     travelTime: 'Local (from Cethana)',
     activities: 'Canyoning with Cradle Mountain Canyons, guided caving, alpine hikes.',
-  type: 'roofed',
-  activityLink: '',
+  type: 'enroute',
+  activityLink: 'https://www.google.com/search?q=things%20to%20do%20Cradle%20Mountain-Lake%20St%20Clair%20National%20Park%20Tasmania%20Australia%20activities%20attractions',
   },
   // Transit to Devonport - Jan 12 (from CSV)
   {
@@ -196,7 +198,7 @@ const defaultTasmaniaTripData = [
     travelTime: '~1h from Cradle Mountain area',
     activities: 'Travel day, last-minute souvenir shopping in Devonport.',
   type: 'roofed',
-  activityLink: '',
+  activityLink: 'https://www.booking.com/searchresults.html?ss=Devonport%2C%20Tasmania%2C%20Australia&checkin=2026-01-12&checkout=2026-01-13&group_adults=4',
   },
   // Spirit of Tasmania (Sailing 2) - Jan 13 (from PDF booking)
   {
@@ -208,8 +210,8 @@ const defaultTasmaniaTripData = [
     notes: 'Depart Devonport 08:30, Arrive Geelong 19:00. Passengers: 3 Adult, 1 Recliner, 2 Day Ticket. Vehicle: 1 LDV T60 (6m, over 2.1m high), DO32JP. Booking #15661503.',
     travelTime: '10h 30m',
     activities: 'Ferry crossing, reflection on the trip.',
-  type: 'roofed',
-  activityLink: '',
+  type: 'enroute',
+  activityLink: 'https://www.google.com/search?q=things%20to%20do%20TT-Line%20Company%20Ferry%20Terminal%20Tasmania%20Australia%20activities%20attractions',
   },
 ];
 

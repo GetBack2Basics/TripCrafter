@@ -76,7 +76,7 @@ function TripForm({ newItem, handleInputChange, onAddItem, onSaveEdit, onCancelE
             value={formData.type}
             onChange={handleFormChange}
             className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            title="Type determines the activity link: Roofed=Booking.com, Camp=FindACamp, Enroute=Google activities"
+            title="Type determines the activity link: Roofed=Booking.com, Camp=Google, Enroute=Google activities"
           >
             <option value="roofed">Roofed</option>
             <option value="camp">Camp</option>

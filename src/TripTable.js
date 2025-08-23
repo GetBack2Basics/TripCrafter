@@ -138,7 +138,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 underline text-xs"
-                        title={`Open ${item.type === 'roofed' ? 'Booking.com' : item.type === 'camp' ? 'FindACamp' : 'Google activities'} search`}
+                        title={`Open ${item.type === 'roofed' ? 'Booking.com' : item.type === 'camp' ? 'Google camping search' : 'Google activities'} search`}
                       >
                         {item.type === 'roofed' ? 'Book Stay' : item.type === 'camp' ? 'Find Camps' : 'Find Activities'}
                       </a>
@@ -255,7 +255,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                   className="text-blue-600 hover:text-blue-800 underline ml-1"
                 >
                   {item.type === 'roofed' ? 'View accommodation options' : 
-                   item.type === 'camp' ? 'Find camping spots on FindACamp' : 
+                   item.type === 'camp' ? 'Find camping spots on Google' : 
                    'Discover local activities'}
                 </a>
               </p>
