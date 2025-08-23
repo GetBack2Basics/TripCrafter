@@ -2,12 +2,60 @@ import React, { useState } from 'react';
 
 function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp, handleMoveDown, loadingInitialData }) {
   const [expandedRowId, setExpandedRowId] = useState(null); // State to track which row is expanded
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   if (tripItems.length === 0 && !loadingInitialData) {
     return (
       <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
     );
   }
+
+  // Drag and Drop handlers
+  const handleDragStart = (e, item, index) => {
+    setDraggedItem({ item, index });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    setDragOverIndex(null);
+    
+    if (draggedItem && draggedItem.index !== targetIndex) {
+      // Calculate how many positions to move
+      const sourceIndex = draggedItem.index;
+      
+      // Move the item by calling handleMoveUp/Down multiple times
+      if (sourceIndex < targetIndex) {
+        // Moving down - call handleMoveDown multiple times
+        for (let i = 0; i < (targetIndex - sourceIndex); i++) {
+          handleMoveDown(draggedItem.item.id);
+        }
+      } else {
+        // Moving up - call handleMoveUp multiple times
+        for (let i = 0; i < (sourceIndex - targetIndex); i++) {
+          handleMoveUp(draggedItem.item.id);
+        }
+      }
+    }
+    
+    setDraggedItem(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverIndex(null);
+  };
 
   // Helper function to format date: DayofWeek-Day (e.g., Tue-29) with month if it changes
   const formatDate = (dateString, index, allItems, showMonthOnMobile = false) => {
@@ -108,7 +156,17 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
           <tbody className="bg-white divide-y divide-gray-200">
             {tripItems.map((item, index) => (
               <React.Fragment key={item.id}>
-                <tr className={`${item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''} hover:bg-gray-100`}>
+                <tr 
+                  className={`${item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''} hover:bg-gray-100 cursor-move transition-colors duration-200
+                    ${dragOverIndex === index ? 'border-t-4 border-indigo-500' : ''}
+                    ${draggedItem?.index === index ? 'opacity-50' : ''}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                >
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                     {formatDate(item.date, index, tripItems)}
                   </td>
@@ -165,24 +223,34 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                       <button
                         onClick={() => handleMoveUp(item.id)}
                         disabled={index === 0}
-                        className={`${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'} text-xs p-1 rounded transition-colors duration-200`}
-                        title="Move up"
+                        className={`${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'} p-2 rounded transition-colors duration-200`}
+                        title="Move up (or drag and drop)"
                       >
-                        <i className="fas fa-chevron-up"></i>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                        </svg>
                       </button>
                       <button
                         onClick={() => handleMoveDown(item.id)}
                         disabled={index === tripItems.length - 1}
-                        className={`${index === tripItems.length - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'} text-xs p-1 rounded transition-colors duration-200`}
-                        title="Move down"
+                        className={`${index === tripItems.length - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'} p-2 rounded transition-colors duration-200`}
+                        title="Move down (or drag and drop)"
                       >
-                        <i className="fas fa-chevron-down"></i>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
                       </button>
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-center">
-                    <button onClick={() => toggleRowExpansion(item.id)} className="text-gray-500 hover:text-gray-700">
-                      <i className={`fas ${expandedRowId === item.id ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                    <button onClick={() => toggleRowExpansion(item.id)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        {expandedRowId === item.id ? (
+                          <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                        ) : (
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                        )}
+                      </svg>
                     </button>
                   </td>
                 </tr>

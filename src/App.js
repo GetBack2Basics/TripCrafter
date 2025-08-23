@@ -9,6 +9,7 @@ import TripForm from './TripForm'; // Import the new TripForm component
 import TripList from './TripList'; // Import the new TripList component
 import TripTable from './TripTable'; // Import the new TripTable component
 import TripMap from './TripMap'; // Import the new TripMap component
+import TripChooser from './TripChooser'; // Import the new TripChooser component
 
 // Utility function to generate activity links based on type
 const generateActivityLink = (type, location, checkinDate, checkoutDate = null, adults = 4, tripSettings = {}) => {
@@ -643,51 +644,66 @@ function App() {
           Trip Crafter
         </h1>
 
-        {/* Trip Settings and Auth status */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex space-x-2">
+        {/* Header Navigation */}
+        <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+          <div className="flex space-x-2 items-center">
             <button
               onClick={() => setShowTripSettings(true)}
               className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
             >
-              Trip Settings
+              Settings
             </button>
             <button
               onClick={() => setShowHelp(true)}
               className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
             >
-              Help & Guide
+              Help
             </button>
-          </div>
-          <div className="text-center text-sm text-gray-600">
+            <TripChooser
+              trips={[]} // TODO: Add trips list when we implement trip management
+              onSelectTrip={(tripId) => {
+                // TODO: Implement trip selection logic
+                console.log('Selected trip:', tripId);
+              }}
+              onCreateNewTrip={() => {
+                // TODO: Implement new trip creation with TripNew.js component
+                console.log('Create new trip clicked');
+              }}
+              currentTripId={currentTripId}
+              currentTripName={tripSettings.name || 'Choose Trip'}
+            />
             {userEmail ? (
-              <>
-                Logged in as: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userEmail}</span>
-                <button
-                  onClick={handleLogout}
-                  className="ml-4 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
-                >
-                  Logout
-                </button>
-              </>
+              <button
+                onClick={handleLogout}
+                className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Logout
+              </button>
             ) : (
-              <>
-                You are currently anonymous.
-                <button
-                  onClick={() => setShowAuthModal(true)}
-                  className="ml-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 px-3 rounded-full shadow-md transition duration-300 transform hover:scale-105"
-                >
-                  Login / Sign Up
-                </button>
-              </>
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+              >
+                Login
+              </button>
             )}
-            <br />
-            {userId && (
-              <span className="text-sm text-gray-600">Your User ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userId}</span></span>
+          </div>
+          
+          {/* User Status Info */}
+          <div className="text-right text-sm text-gray-600">
+            {userEmail ? (
+              <div>Logged in as: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{userEmail}</span></div>
+            ) : (
+              <div>You are currently anonymous</div>
             )}
-            {currentTripId && (
-              <span className="text-sm text-gray-600 ml-2">Current Trip ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded-md">{currentTripId}</span></span>
-            )}
+            <div className="mt-1">
+              {userId && (
+                <span className="text-xs text-gray-500">User ID: <span className="font-mono">{userId.slice(0, 8)}...</span></span>
+              )}
+              {currentTripId && (
+                <span className="text-xs text-gray-500 ml-2">Trip: <span className="font-mono">{currentTripId.slice(0, 8)}...</span></span>
+              )}
+            </div>
           </div>
         </div>
 

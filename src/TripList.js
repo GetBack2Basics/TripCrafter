@@ -1,16 +1,76 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, handleMoveUp, handleMoveDown, handleInputChange, handleSaveEdit, loadingInitialData }) {
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
   if (tripItems.length === 0 && !loadingInitialData) {
     return (
       <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
     );
   }
 
+  // Drag and Drop handlers
+  const handleDragStart = (e, item, index) => {
+    setDraggedItem({ item, index });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    setDragOverIndex(null);
+    
+    if (draggedItem && draggedItem.index !== targetIndex) {
+      // Calculate how many positions to move
+      const sourceIndex = draggedItem.index;
+      
+      // Move the item by calling handleMoveUp/Down multiple times
+      if (sourceIndex < targetIndex) {
+        // Moving down - call handleMoveDown multiple times
+        for (let i = 0; i < (targetIndex - sourceIndex); i++) {
+          handleMoveDown(draggedItem.item.id);
+        }
+      } else {
+        // Moving up - call handleMoveUp multiple times
+        for (let i = 0; i < (sourceIndex - targetIndex); i++) {
+          handleMoveUp(draggedItem.item.id);
+        }
+      }
+    }
+    
+    setDraggedItem(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <div className="space-y-6">
       {tripItems.map((item, index) => (
-        <div key={item.id} className="bg-white p-6 rounded-lg shadow-md border-t-4 border-indigo-500">
+        <div 
+          key={item.id} 
+          className={`bg-white p-6 rounded-lg shadow-md border-t-4 border-indigo-500 cursor-move transition-all duration-200
+            ${dragOverIndex === index ? 'border-l-4 border-l-indigo-500 transform scale-[1.02]' : ''}
+            ${draggedItem?.index === index ? 'opacity-50 transform scale-95' : ''}`}
+          draggable
+          onDragStart={(e) => handleDragStart(e, item, index)}
+          onDragOver={(e) => handleDragOver(e, index)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, index)}
+          onDragEnd={handleDragEnd}
+        >
           {editingItem && editingItem.id === item.id ? (
             /* Edit Form */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -110,6 +170,19 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
           ) : (
             /* Display Item */
             <>
+              {/* Drag Handle Indicator */}
+              <div className="flex justify-center mb-2">
+                <svg className="w-5 h-3 text-gray-400" fill="currentColor" viewBox="0 0 24 8">
+                  <circle cx="3" cy="2" r="1"/>
+                  <circle cx="9" cy="2" r="1"/>
+                  <circle cx="15" cy="2" r="1"/>
+                  <circle cx="21" cy="2" r="1"/>
+                  <circle cx="3" cy="6" r="1"/>
+                  <circle cx="9" cy="6" r="1"/>
+                  <circle cx="15" cy="6" r="1"/>
+                  <circle cx="21" cy="6" r="1"/>
+                </svg>
+              </div>
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <p className="text-sm text-gray-500">{item.date}</p>
@@ -172,17 +245,21 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                     onClick={() => handleMoveUp(item.id)}
                     disabled={index === 0}
                     className={`${index === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transform hover:scale-105'} font-bold py-2 px-3 rounded-full shadow-md transition duration-300`}
-                    title="Move up"
+                    title="Move up (or drag and drop)"
                   >
-                    <i className="fas fa-chevron-up"></i>
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                    </svg>
                   </button>
                   <button
                     onClick={() => handleMoveDown(item.id)}
                     disabled={index === tripItems.length - 1}
                     className={`${index === tripItems.length - 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transform hover:scale-105'} font-bold py-2 px-3 rounded-full shadow-md transition duration-300`}
-                    title="Move down"
+                    title="Move down (or drag and drop)"
                   >
-                    <i className="fas fa-chevron-down"></i>
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
                   </button>
                 </div>
                 <div className="flex space-x-2">
