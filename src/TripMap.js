@@ -20,6 +20,7 @@ function Map({ tripItems }) {
   const [map, setMap] = useState(null);
   const [directionsService, setDirectionsService] = useState(null);
   const [directionsRenderer, setDirectionsRenderer] = useState(null);
+  const [markers, setMarkers] = useState([]);
 
   useEffect(() => {
     if (ref.current && !map) {
@@ -36,7 +37,7 @@ function Map({ tripItems }) {
       const service = new window.google.maps.DirectionsService();
       const renderer = new window.google.maps.DirectionsRenderer({
         draggable: false,
-        suppressMarkers: false,
+        suppressMarkers: true, // We'll use custom markers
       });
       
       setDirectionsService(service);
@@ -47,71 +48,90 @@ function Map({ tripItems }) {
   }, [ref, map]);
 
   useEffect(() => {
-    if (map && directionsService && directionsRenderer && tripItems.length > 1) {
-      // Clear existing routes
-      directionsRenderer.setDirections({ routes: [] });
+    if (map && tripItems.length > 0) {
+      console.log('Map and tripItems available, processing locations:', tripItems);
       
-      // Create waypoints from trip items
-      const locations = tripItems.map(item => item.location);
+      // Clear existing markers
+      markers.forEach(marker => marker.setMap(null));
+      setMarkers([]);
       
-      // If we have at least 2 locations, create a route
-      if (locations.length >= 2) {
-        const origin = locations[0];
-        const destination = locations[locations.length - 1];
-        const waypoints = locations.slice(1, -1).map(location => ({
-          location: location,
-          stopover: true
-        }));
-
-        const request = {
-          origin: origin,
-          destination: destination,
-          waypoints: waypoints,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-          unitSystem: window.google.maps.UnitSystem.METRIC,
-          avoidHighways: false,
-          avoidTolls: false
-        };
-
-        console.log('Requesting directions for:', { origin, destination, waypoints });
-
-        directionsService.route(request, (result, status) => {
-          if (status === window.google.maps.DirectionsStatus.OK) {
-            directionsRenderer.setDirections(result);
-            
-            // Optionally adjust the map bounds to fit the route
-            const bounds = new window.google.maps.LatLngBounds();
-            result.routes[0].legs.forEach(leg => {
-              bounds.extend(leg.start_location);
-              bounds.extend(leg.end_location);
+      // Clear any existing routes
+      if (directionsRenderer) {
+        directionsRenderer.setDirections({ routes: [] });
+      }
+      
+      // First, always add individual markers for each location
+      const geocoder = new window.google.maps.Geocoder();
+      const bounds = new window.google.maps.LatLngBounds();
+      let markersProcessed = 0;
+      const newMarkers = [];
+      
+      tripItems.forEach((item, index) => {
+        geocoder.geocode({ address: item.location }, (results, geocodeStatus) => {
+          markersProcessed++;
+          console.log(`Geocoding ${item.location}:`, geocodeStatus, results);
+          
+          if (geocodeStatus === 'OK') {
+            const marker = new window.google.maps.Marker({
+              position: results[0].geometry.location,
+              map: map,
+              title: item.location,
+              label: (index + 1).toString()
             });
-            map.fitBounds(bounds);
-            console.log('Directions successfully loaded');
+            
+            newMarkers.push(marker);
+            bounds.extend(results[0].geometry.location);
+            
+            // If this is the last marker processed, fit the map bounds and save markers
+            if (markersProcessed === tripItems.length) {
+              map.fitBounds(bounds);
+              setMarkers(newMarkers);
+            }
           } else {
-            console.error('Directions request failed due to ' + status);
-            console.log('Trying to add individual markers instead...');
-            
-            // Fallback: Add individual markers for each location
-            const geocoder = new window.google.maps.Geocoder();
-            locations.forEach((location, index) => {
-              geocoder.geocode({ address: location }, (results, geocodeStatus) => {
-                if (geocodeStatus === 'OK') {
-                  new window.google.maps.Marker({
-                    position: results[0].geometry.location,
-                    map: map,
-                    title: location,
-                    label: (index + 1).toString()
-                  });
-                } else {
-                  console.error('Geocode failed for ' + location + ': ' + geocodeStatus);
-                }
-              });
-            });
+            console.error('Geocode failed for ' + item.location + ': ' + geocodeStatus);
           }
         });
+      });
+      
+      // Then try to add routing if we have multiple locations
+      if (directionsService && directionsRenderer && tripItems.length > 1) {
+        const locations = tripItems.map(item => item.location);
+        
+        if (locations.length >= 2) {
+          const origin = locations[0];
+          const destination = locations[locations.length - 1];
+          const waypoints = locations.slice(1, -1).map(location => ({
+            location: location,
+            stopover: true
+          }));
+
+          const request = {
+            origin: origin,
+            destination: destination,
+            waypoints: waypoints,
+            travelMode: window.google.maps.TravelMode.DRIVING,
+            unitSystem: window.google.maps.UnitSystem.METRIC,
+            avoidHighways: false,
+            avoidTolls: false
+          };
+
+          console.log('Requesting directions for:', { origin, destination, waypoints });
+
+          directionsService.route(request, (result, status) => {
+            if (status === window.google.maps.DirectionsStatus.OK) {
+              // Set suppressMarkers to true since we already have our custom markers
+              directionsRenderer.setOptions({ suppressMarkers: true });
+              directionsRenderer.setDirections(result);
+              console.log('Directions successfully loaded');
+            } else {
+              console.error('Directions request failed due to ' + status);
+              console.log('Showing markers only (no route)');
+            }
+          });
+        }
       }
     }
-  }, [map, directionsService, directionsRenderer, tripItems]);
+  }, [map, directionsService, directionsRenderer, tripItems, markers]);
 
   return <div ref={ref} style={{ width: '100%', height: '500px' }} />;
 }
