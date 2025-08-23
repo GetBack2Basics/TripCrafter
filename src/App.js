@@ -328,7 +328,7 @@ function App() {
   useEffect(() => {
     if (db && currentTripId && appIdentifier) {
       console.log(`Loading trip settings for: ${currentTripId}`);
-      const settingsRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/settings`);
+      const settingsRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/settings`, 'config');
       
       // Try to load existing settings
       const unsubscribe = onSnapshot(settingsRef, (docSnapshot) => {
@@ -363,7 +363,7 @@ function App() {
   const saveTripSettings = async (newSettings) => {
     if (db && currentTripId && appIdentifier) {
       try {
-        const settingsRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/settings`);
+        const settingsRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/settings`, 'config');
         await setDoc(settingsRef, newSettings, { merge: true });
         setTripSettings(newSettings);
         console.log("Trip settings saved:", newSettings);
