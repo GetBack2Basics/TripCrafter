@@ -14,8 +14,8 @@ const render = (status) => {
   }
 };
 
-// Simplified Map component with better performance
-function Map({ tripItems }) {
+// Simplified Map component with better performance and travel time calculation
+function Map({ tripItems, onUpdateTravelTime }) {
   const ref = useRef(null);
   const [map, setMap] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -170,6 +170,28 @@ function Map({ tripItems }) {
           directionsRenderer.setDirections(result);
           console.log('✓ Driving route added successfully');
           
+          // Calculate and update travel times for each leg
+          if (result.routes[0] && result.routes[0].legs && onUpdateTravelTime) {
+            const legs = result.routes[0].legs;
+            console.log('Calculating travel times for', legs.length, 'legs');
+            
+            for (let i = 0; i < legs.length; i++) {
+              const leg = legs[i];
+              const duration = leg.duration.text; // e.g., "2 hours 30 mins"
+              const distance = leg.distance.text; // e.g., "150 km"
+              
+              // The leg connects validLocations[i] to validLocations[i+1]
+              // Find the corresponding trip item for the destination
+              const destinationLocation = validLocations[i + 1];
+              const tripItem = tripItems.find(item => item.location === destinationLocation);
+              
+              if (tripItem) {
+                console.log(`Updating travel time for ${tripItem.location}: ${duration} (${distance})`);
+                onUpdateTravelTime(tripItem.id, duration, distance);
+              }
+            }
+          }
+          
         } catch (error) {
           console.log('ℹ Directions not available, showing markers only:', error.message);
         }
@@ -180,7 +202,7 @@ function Map({ tripItems }) {
     } finally {
       setIsProcessing(false);
     }
-  }, [map, tripItems, isProcessing]);
+  }, [map, tripItems, isProcessing, onUpdateTravelTime]);
 
   // Process locations when map and data are ready
   useEffect(() => {
@@ -219,7 +241,7 @@ function Map({ tripItems }) {
 }
 
 // Main TripMap component
-function TripMap({ tripItems, loadingInitialData }) {
+function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
   if (loadingInitialData) {
@@ -267,6 +289,9 @@ function TripMap({ tripItems, loadingInitialData }) {
             : `Route through ${tripItems.length} locations: ${tripItems.map(item => item.location).join(' → ')}`
           }
         </p>
+        <p className="text-blue-600 text-xs mt-1">
+          💡 Travel times will be automatically calculated and updated based on Google Maps routing data
+        </p>
       </div>
       
       <div className="border rounded-lg overflow-hidden shadow-lg">
@@ -275,7 +300,7 @@ function TripMap({ tripItems, loadingInitialData }) {
           render={render}
           libraries={['geometry']}
         >
-          <Map tripItems={tripItems} />
+          <Map tripItems={tripItems} onUpdateTravelTime={onUpdateTravelTime} />
         </Wrapper>
       </div>
       
@@ -294,7 +319,12 @@ function TripMap({ tripItems, loadingInitialData }) {
                     <p className="text-sm text-gray-600">{item.accommodation}</p>
                   </div>
                   <div className="text-sm text-gray-600 mt-1 sm:mt-0">
-                    {item.date}
+                    <div>{item.date}</div>
+                    {item.travelTime && (
+                      <div className="text-xs text-blue-600 mt-1">
+                        🚗 {item.travelTime}{item.distance ? ` (${item.distance})` : ''}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

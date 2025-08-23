@@ -1,5 +1,5 @@
 /* global __app_id, __firebase_config, __initial_auth_token */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 // eslint-disable-next-line no-unused-vars
@@ -222,6 +222,25 @@ function App() {
       console.log("Itinerary useEffect skipped: db, currentTripId, or appIdentifier not ready.", { db: !!db, currentTripId: !!currentTripId, appIdentifier: !!appIdentifier });
     }
   }, [db, currentTripId, appIdentifier]);
+
+  // Function to update travel time for a trip item
+  const handleUpdateTravelTime = useCallback(async (itemId, duration, distance) => {
+    if (!currentTripId || !db) {
+      console.log('Cannot update travel time: no trip selected or db not ready');
+      return;
+    }
+
+    try {
+      const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, itemId);
+      await updateDoc(docRef, { 
+        travelTime: duration,
+        distance: distance
+      });
+      console.log(`✓ Updated travel time for ${itemId}: ${duration} (${distance})`);
+    } catch (error) {
+      console.error("Error updating travel time:", error);
+    }
+  }, [currentTripId, db, appIdentifier]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -584,6 +603,7 @@ function App() {
             <TripMap
               tripItems={tripItems}
               loadingInitialData={loadingInitialData}
+              onUpdateTravelTime={handleUpdateTravelTime}
             />
           )
         )}
