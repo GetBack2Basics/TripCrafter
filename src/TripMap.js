@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 
 const render = (status) => {
@@ -14,132 +14,188 @@ const render = (status) => {
   }
 };
 
-// Map component that will render the actual Google Map
+// Simplified Map component with better performance
 function Map({ tripItems }) {
   const ref = useRef(null);
   const [map, setMap] = useState(null);
-  const [directionsService, setDirectionsService] = useState(null);
-  const [directionsRenderer, setDirectionsRenderer] = useState(null);
-  const [markers, setMarkers] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
+  // Initialize map only once
   useEffect(() => {
-    if (ref.current && !map) {
-      // Initialize the map
+    if (ref.current && !map && window.google) {
+      console.log('Initializing Google Map...');
       const newMap = new window.google.maps.Map(ref.current, {
-        center: { lat: -41.4545, lng: 147.1595 }, // Roughly center of Tasmania
-        zoom: 8,
+        center: { lat: -41.4545, lng: 147.1595 }, // Tasmania center
+        zoom: 7,
         mapTypeId: 'roadmap',
+        gestureHandling: 'cooperative',
+        zoomControl: true,
+        mapTypeControl: false,
+        scaleControl: true,
+        streetViewControl: false,
+        rotateControl: false,
+        fullscreenControl: true
       });
-      
       setMap(newMap);
-      
-      // Initialize directions service and renderer
-      const service = new window.google.maps.DirectionsService();
-      const renderer = new window.google.maps.DirectionsRenderer({
-        draggable: false,
-        suppressMarkers: true, // We'll use custom markers
-      });
-      
-      setDirectionsService(service);
-      setDirectionsRenderer(renderer);
-      
-      renderer.setMap(newMap);
+      console.log('Google Map initialized successfully');
     }
   }, [ref, map]);
 
-  useEffect(() => {
-    if (map && tripItems.length > 0) {
-      console.log('Map and tripItems available, processing locations:', tripItems);
-      
-      // Clear existing markers
-      markers.forEach(marker => marker.setMap(null));
-      setMarkers([]);
-      
-      // Clear any existing routes
-      if (directionsRenderer) {
-        directionsRenderer.setDirections({ routes: [] });
-      }
-      
-      // First, always add individual markers for each location
+  // Process locations with debouncing
+  const processLocations = useCallback(async () => {
+    if (!map || !tripItems.length || isProcessing) return;
+    
+    setIsProcessing(true);
+    console.log('Processing locations:', tripItems.map(item => item.location));
+
+    try {
       const geocoder = new window.google.maps.Geocoder();
-      const bounds = new window.google.maps.LatLngBounds();
-      let markersProcessed = 0;
-      const newMarkers = [];
-      
-      tripItems.forEach((item, index) => {
-        geocoder.geocode({ address: item.location }, (results, geocodeStatus) => {
-          markersProcessed++;
-          console.log(`Geocoding ${item.location}:`, geocodeStatus, results);
-          
-          if (geocodeStatus === 'OK') {
-            const marker = new window.google.maps.Marker({
-              position: results[0].geometry.location,
-              map: map,
-              title: item.location,
-              label: (index + 1).toString()
-            });
-            
-            newMarkers.push(marker);
-            bounds.extend(results[0].geometry.location);
-            
-            // If this is the last marker processed, fit the map bounds and save markers
-            if (markersProcessed === tripItems.length) {
-              map.fitBounds(bounds);
-              setMarkers(newMarkers);
-            }
-          } else {
-            console.error('Geocode failed for ' + item.location + ': ' + geocodeStatus);
-          }
-        });
+      const directionsService = new window.google.maps.DirectionsService();
+      const directionsRenderer = new window.google.maps.DirectionsRenderer({
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: '#4F46E5',
+          strokeWeight: 4,
+          strokeOpacity: 0.8
+        }
       });
       
-      // Then try to add routing if we have multiple locations
-      if (directionsService && directionsRenderer && tripItems.length > 1) {
-        const locations = tripItems.map(item => item.location);
+      directionsRenderer.setMap(map);
+
+      // Clear existing elements
+      const bounds = new window.google.maps.LatLngBounds();
+      const markers = [];
+
+      // Process each location
+      for (let i = 0; i < tripItems.length; i++) {
+        const item = tripItems[i];
+        try {
+          const results = await new Promise((resolve, reject) => {
+            geocoder.geocode({ address: item.location }, (results, status) => {
+              if (status === 'OK') resolve(results);
+              else reject(new Error(`Geocoding failed for ${item.location}: ${status}`));
+            });
+          });
+
+          if (results && results[0]) {
+            const position = results[0].geometry.location;
+            
+            // Create marker
+            const marker = new window.google.maps.Marker({
+              position: position,
+              map: map,
+              title: `${i + 1}. ${item.location}`,
+              label: {
+                text: (i + 1).toString(),
+                color: 'white',
+                fontWeight: 'bold'
+              },
+              icon: {
+                path: window.google.maps.SymbolPath.CIRCLE,
+                scale: 12,
+                fillColor: '#4F46E5',
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 2
+              }
+            });
+
+            // Add info window
+            const infoWindow = new window.google.maps.InfoWindow({
+              content: `
+                <div style="font-family: sans-serif;">
+                  <h3 style="margin: 0 0 8px 0; color: #4F46E5;">${item.location}</h3>
+                  <p style="margin: 0; color: #666;"><strong>Date:</strong> ${item.date}</p>
+                  <p style="margin: 0; color: #666;"><strong>Stay:</strong> ${item.accommodation}</p>
+                </div>
+              `
+            });
+
+            marker.addListener('click', () => {
+              infoWindow.open(map, marker);
+            });
+
+            markers.push(marker);
+            bounds.extend(position);
+            
+            console.log(`✓ Geocoded: ${item.location}`);
+          }
+        } catch (error) {
+          console.error(`✗ Failed to geocode: ${item.location}`, error);
+        }
+      }
+
+      // Fit map to bounds
+      if (markers.length > 0) {
+        map.fitBounds(bounds);
         
-        if (locations.length >= 2) {
-          const origin = locations[0];
-          const destination = locations[locations.length - 1];
-          const waypoints = locations.slice(1, -1).map(location => ({
-            location: location,
+        // Add padding if single location
+        if (markers.length === 1) {
+          map.setZoom(12);
+        }
+      }
+
+      // Try to add driving directions if multiple locations
+      if (tripItems.length > 1) {
+        try {
+          const waypoints = tripItems.slice(1, -1).map(item => ({
+            location: item.location,
             stopover: true
           }));
 
           const request = {
-            origin: origin,
-            destination: destination,
+            origin: tripItems[0].location,
+            destination: tripItems[tripItems.length - 1].location,
             waypoints: waypoints,
             travelMode: window.google.maps.TravelMode.DRIVING,
-            unitSystem: window.google.maps.UnitSystem.METRIC,
-            avoidHighways: false,
-            avoidTolls: false
+            unitSystem: window.google.maps.UnitSystem.METRIC
           };
 
-          console.log('Requesting directions for:', { origin, destination, waypoints });
-
-          directionsService.route(request, (result, status) => {
-            if (status === window.google.maps.DirectionsStatus.OK) {
-              // Set suppressMarkers to true since we already have our custom markers
-              directionsRenderer.setOptions({ suppressMarkers: true });
-              directionsRenderer.setDirections(result);
-              console.log('Directions successfully loaded');
-            } else {
-              console.error('Directions request failed due to ' + status);
-              console.log('Showing markers only (no route)');
-            }
+          const result = await new Promise((resolve, reject) => {
+            directionsService.route(request, (result, status) => {
+              if (status === 'OK') resolve(result);
+              else reject(new Error(`Directions failed: ${status}`));
+            });
           });
+
+          directionsRenderer.setDirections(result);
+          console.log('✓ Driving route added successfully');
+          
+        } catch (error) {
+          console.log('ℹ Directions not available, showing markers only:', error.message);
         }
       }
-    }
-  }, [map, directionsService, directionsRenderer, tripItems, markers]);
 
-  return <div ref={ref} style={{ width: '100%', height: '500px' }} />;
+    } catch (error) {
+      console.error('Error processing locations:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [map, tripItems, isProcessing]);
+
+  // Process locations when map and data are ready
+  useEffect(() => {
+    if (map && tripItems.length > 0) {
+      // Debounce to prevent multiple rapid calls
+      const timer = setTimeout(processLocations, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [map, tripItems, processLocations]);
+
+  return (
+    <div className="relative">
+      <div ref={ref} style={{ width: '100%', height: '500px' }} />
+      {isProcessing && (
+        <div className="absolute top-2 right-2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
+          Processing locations...
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Main TripMap component
 function TripMap({ tripItems, loadingInitialData }) {
-  // You'll need to replace this with your actual Google Maps API key
-  // For development, you can set it as an environment variable: REACT_APP_GOOGLE_MAPS_API_KEY
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
   if (loadingInitialData) {
@@ -156,16 +212,14 @@ function TripMap({ tripItems, loadingInitialData }) {
         <p className="font-bold">Google Maps API Key Required</p>
         <p>Please set your Google Maps API key in the environment variable: REACT_APP_GOOGLE_MAPS_API_KEY</p>
         <p className="text-sm mt-2">
-          You can get an API key from the{' '}
-          <a 
-            href="https://console.cloud.google.com/google/maps-apis/overview" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="underline hover:text-yellow-800"
-          >
-            Google Cloud Console
-          </a>
+          To get an API key:
         </p>
+        <ol className="text-sm mt-2 ml-4 list-decimal">
+          <li>Visit Google Cloud Console</li>
+          <li>Enable Maps JavaScript API and Directions API</li>
+          <li>Create an API key</li>
+          <li>Add it to Netlify environment variables</li>
+        </ol>
       </div>
     );
   }
@@ -184,28 +238,40 @@ function TripMap({ tripItems, loadingInitialData }) {
       <div className="mb-4">
         <h3 className="text-xl font-semibold text-indigo-700 mb-2">Trip Route Map</h3>
         <p className="text-gray-600 text-sm">
-          Showing route through {tripItems.length} locations: {tripItems.map(item => item.location).join(' → ')}
+          {tripItems.length === 1 
+            ? `Showing location: ${tripItems[0].location}`
+            : `Route through ${tripItems.length} locations: ${tripItems.map(item => item.location).join(' → ')}`
+          }
         </p>
       </div>
       
       <div className="border rounded-lg overflow-hidden shadow-lg">
-        <Wrapper apiKey={apiKey} render={render}>
+        <Wrapper 
+          apiKey={apiKey} 
+          render={render}
+          libraries={['geometry']}
+        >
           <Map tripItems={tripItems} />
         </Wrapper>
       </div>
       
       <div className="mt-4">
-        <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Locations</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Timeline</h4>
+        <div className="space-y-2">
           {tripItems.map((item, index) => (
-            <div key={item.id} className="bg-gray-50 p-3 rounded-lg border">
-              <div className="flex items-center space-x-2">
-                <span className="bg-indigo-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">
-                  {index + 1}
-                </span>
-                <div>
-                  <p className="font-semibold text-gray-800">{item.location}</p>
-                  <p className="text-sm text-gray-600">{item.date}</p>
+            <div key={item.id} className="bg-gray-50 p-3 rounded-lg border flex items-center space-x-3">
+              <span className="bg-indigo-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold flex-shrink-0">
+                {index + 1}
+              </span>
+              <div className="flex-grow">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-800">{item.location}</p>
+                    <p className="text-sm text-gray-600">{item.accommodation}</p>
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1 sm:mt-0">
+                    {item.date}
+                  </div>
                 </div>
               </div>
             </div>
