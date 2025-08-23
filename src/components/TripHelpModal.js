@@ -21,35 +21,7 @@ function TripHelpModal({ isOpen, onClose }) {
     }
   }, [isOpen]);
 
-  const parseMarkdown = (markdown) => {
-    // Simple markdown parser for basic formatting
-    let html = markdown;
-    
-    // Headers
-    html = html.replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold mb-4 text-indigo-700">$1</h1>');
-    html = html.replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-gray-800 mb-3 mt-6">$1</h2>');
-    html = html.replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-gray-700 mb-2 mt-4">$1</h3>');
-    
-    // Bold text
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-700">$1</strong>');
-    
-    // Lists
-    html = html.replace(/^- (.*$)/gm, '<li class="ml-4 text-gray-600">• $1</li>');
-    html = html.replace(/^\d+\. (.*$)/gm, '<li class="ml-4 text-gray-600 list-decimal">$1</li>');
-    
-    // Wrap consecutive list items
-    html = html.replace(/(<li.*?<\/li>\s*)+/g, (match) => {
-      return `<ul class="space-y-1 mb-3">${match}</ul>`;
-    });
-    
-    // Paragraphs
-    html = html.replace(/^(?!<[h|u|l])(.*$)/gm, '<p class="text-gray-600 mb-3">$1</p>');
-    
-    // Remove empty paragraphs
-    html = html.replace(/<p class="text-gray-600 mb-3">\s*<\/p>/g, '');
-    
-    return html;
-  };
+  // Removed unused parseMarkdown function to resolve ESLint error
 
   const renderContent = () => {
     const sections = helpContent.split('## ').filter(section => section.trim());
