@@ -13,7 +13,8 @@ const defaultTasmaniaTripData = [
     notes: 'Depart Geelong 08:30, Arrive Devonport 19:00. Passengers: 4 Adult, 2 Recliner (Accessible), 2 Day Ticket. Vehicle: 1 LDV T60 (6m, over 2.1m high), DO32JP. Booking #15661503.',
     travelTime: '10h 30m',
     activities: 'Ferry crossing, scenic views of Bass Strait.',
-    bookingCom: '', // Ferry - no accommodation needed
+    type: 'enroute',
+    activityLink: '',
   },
   // George Town - Dec 22-23 (from CSV, adjusted to fit after ferry arrival)
   {
@@ -25,7 +26,8 @@ const defaultTasmaniaTripData = [
     notes: 'Overnight. May cancel and just free camp.',
     travelTime: '~30m from Devonport', // Estimated drive from Devonport port
     activities: 'Arrival in Tasmania, settle in George Town.',
-    bookingCom: 'https://www.booking.com/searchresults.html?ss=George+Town&checkin=2025-12-22&checkout=2025-12-23&group_adults=4',
+    type: 'camp',
+    activityLink: 'http://www.findacamp.com.au/camp-site.php?pc=george+town&dis=25',
   },
   // Bay of Fires / NE Coast (Binalong Bay) - Dec 23-24 (from CSV)
   {
@@ -37,7 +39,8 @@ const defaultTasmaniaTripData = [
     notes: 'Beaches, Eddystone Point day trip, coastal walks.',
     travelTime: '~3h 15m from Devonport',
     activities: 'Beaches, Eddystone Point day trip, coastal walks.',
-  bookingCom: '',
+    type: 'camp',
+    activityLink: 'http://www.findacamp.com.au/camp-site.php?pc=binalong+bay&dis=25',
   },
   // Ross / Midlands (Christmas - booked) - Dec 24-26 (from CSV, overlapping with Scamander)
   // Scamander Sanctuary (from PDF booking) is Dec 24-25, so we'll adjust Ross to start after.
@@ -50,7 +53,8 @@ const defaultTasmaniaTripData = [
     notes: 'Accommodation for George Corea (24 Dec 2025 to 25 Dec 2025). Booking #27366. Receipt #29582. Scenic drive from Bay of Fires to Tasmania\'s East Coast for Christmas.',
     travelTime: 'Approx. 1h from Bay of Fires', // Estimated based on map
     activities: 'Travel to Scamander, settle for Christmas Eve.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   {
     id: 'ross-midlands-2025-12-25',
@@ -61,7 +65,8 @@ const defaultTasmaniaTripData = [
     notes: 'Christmas service, historic village walks.',
     travelTime: '~1h from Scamander', // Estimated drive from Scamander to Ross
     activities: 'Christmas service, historic village walks.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Freycinet / East Coast - Dec 26-28 (from CSV)
   {
@@ -73,7 +78,8 @@ const defaultTasmaniaTripData = [
     notes: 'Wineglass Bay hike, coastal activities.',
     travelTime: '~1h 30m from Ross', // Estimated drive
     activities: 'Wineglass Bay hike, coastal activities.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Hobart / South East - Dec 28-30 (from CSV)
   {
@@ -85,7 +91,8 @@ const defaultTasmaniaTripData = [
     notes: 'MONA, Salamanca, Port Arthur day trip, Richmond.',
     travelTime: '~2h from Freycinet',
     activities: 'MONA, Salamanca, Port Arthur day trip, Richmond.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Huon Valley / South West - Dec 30-Jan 1 (from CSV)
   {
@@ -108,7 +115,8 @@ const defaultTasmaniaTripData = [
     notes: 'Waterfalls, Tall Trees Walk, Lake St Clair.',
     travelTime: '~1h 30m from Huon Valley',
     activities: 'Waterfalls, Tall Trees Walk, Lake St Clair.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Queenstown / West Coast - Jan 3-5 (from CSV)
   {
@@ -120,7 +128,8 @@ const defaultTasmaniaTripData = [
     notes: 'Mining history, Gordon River Cruise (Strahan).',
     travelTime: '~2h from Mount Field',
     activities: 'Mining history, Gordon River Cruise (Strahan).',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Strahan / West Coast - Jan 5-7 (from CSV)
   {
@@ -132,7 +141,8 @@ const defaultTasmaniaTripData = [
     notes: 'Gordon River Cruise, Henty Dunes.',
     travelTime: '~45m from Queenstown',
     activities: 'Gordon River Cruise, Henty Dunes.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Stanley / NW Coast / Tarkine - Jan 7-9 (from CSV)
   {
@@ -144,7 +154,8 @@ const defaultTasmaniaTripData = [
     notes: 'The Nut, Tarkine Drive, Edge of the World walks.',
     travelTime: '~3-4h from Strahan to Stanley',
     activities: 'The Nut, Tarkine Drive, Edge of the World walks.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Cethana Campground (from PDF booking) - Jan 9-11 (overlaps with CSV's Transit to Cradle Mountain)
   // We'll keep Cethana as the primary booking for these dates.
@@ -157,7 +168,8 @@ const defaultTasmaniaTripData = [
     notes: 'Trip dates: Fri, Jan 9th to Sun, Jan 11th. Group size: 3 Adults, 1 Vehicle (car, 5 meters length). Booking #3585929. Located near the Cradle Mountain area, providing a good base for exploring.',
     travelTime: 'Approx. 2h from Stanley', // Estimated drive to Cethana
     activities: 'Camping, exploring local area, relaxing, day trips to nearby attractions like Cradle Mountain.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Cradle Mountain - Jan 10-12 (from CSV, adjusted to fit Cethana booking)
   // This entry is adjusted to represent activities during the Cethana stay.
@@ -170,7 +182,8 @@ const defaultTasmaniaTripData = [
     notes: 'Canyoning with Cradle Mountain Canyons, guided caving, alpine hikes.',
     travelTime: 'Local (from Cethana)',
     activities: 'Canyoning with Cradle Mountain Canyons, guided caving, alpine hikes.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Transit to Devonport - Jan 12 (from CSV)
   {
@@ -182,7 +195,8 @@ const defaultTasmaniaTripData = [
     notes: 'Travel day to Devonport for ferry departure.',
     travelTime: '~1h from Cradle Mountain area',
     activities: 'Travel day, last-minute souvenir shopping in Devonport.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
   // Spirit of Tasmania (Sailing 2) - Jan 13 (from PDF booking)
   {
@@ -194,7 +208,8 @@ const defaultTasmaniaTripData = [
     notes: 'Depart Devonport 08:30, Arrive Geelong 19:00. Passengers: 3 Adult, 1 Recliner, 2 Day Ticket. Vehicle: 1 LDV T60 (6m, over 2.1m high), DO32JP. Booking #15661503.',
     travelTime: '10h 30m',
     activities: 'Ferry crossing, reflection on the trip.',
-  bookingCom: '',
+  type: 'roofed',
+  activityLink: '',
   },
 ];
 

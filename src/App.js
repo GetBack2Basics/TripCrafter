@@ -10,43 +10,58 @@ import TripList from './TripList'; // Import the new TripList component
 import TripTable from './TripTable'; // Import the new TripTable component
 import TripMap from './TripMap'; // Import the new TripMap component
 
-// Utility function to generate Booking.com URLs
-const generateBookingComUrl = (location, checkinDate, checkoutDate = null, adults = 4) => {
-  if (!location || !checkinDate) return '';
+// Utility function to generate activity links based on type
+const generateActivityLink = (type, location, checkinDate, checkoutDate = null, adults = 4) => {
+  if (!location) return '';
   
-  // Extract city/town name from location (remove state, country, etc.)
   const locationParts = location.split(',');
   const cityName = locationParts[0].trim();
   
-  // Parse checkin date
-  const checkin = new Date(checkinDate);
-  const checkinYear = checkin.getFullYear();
-  const checkinMonth = checkin.getMonth() + 1; // JavaScript months are 0-indexed
-  const checkinDay = checkin.getDate();
-  
-  // Calculate checkout date (default to next day if not provided)
-  let checkout;
-  if (checkoutDate) {
-    checkout = new Date(checkoutDate);
-  } else {
-    checkout = new Date(checkin);
-    checkout.setDate(checkout.getDate() + 1);
+  switch(type) {
+    case 'roofed':
+      // Generate Booking.com URL
+      if (!checkinDate) return '';
+      
+      const checkin = new Date(checkinDate);
+      const checkinYear = checkin.getFullYear();
+      const checkinMonth = checkin.getMonth() + 1;
+      const checkinDay = checkin.getDate();
+      
+      let checkout;
+      if (checkoutDate) {
+        checkout = new Date(checkoutDate);
+      } else {
+        checkout = new Date(checkin);
+        checkout.setDate(checkout.getDate() + 1);
+      }
+      
+      const checkoutYear = checkout.getFullYear();
+      const checkoutMonth = checkout.getMonth() + 1;
+      const checkoutDay = checkout.getDate();
+      
+      const baseUrl = 'https://www.booking.com/searchresults.html';
+      const params = new URLSearchParams({
+        ss: cityName,
+        checkin: `${checkinYear}-${String(checkinMonth).padStart(2, '0')}-${String(checkinDay).padStart(2, '0')}`,
+        checkout: `${checkoutYear}-${String(checkoutMonth).padStart(2, '0')}-${String(checkoutDay).padStart(2, '0')}`,
+        group_adults: adults.toString()
+      });
+      
+      return `${baseUrl}?${params.toString()}`;
+      
+    case 'camp':
+      // Generate findacamp.com.au URL
+      const campSearchTerm = encodeURIComponent(cityName.toLowerCase().replace(' ', '+'));
+      return `http://www.findacamp.com.au/camp-site.php?pc=${campSearchTerm}&dis=25`;
+      
+    case 'enroute':
+      // Generate Google search for activities
+      const searchQuery = encodeURIComponent(`things to do ${cityName} Tasmania activities attractions`);
+      return `https://www.google.com/search?q=${searchQuery}`;
+      
+    default:
+      return '';
   }
-  
-  const checkoutYear = checkout.getFullYear();
-  const checkoutMonth = checkout.getMonth() + 1;
-  const checkoutDay = checkout.getDate();
-  
-  // Construct the booking.com search URL
-  const baseUrl = 'https://www.booking.com/searchresults.html';
-  const params = new URLSearchParams({
-    ss: cityName,
-    checkin: `${checkinYear}-${String(checkinMonth).padStart(2, '0')}-${String(checkinDay).padStart(2, '0')}`,
-    checkout: `${checkoutYear}-${String(checkoutMonth).padStart(2, '0')}-${String(checkoutDay).padStart(2, '0')}`,
-    group_adults: adults.toString()
-  });
-  
-  return `${baseUrl}?${params.toString()}`;
 };
 
 function App() {
@@ -57,7 +72,7 @@ function App() {
   const [userEmail, setUserEmail] = useState(null);
   const [currentTripId, setCurrentTripId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
-  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', bookingCom: '' });
+  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
@@ -269,7 +284,11 @@ function App() {
             id: doc.id, 
             ...data,
             // Add order field if it doesn't exist (for backwards compatibility)
-            order: data.order !== undefined ? data.order : new Date(data.date).getTime()
+            order: data.order !== undefined ? data.order : new Date(data.date).getTime(),
+            // Add type field if it doesn't exist (for backwards compatibility)
+            type: data.type || 'roofed',
+            // Handle migration from bookingCom to activityLink
+            activityLink: data.activityLink || data.bookingCom || ''
           });
         });
         // Sort by order field first, then by date as fallback
@@ -318,11 +337,12 @@ function App() {
     if (editingItem) {
       const updatedItem = { ...editingItem, [name]: value };
       
-      // Auto-generate booking.com URL if location or date changes
-      if (name === 'location' || name === 'date') {
+      // Auto-generate activity link if location, date, or type changes
+      if (name === 'location' || name === 'date' || name === 'type') {
         const nextDayDate = new Date(updatedItem.date || new Date());
         nextDayDate.setDate(nextDayDate.getDate() + 1);
-        updatedItem.bookingCom = generateBookingComUrl(
+        updatedItem.activityLink = generateActivityLink(
+          updatedItem.type, 
           updatedItem.location, 
           updatedItem.date, 
           nextDayDate.toISOString().split('T')[0]
@@ -333,11 +353,12 @@ function App() {
     } else {
       const updatedItem = { ...newItem, [name]: value };
       
-      // Auto-generate booking.com URL if location or date changes
-      if (name === 'location' || name === 'date') {
+      // Auto-generate activity link if location, date, or type changes
+      if (name === 'location' || name === 'date' || name === 'type') {
         const nextDayDate = new Date(updatedItem.date || new Date());
         nextDayDate.setDate(nextDayDate.getDate() + 1);
-        updatedItem.bookingCom = generateBookingComUrl(
+        updatedItem.activityLink = generateActivityLink(
+          updatedItem.type, 
           updatedItem.location, 
           updatedItem.date, 
           nextDayDate.toISOString().split('T')[0]
@@ -439,7 +460,7 @@ function App() {
 
     try {
       await setDoc(newItemRef, itemToAdd);
-      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', bookingCom: '' });
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
       openModal('Trip item added successfully!');
     } catch (error) {
       console.error("Error adding document: ", error);
@@ -514,7 +535,7 @@ function App() {
       const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
       await updateDoc(docRef, editingItem); // Update the document with the editedItem state
       setEditingItem(null); // Clear editing item state
-      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', bookingCom: '' }); // Clear form
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' }); // Clear form
       setViewMode('table'); // Go back to table view after saving
       openModal('Trip item updated successfully!');
     } catch (error) {
@@ -692,7 +713,7 @@ function App() {
           <button
             onClick={() => {
               setEditingItem(null); // Clear any editing state
-              setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', bookingCom: '' }); // Clear form
+              setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' }); // Clear form
               setViewMode('form'); // Switch to form view
             }}
             className={`px-6 py-2 rounded-full font-semibold transition duration-300 ${
@@ -745,7 +766,7 @@ function App() {
               onSaveEdit={handleSaveEdit} // New prop for saving edits
               onCancelEdit={() => { // New prop for canceling edits
                 setEditingItem(null);
-                setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', bookingCom: '' });
+                setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
                 setViewMode('table'); // Go back to table view
               }}
               openModal={openModal}

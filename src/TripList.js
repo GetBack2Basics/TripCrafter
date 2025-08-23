@@ -50,6 +50,16 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                 <option value="Booked">Booked</option>
                 <option value="Cancelled">Cancelled</option>
               </select>
+              <select
+                name="type"
+                value={editingItem.type}
+                onChange={handleInputChange}
+                className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <option value="roofed">Roofed</option>
+                <option value="camp">Camp</option>
+                <option value="enroute">Enroute</option>
+              </select>
               <input
                 type="text"
                 name="travelTime"
@@ -68,10 +78,10 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
               />
               <input
                 type="url"
-                name="bookingCom"
-                value={editingItem.bookingCom}
+                name="activityLink"
+                value={editingItem.activityLink}
                 onChange={handleInputChange}
-                placeholder="Booking.com URL"
+                placeholder="Activity Link"
                 className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50"
               />
               <textarea
@@ -106,15 +116,25 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                   <h3 className="text-xl font-semibold text-indigo-800 mb-1">{item.location}</h3>
                   <p className="text-lg text-gray-700">{item.accommodation}</p>
                 </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                    item.status === 'Booked' ? 'bg-green-100 text-green-800' :
-                    item.status === 'Unconfirmed' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {item.status}
-                </span>
+                <div className="flex flex-col items-end space-y-2">
+                  <span
+                    className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                      item.status === 'Booked' ? 'bg-green-100 text-green-800' :
+                      item.status === 'Unconfirmed' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {item.status}
+                  </span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    item.type === 'roofed' ? 'bg-blue-100 text-blue-800' :
+                    item.type === 'camp' ? 'bg-green-100 text-green-800' :
+                    item.type === 'enroute' ? 'bg-orange-100 text-orange-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {item.type || 'roofed'}
+                  </span>
+                </div>
               </div>
               {item.travelTime && (
                 <p className="text-md text-gray-600 mb-2">
@@ -129,16 +149,20 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
               {item.notes && (
                 <p className="text-md text-gray-600 mb-4">{item.notes}</p>
               )}
-              {item.bookingCom && (
+              {item.activityLink && (
                 <p className="text-md text-gray-600 mb-4">
-                  <span className="font-medium">Booking:</span> 
+                  <span className="font-medium">
+                    {item.type === 'roofed' ? 'Booking:' : item.type === 'camp' ? 'Camping:' : 'Activities:'}
+                  </span> 
                   <a 
-                    href={item.bookingCom} 
+                    href={item.activityLink} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:text-blue-800 underline ml-1"
                   >
-                    View accommodation options on Booking.com
+                    {item.type === 'roofed' ? 'View accommodation options on Booking.com' : 
+                     item.type === 'camp' ? 'Find camping spots on FindACamp' : 
+                     'Discover local activities on Google'}
                   </a>
                 </p>
               )}

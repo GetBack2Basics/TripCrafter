@@ -85,11 +85,14 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
               <th scope="col" className="w-[15%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Accommodation
               </th>
-              <th scope="col" className="w-[20%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-[8%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Type
+              </th>
+              <th scope="col" className="w-[17%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Activities
               </th>
               <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Booking.com
+                Activity Link
               </th>
               <th scope="col" className="w-[10%] relative px-4 py-3">
                 <span className="sr-only">Actions</span>
@@ -116,18 +119,28 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                     <TruncatedText text={item.accommodation} maxLength={40} />
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                    <TruncatedText text={item.activities} maxLength={60} />
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      item.type === 'roofed' ? 'bg-blue-100 text-blue-800' :
+                      item.type === 'camp' ? 'bg-green-100 text-green-800' :
+                      item.type === 'enroute' ? 'bg-orange-100 text-orange-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {item.type || 'roofed'}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                    {item.bookingCom ? (
+                    <TruncatedText text={item.activities} maxLength={50} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    {item.activityLink ? (
                       <a 
-                        href={item.bookingCom} 
+                        href={item.activityLink} 
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 underline text-xs"
-                        title="Open Booking.com search"
+                        title={`Open ${item.type === 'roofed' ? 'Booking.com' : item.type === 'camp' ? 'FindACamp' : 'Google activities'} search`}
                       >
-                        View Options
+                        {item.type === 'roofed' ? 'Book Stay' : item.type === 'camp' ? 'Find Camps' : 'Find Activities'}
                       </a>
                     ) : (
                       <span className="text-gray-400 text-xs">No link</span>
@@ -175,7 +188,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                 </tr>
                 {expandedRowId === item.id && (
                   <tr className={`${item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''} border-t border-gray-200`}>
-                    <td colSpan="8" className="px-4 py-3 text-sm text-gray-700"> {/* Adjusted colSpan */}
+                    <td colSpan="9" className="px-4 py-3 text-sm text-gray-700"> {/* Adjusted colSpan */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2"> {/* Adjusted grid for better layout */}
                         {item.travelTime && (
                           <div><span className="font-medium">Est. Travel Time:</span> <TruncatedText text={item.travelTime} fullWidth={true} /></div>
@@ -230,16 +243,20 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                 <span className="font-medium">Notes:</span> <TruncatedText text={item.notes} maxLength={100} />
               </p>
             )}
-            {item.bookingCom && (
+            {item.activityLink && (
               <p className="text-xs text-gray-600 mb-2">
-                <span className="font-medium">Booking:</span> 
+                <span className="font-medium">
+                  {item.type === 'roofed' ? 'Booking:' : item.type === 'camp' ? 'Camping:' : 'Activities:'}
+                </span> 
                 <a 
-                  href={item.bookingCom} 
+                  href={item.activityLink} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:text-blue-800 underline ml-1"
                 >
-                  View accommodation options
+                  {item.type === 'roofed' ? 'View accommodation options' : 
+                   item.type === 'camp' ? 'Find camping spots on FindACamp' : 
+                   'Discover local activities'}
                 </a>
               </p>
             )}

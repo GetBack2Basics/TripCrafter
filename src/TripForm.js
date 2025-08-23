@@ -71,6 +71,17 @@ function TripForm({ newItem, handleInputChange, onAddItem, onSaveEdit, onCancelE
             <option value="Cancelled">Cancelled</option>
             <option value="Not booked">Not booked</option>
           </select>
+          <select
+            name="type"
+            value={formData.type}
+            onChange={handleFormChange}
+            className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            title="Type determines the activity link: Roofed=Booking.com, Camp=FindACamp, Enroute=Google activities"
+          >
+            <option value="roofed">Roofed</option>
+            <option value="camp">Camp</option>
+            <option value="enroute">Enroute</option>
+          </select>
           <input
             type="text"
             name="travelTime"
@@ -89,12 +100,12 @@ function TripForm({ newItem, handleInputChange, onAddItem, onSaveEdit, onCancelE
           />
           <input
             type="url"
-            name="bookingCom"
-            value={formData.bookingCom}
+            name="activityLink"
+            value={formData.activityLink}
             onChange={handleFormChange}
-            placeholder="Booking.com URL (auto-generated)"
+            placeholder="Activity Link (auto-generated based on type)"
             className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50"
-            title="This URL is auto-generated based on location and date, but you can edit it manually"
+            title="This URL is auto-generated based on type and location, but you can edit it manually"
           />
           <textarea
             name="notes"
