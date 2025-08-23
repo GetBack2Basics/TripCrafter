@@ -12,6 +12,7 @@ import TripMap from './TripMap'; // Import the new TripMap component
 import TripChooser from './TripChooser'; // Import the new TripChooser component
 import AIImportButton from './components/AIImportButton'; // Import AI Import button
 import AIImportModal from './components/AIImportModal'; // Import AI Import modal
+import ImportConflictModal from './components/ImportConflictModal';
 import TripHelpModal from './components/TripHelpModal'; // Import the help modal
 import { createAIImportHandlers } from './handlers/aiImportHandlers'; // Import AI Import handlers
 
@@ -114,6 +115,8 @@ function App() {
 
   // AI Import states
   const [showAIImportModal, setShowAIImportModal] = useState(false);
+  const [importConflicts, setImportConflicts] = useState([]);
+  const [pendingImportItems, setPendingImportItems] = useState([]);
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
@@ -640,14 +643,117 @@ function App() {
   };
 
   // AI Import handlers - using external handler functions to keep App.js clean
-  const aiImportHandlers = createAIImportHandlers({
-    db,
-    currentTripId,
-    appIdentifier,
-    tripSettings,
-    generateActivityLink,
-    openModal
-  });
+  // Custom AI Import handler to support conflict resolution
+  const handleAIImportSuccess = async (parsedData) => {
+    if (!currentTripId) {
+      openModal('No trip selected. Please select or create a trip first.');
+      return;
+    }
+    const dataArray = Array.isArray(parsedData) ? parsedData : [parsedData];
+    // Group by date
+    const byDate = {};
+    dataArray.forEach(item => {
+      if (!byDate[item.date]) byDate[item.date] = [];
+      byDate[item.date].push(item);
+    });
+    // Find conflicts
+    const conflicts = [];
+    const existingByDate = {};
+    tripItems.forEach(item => {
+      if (!existingByDate[item.date]) existingByDate[item.date] = [];
+      existingByDate[item.date].push(item);
+    });
+    Object.keys(byDate).forEach(date => {
+      if (existingByDate[date]) {
+        byDate[date].forEach(importedItem => {
+          // Only conflict with roofed/camping for now
+          const existing = existingByDate[date].find(ei => ei.type === 'roofed' || ei.type === 'camp');
+          if (existing) {
+            conflicts.push({ date, existingItem: existing, importedItem });
+          }
+        });
+      }
+    });
+    if (conflicts.length > 0) {
+      setImportConflicts(conflicts);
+      setPendingImportItems(dataArray);
+      setShowAIImportModal(false);
+      return;
+    }
+    // No conflicts, proceed to add all
+    await addImportedItems(dataArray);
+  };
+
+  const addImportedItems = async (items, choices = {}) => {
+    try {
+      for (const item of items) {
+        let finalItem = { ...item };
+        if (choices[item.date]) {
+          if (choices[item.date] === 'ignore') continue;
+          if (choices[item.date] === 'enroute') finalItem.type = 'enroute';
+          if (choices[item.date] === 'note') finalItem.type = 'note';
+          if (choices[item.date] === 'replace') {
+            // Remove existing roofed/camp for that date
+            const toRemove = tripItems.find(ei => ei.date === item.date && (ei.type === 'roofed' || ei.type === 'camp'));
+            if (toRemove) {
+              const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, toRemove.id);
+              await deleteDoc(docRef);
+            }
+          }
+        }
+        // Generate activity link if not present
+        if (!finalItem.activityLink) {
+          finalItem.activityLink = generateActivityLink(
+            finalItem.type,
+            finalItem.location,
+            finalItem.date,
+            null,
+            4,
+            tripSettings
+          );
+        }
+        const itineraryCollectionRef = collection(
+          db,
+          `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`
+        );
+        const newItemRef = doc(itineraryCollectionRef);
+        const itemToAdd = {
+          ...finalItem,
+          id: newItemRef.id,
+          order: Date.now() + items.indexOf(item)
+        };
+        await setDoc(newItemRef, itemToAdd);
+      }
+      const itemText = items.length === 1 ? 'item' : 'items';
+      openModal(`🎉 ${items.length} trip ${itemText} imported successfully with AI!`);
+      setImportConflicts([]);
+      setPendingImportItems([]);
+    } catch (error) {
+      console.error('Error adding AI imported items: ', error);
+      openModal('Error importing trip data. Please try again.');
+    }
+  };
+
+  const handleImportConflictResolve = async (choices) => {
+    // Apply user choices
+    await addImportedItems(pendingImportItems, choices);
+    setImportConflicts([]);
+    setPendingImportItems([]);
+  };
+
+  const handleImportConflictCancel = () => {
+    setImportConflicts([]);
+    setPendingImportItems([]);
+    openModal('AI import cancelled. No changes made.');
+  };
+
+  const aiImportHandlers = {
+    handleAIImportSuccess,
+    handleAIImportError: (error) => {
+      console.error('AI Import Error:', error);
+      openModal(`AI Import failed: ${error}`);
+    }
+  };
 
   // Display loading screen until Firebase Auth is ready and initial trip is set
   if (!isAuthReady || loadingInitialData) {
@@ -1138,6 +1244,14 @@ function App() {
           onImportSuccess={aiImportHandlers.handleAIImportSuccess}
           onError={aiImportHandlers.handleAIImportError}
         />
+        {/* Import Conflict Modal */}
+        {importConflicts.length > 0 && (
+          <ImportConflictModal
+            conflicts={importConflicts}
+            onResolve={handleImportConflictResolve}
+            onCancel={handleImportConflictCancel}
+          />
+        )}
         
         {/* Version number display */}
         <div className="text-center text-xs text-gray-400 mt-8">
