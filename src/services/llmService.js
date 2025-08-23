@@ -110,17 +110,20 @@ Return only JSON:`;
       const line = lines[i];
       if (dateRegex.test(line)) {
         // Look back for place/accommodation/address
-        let j = i - 1;
-        let place = null, address = null, accommodation = null;
-        while (j >= 0 && (!place || !address)) {
-          if (!place && lines[j].match(/hotel|park|camp|campsite|caravan|motel|resort|lodge|inn|apartment|stand|campground|site|harbour|river|lake|bay|bluff|trial|wilderness|information|green|lagoon|track|road|rd|drive|dr|tasman|highway|hwy|avenue|ave|street|st|lane|ln|boulevard|blvd/i)) {
-            place = lines[j];
-          } else if (!address && lines[j].match(/\d+|road|rd|drive|dr|tasman|highway|hwy|avenue|ave|street|st|lane|ln|boulevard|blvd|access/i)) {
-            address = lines[j];
-          }
-          j--;
+        let place = null, address = null;
+        if (i >= 2) {
+          // Assume: [address], [place], [date]
+          place = lines[i-1];
+          address = lines[i-2];
+        } else if (i >= 1) {
+          place = lines[i-1];
         }
-        accommodation = place || address || 'Accommodation';
+        // If address looks like a street or has a number, keep, else swap
+        if (address && !address.match(/\d+|road|rd|drive|dr|tasman|highway|hwy|avenue|ave|street|st|lane|ln|boulevard|blvd|access/i)) {
+          // If address doesn't look like an address, treat as part of place
+          place = address ? address + ' ' + (place || '') : (place || '');
+          address = '';
+        }
         // Determine type
         let type = 'roofed';
         if (/camp|campsite|caravan|rv|park|lagoon|green|bay|harbour|river|lake|bluff|trial|wilderness/i.test((place || '').toLowerCase())) {
@@ -133,14 +136,13 @@ Return only JSON:`;
         items.push({
           date,
           location: address || place || 'Location',
-          accommodation,
+          accommodation: place || 'Accommodation',
           status: 'Unconfirmed',
           type,
           travelTime: '',
           activities: '',
           notes: 'Extracted from itinerary text.'
         });
-  // (no-op: removed unused assignments)
       }
     }
     // Fallback: if no items found, return a single generic item
