@@ -147,8 +147,11 @@ function App() {
         });
 
         const itineraryCollectionRef = collection(newTripRef, 'itineraryItems');
-        for (const item of defaultTasmaniaTripData) {
-          await setDoc(doc(itineraryCollectionRef, item.id), item);
+        for (const [index, item] of defaultTasmaniaTripData.entries()) {
+          await setDoc(doc(itineraryCollectionRef, item.id), {
+            ...item,
+            order: index * 1000 // Give each item an order based on its index
+          });
         }
         console.log("Default Tasmania trip created in Firestore.");
       } else {
@@ -180,11 +183,27 @@ function App() {
           }
           
           // Add new items with proper structure
-          for (const item of defaultTasmaniaTripData) {
-            await setDoc(doc(itineraryCollectionRef, item.id), item);
+          for (const [index, item] of defaultTasmaniaTripData.entries()) {
+            await setDoc(doc(itineraryCollectionRef, item.id), {
+              ...item,
+              order: index * 1000 // Give each item an order based on its index
+            });
           }
           
           console.log("Trip data updated successfully with new structure and addresses.");
+        } else {
+          // Check if existing items need order fields added
+          const itemsNeedingOrder = currentItems.filter(item => item.order === undefined);
+          if (itemsNeedingOrder.length > 0) {
+            console.log("Adding order fields to existing items...");
+            for (const [index, item] of currentItems.entries()) {
+              if (item.order === undefined) {
+                const docRef = doc(itineraryCollectionRef, item.id);
+                await updateDoc(docRef, { order: index * 1000 });
+              }
+            }
+            console.log("Order fields added to existing items.");
+          }
         }
       }
       setCurrentTripId(selectedTripId);
@@ -206,9 +225,21 @@ function App() {
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const items = [];
         snapshot.forEach((doc) => {
-          items.push({ id: doc.id, ...doc.data() });
+          const data = doc.data();
+          items.push({ 
+            id: doc.id, 
+            ...data,
+            // Add order field if it doesn't exist (for backwards compatibility)
+            order: data.order !== undefined ? data.order : new Date(data.date).getTime()
+          });
         });
-        setTripItems(items.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        // Sort by order field first, then by date as fallback
+        setTripItems(items.sort((a, b) => {
+          if (a.order !== b.order) {
+            return a.order - b.order;
+          }
+          return new Date(a.date) - new Date(b.date);
+        }));
         console.log("Itinerary items updated from Firestore.");
       }, (error) => {
         console.error("Error fetching trip itinerary: ", error);
@@ -333,7 +364,12 @@ function App() {
 
     const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
     const newItemRef = doc(itineraryCollectionRef);
-    const itemToAdd = { ...newItem, id: newItemRef.id };
+    // Set order to current timestamp to add at the end
+    const itemToAdd = { 
+      ...newItem, 
+      id: newItemRef.id,
+      order: Date.now()
+    };
 
     try {
       await setDoc(newItemRef, itemToAdd);
@@ -342,6 +378,52 @@ function App() {
     } catch (error) {
       console.error("Error adding document: ", error);
       openModal('Error adding trip item. Please try again.');
+    }
+  };
+
+  // Function to move an item up in the order
+  const handleMoveUp = async (itemId) => {
+    const currentIndex = tripItems.findIndex(item => item.id === itemId);
+    if (currentIndex <= 0) return; // Can't move up if it's already first
+
+    const currentItem = tripItems[currentIndex];
+    const previousItem = tripItems[currentIndex - 1];
+
+    try {
+      // Swap the order values
+      const docRef1 = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, currentItem.id);
+      const docRef2 = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, previousItem.id);
+      
+      await updateDoc(docRef1, { order: previousItem.order });
+      await updateDoc(docRef2, { order: currentItem.order });
+      
+      console.log(`Moved ${currentItem.location} up in order`);
+    } catch (error) {
+      console.error("Error moving item up:", error);
+      openModal('Error moving item. Please try again.');
+    }
+  };
+
+  // Function to move an item down in the order
+  const handleMoveDown = async (itemId) => {
+    const currentIndex = tripItems.findIndex(item => item.id === itemId);
+    if (currentIndex >= tripItems.length - 1) return; // Can't move down if it's already last
+
+    const currentItem = tripItems[currentIndex];
+    const nextItem = tripItems[currentIndex + 1];
+
+    try {
+      // Swap the order values
+      const docRef1 = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, currentItem.id);
+      const docRef2 = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, nextItem.id);
+      
+      await updateDoc(docRef1, { order: nextItem.order });
+      await updateDoc(docRef2, { order: currentItem.order });
+      
+      console.log(`Moved ${currentItem.location} down in order`);
+    } catch (error) {
+      console.error("Error moving item down:", error);
+      openModal('Error moving item. Please try again.');
     }
   };
 
@@ -573,6 +655,8 @@ function App() {
               tripItems={tripItems}
               handleEditClick={handleEditClick}
               handleDeleteItem={handleDeleteItem}
+              handleMoveUp={handleMoveUp}
+              handleMoveDown={handleMoveDown}
               loadingInitialData={loadingInitialData}
             />
           ) : viewMode === 'list' ? (
@@ -581,6 +665,8 @@ function App() {
               editingItem={editingItem}
               handleEditClick={handleEditClick}
               handleDeleteItem={handleDeleteItem}
+              handleMoveUp={handleMoveUp}
+              handleMoveDown={handleMoveDown}
               handleInputChange={handleInputChange}
               handleSaveEdit={handleSaveEdit}
               loadingInitialData={loadingInitialData}

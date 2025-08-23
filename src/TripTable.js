@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitialData }) {
+function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp, handleMoveDown, loadingInitialData }) {
   const [expandedRowId, setExpandedRowId] = useState(null); // State to track which row is expanded
 
   if (tripItems.length === 0 && !loadingInitialData) {
@@ -82,14 +82,17 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
               <th scope="col" className="w-[20%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Location
               </th>
-              <th scope="col" className="w-[20%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-[15%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Accommodation
               </th>
-              <th scope="col" className="w-[30%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-[25%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Activities
               </th>
               <th scope="col" className="w-[10%] relative px-4 py-3">
                 <span className="sr-only">Actions</span>
+              </th>
+              <th scope="col" className="w-[10%] relative px-4 py-3 text-center">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Order</span>
               </th>
               <th scope="col" className="w-[5%] relative px-4 py-3">
                 {/* Empty header for expand toggle */}
@@ -126,6 +129,26 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
                       Delete
                     </button>
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center text-sm font-medium">
+                    <div className="flex flex-col space-y-1 items-center">
+                      <button
+                        onClick={() => handleMoveUp(item.id)}
+                        disabled={index === 0}
+                        className={`${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'} text-xs p-1 rounded transition-colors duration-200`}
+                        title="Move up"
+                      >
+                        <i className="fas fa-chevron-up"></i>
+                      </button>
+                      <button
+                        onClick={() => handleMoveDown(item.id)}
+                        disabled={index === tripItems.length - 1}
+                        className={`${index === tripItems.length - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'} text-xs p-1 rounded transition-colors duration-200`}
+                        title="Move down"
+                      >
+                        <i className="fas fa-chevron-down"></i>
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-center">
                     <button onClick={() => toggleRowExpansion(item.id)} className="text-gray-500 hover:text-gray-700">
                       <i className={`fas ${expandedRowId === item.id ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
@@ -134,7 +157,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
                 </tr>
                 {expandedRowId === item.id && (
                   <tr className={`${item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''} border-t border-gray-200`}>
-                    <td colSpan="6" className="px-4 py-3 text-sm text-gray-700"> {/* Adjusted colSpan */}
+                    <td colSpan="7" className="px-4 py-3 text-sm text-gray-700"> {/* Adjusted colSpan */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2"> {/* Adjusted grid for better layout */}
                         {item.travelTime && (
                           <div><span className="font-medium">Est. Travel Time:</span> <TruncatedText text={item.travelTime} fullWidth={true} /></div>
@@ -152,7 +175,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
                         </div>
                       </div>
                     </td>
-                    <td colSpan="2"></td> {/* Empty cells for actions and toggle */}
+                    <td colSpan="3"></td> {/* Empty cells for actions, move, and toggle */}
                   </tr>
                 )}
               </React.Fragment>
@@ -189,19 +212,39 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, loadingInitia
                 <span className="font-medium">Notes:</span> <TruncatedText text={item.notes} maxLength={100} />
               </p>
             )}
-            <div className="flex justify-end space-x-2 mt-3">
-              <button
-                onClick={() => handleEditClick(item)}
-                className="text-indigo-600 hover:text-indigo-900 text-sm"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => handleDeleteItem(item.id)}
-                className="text-red-600 hover:text-red-900 text-sm"
-              >
-                Delete
-              </button>
+            <div className="flex justify-between items-center space-x-2 mt-3">
+              <div className="flex space-x-1">
+                <button
+                  onClick={() => handleMoveUp(item.id)}
+                  disabled={index === 0}
+                  className={`${index === 0 ? 'text-gray-300 cursor-not-allowed bg-gray-100' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-100'} text-sm p-2 rounded-full transition-colors duration-200`}
+                  title="Move up"
+                >
+                  <i className="fas fa-chevron-up"></i>
+                </button>
+                <button
+                  onClick={() => handleMoveDown(item.id)}
+                  disabled={index === tripItems.length - 1}
+                  className={`${index === tripItems.length - 1 ? 'text-gray-300 cursor-not-allowed bg-gray-100' : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-100'} text-sm p-2 rounded-full transition-colors duration-200`}
+                  title="Move down"
+                >
+                  <i className="fas fa-chevron-down"></i>
+                </button>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handleEditClick(item)}
+                  className="text-indigo-600 hover:text-indigo-900 text-sm"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDeleteItem(item.id)}
+                  className="text-red-600 hover:text-red-900 text-sm"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         ))}

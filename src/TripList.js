@@ -1,6 +1,6 @@
 import React from 'react';
 
-function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, handleInputChange, handleSaveEdit, loadingInitialData }) {
+function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, handleMoveUp, handleMoveDown, handleInputChange, handleSaveEdit, loadingInitialData }) {
   if (tripItems.length === 0 && !loadingInitialData) {
     return (
       <p className="text-center text-gray-500 text-xl py-8">No trip items yet for this trip. Add one above!</p>
@@ -9,7 +9,7 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
 
   return (
     <div className="space-y-6">
-      {tripItems.map((item) => (
+      {tripItems.map((item, index) => (
         <div key={item.id} className="bg-white p-6 rounded-lg shadow-md border-t-4 border-indigo-500">
           {editingItem && editingItem.id === item.id ? (
             /* Edit Form */
@@ -121,19 +121,39 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
               {item.notes && (
                 <p className="text-md text-gray-600 mb-4">{item.notes}</p>
               )}
-              <div className="flex justify-end space-x-2">
-                <button
-                  onClick={() => handleEditClick(item)}
-                  className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDeleteItem(item.id)}
-                  className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
-                >
-                  Delete
-                </button>
+              <div className="flex justify-between items-center">
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleMoveUp(item.id)}
+                    disabled={index === 0}
+                    className={`${index === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transform hover:scale-105'} font-bold py-2 px-3 rounded-full shadow-md transition duration-300`}
+                    title="Move up"
+                  >
+                    <i className="fas fa-chevron-up"></i>
+                  </button>
+                  <button
+                    onClick={() => handleMoveDown(item.id)}
+                    disabled={index === tripItems.length - 1}
+                    className={`${index === tripItems.length - 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transform hover:scale-105'} font-bold py-2 px-3 rounded-full shadow-md transition duration-300`}
+                    title="Move down"
+                  >
+                    <i className="fas fa-chevron-down"></i>
+                  </button>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleEditClick(item)}
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </>
           )}
