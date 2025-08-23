@@ -154,6 +154,37 @@ function App() {
       } else {
         selectedTripId = tripsSnapshot.docs[0].id;
         console.log(`Existing trip found. Selecting trip ID: ${selectedTripId}`);
+        
+        // Check if we need to update location names for Tasmania locations
+        const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${selectedTripId}/itineraryItems`);
+        const itinerarySnapshot = await getDocs(itineraryCollectionRef);
+        
+        let needsLocationUpdate = false;
+        itinerarySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.location && !data.location.includes('Tasmania, Australia')) {
+            needsLocationUpdate = true;
+          }
+        });
+        
+        if (needsLocationUpdate) {
+          console.log("Updating location names to include Tasmania, Australia...");
+          itinerarySnapshot.forEach(async (docSnapshot) => {
+            const data = docSnapshot.data();
+            const locationUpdates = {
+              'Devonport': 'Devonport, Tasmania, Australia',
+              'Ross': 'Ross, Tasmania, Australia', 
+              'Hobart': 'Hobart, Tasmania, Australia'
+            };
+            
+            if (locationUpdates[data.location]) {
+              await updateDoc(docSnapshot.ref, {
+                location: locationUpdates[data.location]
+              });
+              console.log(`Updated ${data.location} to ${locationUpdates[data.location]}`);
+            }
+          });
+        }
       }
       setCurrentTripId(selectedTripId);
       setLoadingInitialData(false);
