@@ -100,78 +100,67 @@ Return only JSON:`;
   }
 
   mockParse(text) {
-    console.log('Using mock parser for text:', text.substring(0, 200) + '...');
-    
-    // Simple pattern matching for demonstration
-    const patterns = {
-      dates: /(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})/g,
-      accommodations: /(hotel|motel|resort|camping|campsite|ferry|hostel|lodge|b&b|bnb|apartment)/i,
-      locations: /(avenue|ave|street|st|road|rd|drive|dr|way|lane|ln|boulevard|blvd|highway|hwy)/i,
-      bookingNumbers: /(booking|confirmation|reference)[\s#:]*([a-z0-9]{6,})/i
-    };
-
-    const foundDates = text.match(patterns.dates) || [];
-    const foundBookingNumbers = text.match(patterns.bookingNumbers) || [];
-
-    // Extract a meaningful location
-    const lines = text.split('\n').filter(line => line.trim().length > 0);
-    let location = 'Location from PDF';
-    for (const line of lines) {
-      if (patterns.locations.test(line) && line.length < 100) {
-        location = line.trim();
-        break;
-      }
-    }
-
-    // Extract accommodation name
-    let accommodation = 'Accommodation from PDF';
-    for (const line of lines) {
-      if (patterns.accommodations.test(line) && line.length < 80) {
-        accommodation = line.trim();
-        break;
-      }
-    }
-
-    // Determine type based on accommodation
-    let type = 'roofed';
-    if (/camping|campsite|caravan|rv|camp/i.test(accommodation.toLowerCase())) {
-      type = 'camp';
-    } else if (/ferry|transport|flight|bus|train/i.test(accommodation.toLowerCase())) {
-      type = 'enroute';
-    }
-
-    // Format date
-    let date = new Date().toISOString().split('T')[0];
-    if (foundDates.length > 0) {
-      try {
-        const parsedDate = new Date(foundDates[0]);
-        if (!isNaN(parsedDate.getTime())) {
-          date = parsedDate.toISOString().split('T')[0];
+    console.log('Using improved mock parser for text:', text.substring(0, 200) + '...');
+    // Split lines and scan for date lines
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const dateRegex = /^(\d{1,2} [A-Za-z]{3,9} \d{4})$/;
+    const items = [];
+    let lastPlace = null;
+    let lastAddress = null;
+    let lastAccommodation = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (dateRegex.test(line)) {
+        // Look back for place/accommodation/address
+        let j = i - 1;
+        let place = null, address = null, accommodation = null;
+        while (j >= 0 && (!place || !address)) {
+          if (!place && lines[j].match(/hotel|park|camp|campsite|caravan|motel|resort|lodge|inn|apartment|stand|campground|site|harbour|river|lake|bay|bluff|trial|wilderness|information|green|lagoon|track|road|rd|drive|dr|tasman|highway|hwy|avenue|ave|street|st|lane|ln|boulevard|blvd/i)) {
+            place = lines[j];
+          } else if (!address && lines[j].match(/\d+|road|rd|drive|dr|tasman|highway|hwy|avenue|ave|street|st|lane|ln|boulevard|blvd|access/i)) {
+            address = lines[j];
+          }
+          j--;
         }
-      } catch (e) {
-        // Keep default date if parsing fails
+        accommodation = place || address || 'Accommodation';
+        // Determine type
+        let type = 'roofed';
+        if (/camp|campsite|caravan|rv|park|lagoon|green|bay|harbour|river|lake|bluff|trial|wilderness/i.test((place || '').toLowerCase())) {
+          type = 'camp';
+        }
+        // Format date
+        const [day, monthStr, year] = line.split(' ');
+        const month = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].findIndex(m => m === monthStr.toLowerCase().slice(0,3)) + 1;
+        const date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        items.push({
+          date,
+          location: address || place || 'Location',
+          accommodation,
+          status: 'Unconfirmed',
+          type,
+          travelTime: '',
+          activities: '',
+          notes: 'Extracted from itinerary text.'
+        });
+        lastPlace = place;
+        lastAddress = address;
+        lastAccommodation = accommodation;
       }
     }
-
-    // Build notes
-    let notes = 'Extracted from PDF';
-    if (foundBookingNumbers.length > 0) {
-      notes += `. Booking reference: ${foundBookingNumbers[0]}`;
+    // Fallback: if no items found, return a single generic item
+    if (items.length === 0) {
+      return {
+        date: new Date().toISOString().split('T')[0],
+        location: 'Location from PDF',
+        accommodation: 'Accommodation from PDF',
+        status: 'Unconfirmed',
+        type: 'roofed',
+        travelTime: '',
+        activities: `Activities extracted from PDF content`,
+        notes: 'Extracted from PDF.'
+      };
     }
-    if (text.length > 200) {
-      notes += `. Original text: ${text.substring(0, 150)}...`;
-    }
-
-    return {
-      date,
-      location,
-      accommodation,
-      status: 'Unconfirmed',
-      type,
-      travelTime: '',
-      activities: `Activities extracted from PDF content`,
-      notes
-    };
+    return items;
   }
 }
 
