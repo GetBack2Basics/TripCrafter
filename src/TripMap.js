@@ -19,6 +19,7 @@ function Map({ tripItems }) {
   const ref = useRef(null);
   const [map, setMap] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [lastProcessedData, setLastProcessedData] = useState(null);
 
   // Initialize map only once
   useEffect(() => {
@@ -41,9 +42,12 @@ function Map({ tripItems }) {
     }
   }, [ref, map]);
 
-  // Process locations with debouncing
+  // Process locations with debouncing and loop prevention
   const processLocations = useCallback(async () => {
-    if (!map || !tripItems.length || isProcessing) return;
+    if (!map || !tripItems.length || isProcessing) {
+      console.log('Skipping processLocations:', { map: !!map, tripItemsLength: tripItems.length, isProcessing });
+      return;
+    }
     
     setIsProcessing(true);
     console.log('Processing locations:', tripItems.map(item => item.location));
@@ -65,8 +69,9 @@ function Map({ tripItems }) {
       // Clear existing elements
       const bounds = new window.google.maps.LatLngBounds();
       const markers = [];
+      const validLocations = [];
 
-      // Process each location
+      // Process each location sequentially to avoid API rate limits
       for (let i = 0; i < tripItems.length; i++) {
         const item = tripItems[i];
         try {
@@ -117,8 +122,12 @@ function Map({ tripItems }) {
 
             markers.push(marker);
             bounds.extend(position);
+            validLocations.push(item.location);
             
             console.log(`✓ Geocoded: ${item.location}`);
+            
+            // Add small delay between geocoding requests
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
         } catch (error) {
           console.error(`✗ Failed to geocode: ${item.location}`, error);
@@ -135,17 +144,17 @@ function Map({ tripItems }) {
         }
       }
 
-      // Try to add driving directions if multiple locations
-      if (tripItems.length > 1) {
+      // Try to add driving directions if multiple valid locations
+      if (validLocations.length > 1) {
         try {
-          const waypoints = tripItems.slice(1, -1).map(item => ({
-            location: item.location,
+          const waypoints = validLocations.slice(1, -1).map(location => ({
+            location: location,
             stopover: true
           }));
 
           const request = {
-            origin: tripItems[0].location,
-            destination: tripItems[tripItems.length - 1].location,
+            origin: validLocations[0],
+            destination: validLocations[validLocations.length - 1],
             waypoints: waypoints,
             travelMode: window.google.maps.TravelMode.DRIVING,
             unitSystem: window.google.maps.UnitSystem.METRIC
@@ -171,16 +180,31 @@ function Map({ tripItems }) {
     } finally {
       setIsProcessing(false);
     }
-  }, [map, tripItems, isProcessing]);
+  }, [map, tripItems]);
 
   // Process locations when map and data are ready
   useEffect(() => {
     if (map && tripItems.length > 0) {
+      // Check if we already processed this exact data to prevent infinite loops
+      const currentDataKey = JSON.stringify(tripItems.map(item => ({
+        id: item.id,
+        location: item.location
+      })));
+      
+      if (lastProcessedData === currentDataKey) {
+        console.log('Skipping - already processed this data');
+        return;
+      }
+      
       // Debounce to prevent multiple rapid calls
-      const timer = setTimeout(processLocations, 500);
+      const timer = setTimeout(() => {
+        setLastProcessedData(currentDataKey);
+        processLocations();
+      }, 1000); // Increased delay to prevent spam
+      
       return () => clearTimeout(timer);
     }
-  }, [map, tripItems, processLocations]);
+  }, [map, tripItems, processLocations, lastProcessedData]);
 
   return (
     <div className="relative">
