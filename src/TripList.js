@@ -66,6 +66,14 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
                 placeholder="Activities for the day"
                 className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
               />
+              <input
+                type="url"
+                name="bookingCom"
+                value={editingItem.bookingCom}
+                onChange={handleInputChange}
+                placeholder="Booking.com URL"
+                className="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50"
+              />
               <textarea
                 name="notes"
                 value={editingItem.notes}
@@ -120,6 +128,19 @@ function TripList({ tripItems, editingItem, handleEditClick, handleDeleteItem, h
               )}
               {item.notes && (
                 <p className="text-md text-gray-600 mb-4">{item.notes}</p>
+              )}
+              {item.bookingCom && (
+                <p className="text-md text-gray-600 mb-4">
+                  <span className="font-medium">Booking:</span> 
+                  <a 
+                    href={item.bookingCom} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 underline ml-1"
+                  >
+                    View accommodation options on Booking.com
+                  </a>
+                </p>
               )}
               <div className="flex justify-between items-center">
                 <div className="flex space-x-2">

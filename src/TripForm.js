@@ -87,6 +87,15 @@ function TripForm({ newItem, handleInputChange, onAddItem, onSaveEdit, onCancelE
             placeholder="Activities for the day"
             className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
           />
+          <input
+            type="url"
+            name="bookingCom"
+            value={formData.bookingCom}
+            onChange={handleFormChange}
+            placeholder="Booking.com URL (auto-generated)"
+            className="p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50"
+            title="This URL is auto-generated based on location and date, but you can edit it manually"
+          />
           <textarea
             name="notes"
             value={formData.notes}

@@ -85,8 +85,11 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
               <th scope="col" className="w-[15%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Accommodation
               </th>
-              <th scope="col" className="w-[25%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="w-[20%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Activities
+              </th>
+              <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Booking.com
               </th>
               <th scope="col" className="w-[10%] relative px-4 py-3">
                 <span className="sr-only">Actions</span>
@@ -114,6 +117,21 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     <TruncatedText text={item.activities} maxLength={60} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    {item.bookingCom ? (
+                      <a 
+                        href={item.bookingCom} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 underline text-xs"
+                        title="Open Booking.com search"
+                      >
+                        View Options
+                      </a>
+                    ) : (
+                      <span className="text-gray-400 text-xs">No link</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                     <button
@@ -157,7 +175,7 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
                 </tr>
                 {expandedRowId === item.id && (
                   <tr className={`${item.status === 'Booked' ? 'bg-green-50' : item.status === 'Unconfirmed' ? 'bg-yellow-50' : item.status === 'Cancelled' ? 'bg-red-50' : ''} border-t border-gray-200`}>
-                    <td colSpan="7" className="px-4 py-3 text-sm text-gray-700"> {/* Adjusted colSpan */}
+                    <td colSpan="8" className="px-4 py-3 text-sm text-gray-700"> {/* Adjusted colSpan */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2"> {/* Adjusted grid for better layout */}
                         {item.travelTime && (
                           <div><span className="font-medium">Est. Travel Time:</span> <TruncatedText text={item.travelTime} fullWidth={true} /></div>
@@ -210,6 +228,19 @@ function TripTable({ tripItems, handleEditClick, handleDeleteItem, handleMoveUp,
             {item.notes && (
               <p className="text-xs text-gray-600 mb-2">
                 <span className="font-medium">Notes:</span> <TruncatedText text={item.notes} maxLength={100} />
+              </p>
+            )}
+            {item.bookingCom && (
+              <p className="text-xs text-gray-600 mb-2">
+                <span className="font-medium">Booking:</span> 
+                <a 
+                  href={item.bookingCom} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 underline ml-1"
+                >
+                  View accommodation options
+                </a>
               </p>
             )}
             <div className="flex justify-between items-center space-x-2 mt-3">
