@@ -89,6 +89,7 @@ function App() {
   const [loadingInitialData, setLoadingInitialData] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [showTripSettings, setShowTripSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const [version, setVersion] = useState('1.0.0');
   const [appIdentifier, setAppIdentifier] = useState('default-app-id');
@@ -644,12 +645,20 @@ function App() {
 
         {/* Trip Settings and Auth status */}
         <div className="flex justify-between items-center mb-6">
-          <button
-            onClick={() => setShowTripSettings(true)}
-            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
-          >
-            Trip Settings
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setShowTripSettings(true)}
+              className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+            >
+              Trip Settings
+            </button>
+            <button
+              onClick={() => setShowHelp(true)}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105"
+            >
+              Help & Guide
+            </button>
+          </div>
           <div className="text-center text-sm text-gray-600">
             {userEmail ? (
               <>
@@ -743,6 +752,156 @@ function App() {
                   className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold py-2 px-4 rounded-md transition duration-300"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Help Modal */}
+        {showHelp && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg max-w-4xl w-full m-4 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-2xl font-bold mb-4 text-indigo-700">TripCrafter - User Guide</h2>
+              
+              <div className="space-y-6">
+                {/* Overview */}
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">📍 Overview</h3>
+                  <p className="text-gray-600">
+                    TripCrafter helps you plan and organize your trip itinerary with intelligent activity links, 
+                    route ordering, and map visualization. Each trip item automatically generates relevant links 
+                    based on its type (accommodation, camping, or activities).
+                  </p>
+                </section>
+
+                {/* Getting Started */}
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🚀 Getting Started</h3>
+                  <ol className="list-decimal list-inside text-gray-600 space-y-1">
+                    <li><strong>Configure Trip Settings:</strong> Click "Trip Settings" to set your trip's state and country for accurate search results</li>
+                    <li><strong>Add Trip Items:</strong> Use the form to add locations, dates, and accommodations</li>
+                    <li><strong>Set Item Types:</strong> Choose the correct type for each item to get relevant activity links</li>
+                    <li><strong>Reorder Items:</strong> Use move up/down buttons to organize your route</li>
+                    <li><strong>View on Map:</strong> Switch to Map view to see your route and travel times</li>
+                  </ol>
+                </section>
+
+                {/* Trip Item Types */}
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🏨 Trip Item Types</h3>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div className="bg-green-50 p-3 rounded-md">
+                      <div className="font-semibold text-green-700 mb-1">🏨 Roofed</div>
+                      <div className="text-sm text-gray-600">Hotels, B&Bs, apartments</div>
+                      <div className="text-xs text-blue-600 mt-1">→ Generates Booking.com links</div>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-md">
+                      <div className="font-semibold text-orange-700 mb-1">⛺ Camp</div>
+                      <div className="text-sm text-gray-600">Camping, RV parks, outdoor stays</div>
+                      <div className="text-xs text-blue-600 mt-1">→ Generates Google camping search</div>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-md">
+                      <div className="font-semibold text-blue-700 mb-1">🚗 Enroute</div>
+                      <div className="text-sm text-gray-600">Transit, activities, stops</div>
+                      <div className="text-xs text-blue-600 mt-1">→ Generates Google activities search</div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Views */}
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">👀 Views</h3>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">📋 Table View</div>
+                      <div className="text-sm text-gray-600">Compact overview with all details, move buttons, and activity links</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">📱 List View</div>
+                      <div className="text-sm text-gray-600">Card-based mobile-friendly view with editing capabilities</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="font-semibold text-gray-700 mb-1">🗺️ Map View</div>
+                      <div className="text-sm text-gray-600">Visual route with travel times and distance calculations</div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Key Features */}
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">⭐ Key Features</h3>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-semibold text-gray-700 mb-2">🔗 Smart Activity Links</h4>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        <li>• Auto-generated based on location and type</li>
+                        <li>• Include state/country for accuracy</li>
+                        <li>• Update automatically when location changes</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-700 mb-2">📍 Route Management</h4>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        <li>• Move items up/down to reorder route</li>
+                        <li>• Map view shows optimized travel path</li>
+                        <li>• Automatic travel time calculations</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-700 mb-2">☁️ Cloud Sync</h4>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        <li>• Real-time synchronization across devices</li>
+                        <li>• Anonymous or email-based accounts</li>
+                        <li>• Automatic backup of all changes</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-700 mb-2">✏️ Easy Editing</h4>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        <li>• Click any item to edit details</li>
+                        <li>• Bulk actions for status updates</li>
+                        <li>• Drag-and-drop reordering (coming soon)</li>
+                      </ul>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Tips */}
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">💡 Pro Tips</h3>
+                  <div className="bg-yellow-50 p-4 rounded-md">
+                    <ul className="text-sm text-gray-700 space-y-2">
+                      <li><strong>🎯 Precise Locations:</strong> Use full addresses or landmark names for better search results</li>
+                      <li><strong>📅 Date Planning:</strong> Activity links for accommodations include your check-in dates</li>
+                      <li><strong>🗺️ Route Optimization:</strong> Arrange items in geographic order using move buttons</li>
+                      <li><strong>⚙️ Trip Settings:</strong> Set correct state/country to avoid location confusion (e.g., "Paris, Texas" vs "Paris, France")</li>
+                      <li><strong>🔄 Real-time Updates:</strong> Changes sync automatically - no need to save manually</li>
+                    </ul>
+                  </div>
+                </section>
+
+                {/* Workflow */}
+                <section>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🔄 Recommended Workflow</h3>
+                  <div className="bg-blue-50 p-4 rounded-md">
+                    <ol className="text-sm text-gray-700 space-y-2">
+                      <li><strong>1. Plan:</strong> Configure trip settings and add all your destinations</li>
+                      <li><strong>2. Organize:</strong> Set correct types and reorder items for logical travel flow</li>
+                      <li><strong>3. Research:</strong> Use activity links to find and book accommodations/activities</li>
+                      <li><strong>4. Navigate:</strong> Use map view during travel to see route and travel times</li>
+                      <li><strong>5. Update:</strong> Mark items as "Booked" or "Confirmed" as you make reservations</li>
+                    </ol>
+                  </div>
+                </section>
+              </div>
+
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-md transition duration-300"
+                >
+                  Got it!
                 </button>
               </div>
             </div>
