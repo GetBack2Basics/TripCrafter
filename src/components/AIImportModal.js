@@ -50,13 +50,16 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
         setLlmPrompt(prompt);
         setShowPrompt(true);
         onError(result.error);
+        handleClose();
       }
     } catch (error) {
       onError(error.message);
+      handleClose();
     } finally {
       setIsProcessing(false);
     }
-  // Handler for manual JSON paste
+  };
+
   const handleManualJsonSubmit = (e) => {
     e.preventDefault();
     try {
@@ -66,7 +69,6 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
     } catch (err) {
       onError('Invalid JSON. Please check your LLM output.');
     }
-  };
   };
 
   const handleClose = () => {
