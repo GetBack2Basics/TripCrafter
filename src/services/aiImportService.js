@@ -1,7 +1,49 @@
+  async getPrompt(source, type = 'auto') {
+    let content = '';
+    let detectedType = type;
+    if (type === 'auto') {
+      detectedType = this.detectSourceType(source);
+    }
+    switch (detectedType) {
+      case 'url':
+        content = await this.extractFromUrl(source);
+        break;
+      case 'pdf':
+        content = await this.extractFromPdf(source);
+        break;
+      case 'text':
+        content = source;
+        break;
+      default:
+        content = '';
+    }
+    return llmService.buildPrompt(content);
+  }
 // AI Import service for parsing various content types into trip data format
 import { llmService } from './llmService';
 
 export class AIImportService {
+  async getPrompt(source, type = 'auto') {
+    let content = '';
+    let detectedType = type;
+    if (type === 'auto') {
+      detectedType = this.detectSourceType(source);
+    }
+    switch (detectedType) {
+      case 'url':
+        content = await this.extractFromUrl(source);
+        break;
+      case 'pdf':
+        content = await this.extractFromPdf(source);
+        break;
+      case 'text':
+        content = source;
+        break;
+      default:
+        content = '';
+    }
+    return llmService.buildPrompt(content);
+  }
   constructor() {
     this.supportedTypes = {
       pdf: 'application/pdf',
