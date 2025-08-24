@@ -1,3 +1,5 @@
+export class AIImportService {
+  // ...existing code...
   async getPrompt(source, type = 'auto') {
     let content = '';
     let detectedType = type;
@@ -18,6 +20,8 @@
         content = '';
     }
     return llmService.buildPrompt(content);
+  }
+  // ...existing code...
   }
 // AI Import service for parsing various content types into trip data format
 import { llmService } from './llmService';
