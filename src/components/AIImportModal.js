@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { aiImportService } from '../services/aiImportService';
+import AIImportReview from './AIImportReview';
 
 function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
+  const [reviewData, setReviewData] = useState(null);
   const [importType, setImportType] = useState('url');
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -42,8 +44,7 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
     try {
       const result = await aiImportService.importFromSource(source, importType);
       if (result.success) {
-        onImportSuccess(result.data);
-        handleClose();
+        setReviewData(result.data);
       } else {
         // On error, show the generated prompt for manual LLM use
         const prompt = await aiImportService.getPrompt(source, importType);
@@ -64,11 +65,37 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
     e.preventDefault();
     try {
       const data = JSON.parse(manualJson);
-      onImportSuccess(data);
-      handleClose();
+      setReviewData(data);
     } catch (err) {
       onError('Invalid JSON. Please check your LLM output.');
     }
+  };
+
+  // Review/merge handlers
+  const handleMerge = (entry) => {
+    // Merge entry into trip (call onImportSuccess with just this entry)
+    onImportSuccess([entry]);
+    setReviewData(null);
+    handleClose();
+  };
+  const handleIgnore = (entry) => {
+    // Remove entry from reviewData
+    setReviewData(prev => prev.filter(e => e !== entry));
+  };
+  const handleReplace = (entry) => {
+    // Replace existing entry for this date/type with this one (call onImportSuccess with just this entry)
+    onImportSuccess([entry], { replace: true });
+    setReviewData(null);
+    handleClose();
+  };
+  const handleEdit = (entry) => {
+    // Could open an edit modal, for now just call merge
+    onImportSuccess([entry]);
+    setReviewData(null);
+    handleClose();
+  };
+  const handleCancelReview = () => {
+    setReviewData(null);
   };
 
   const handleClose = () => {
@@ -102,6 +129,22 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
   };
 
   if (!isOpen) return null;
+  if (reviewData) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <AIImportReview
+            importedData={reviewData}
+            onMerge={handleMerge}
+            onIgnore={handleIgnore}
+            onReplace={handleReplace}
+            onEdit={handleEdit}
+            onCancel={handleCancelReview}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

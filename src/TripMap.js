@@ -15,7 +15,12 @@ const render = (status) => {
 };
 
 // Simplified Map component with better performance and travel time calculation
-function Map({ tripItems, onUpdateTravelTime }) {
+function getPlaceName(location) {
+  if (!location) return '';
+  return location.split(',')[0];
+}
+
+function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
   const ref = useRef(null);
   const [map, setMap] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -24,9 +29,8 @@ function Map({ tripItems, onUpdateTravelTime }) {
   // Initialize map only once
   useEffect(() => {
     if (ref.current && !map && window.google) {
-      console.log('Initializing Google Map...');
       const newMap = new window.google.maps.Map(ref.current, {
-        center: { lat: -41.4545, lng: 147.1595 }, // Tasmania center
+        center: { lat: -41.4545, lng: 147.1595 },
         zoom: 7,
         mapTypeId: 'roadmap',
         gestureHandling: 'cooperative',
@@ -38,7 +42,6 @@ function Map({ tripItems, onUpdateTravelTime }) {
         fullscreenControl: true
       });
       setMap(newMap);
-      console.log('Google Map initialized successfully');
     }
   }, [ref, map]);
 
@@ -84,7 +87,6 @@ function Map({ tripItems, onUpdateTravelTime }) {
 
           if (results && results[0]) {
             const position = results[0].geometry.location;
-            
             // Create marker
             const marker = new window.google.maps.Marker({
               position: position,
@@ -98,11 +100,12 @@ function Map({ tripItems, onUpdateTravelTime }) {
               icon: {
                 path: window.google.maps.SymbolPath.CIRCLE,
                 scale: 12,
-                fillColor: '#4F46E5',
+                fillColor: activeIndex === i ? '#f59e42' : '#4F46E5',
                 fillOpacity: 1,
-                strokeColor: 'white',
+                strokeColor: activeIndex === i ? '#f59e42' : 'white',
                 strokeWeight: 2
-              }
+              },
+              zIndex: activeIndex === i ? 999 : 1
             });
 
             // Add info window
@@ -118,14 +121,12 @@ function Map({ tripItems, onUpdateTravelTime }) {
 
             marker.addListener('click', () => {
               infoWindow.open(map, marker);
+              setActiveIndex && setActiveIndex(i);
             });
 
             markers.push(marker);
             bounds.extend(position);
             validLocations.push(item.location);
-            
-            console.log(`✓ Geocoded: ${item.location}`);
-            
             // Add small delay between geocoding requests
             await new Promise(resolve => setTimeout(resolve, 100));
           }
@@ -242,6 +243,7 @@ function Map({ tripItems, onUpdateTravelTime }) {
 
 // Main TripMap component
 function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
+  const [activeIndex, setActiveIndex] = useState(null);
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
   // Filter out "note" type items from mapping
@@ -292,8 +294,8 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
         <h3 className="text-xl font-semibold text-indigo-700 mb-2">Trip Route Map</h3>
         <p className="text-gray-600 text-sm">
           {mappableItems.length === 1 
-            ? `Showing location: ${mappableItems[0].location}`
-            : `Route through ${mappableItems.length} locations: ${mappableItems.map(item => item.location).join(' → ')}`
+            ? `Showing location: ${getPlaceName(mappableItems[0].location)}`
+            : `Route through ${mappableItems.length} locations: ${mappableItems.map(item => getPlaceName(item.location)).join(' → ')}`
           }
           {tripItems.length > mappableItems.length && 
             ` (${tripItems.length - mappableItems.length} note items excluded from map)`
@@ -303,54 +305,51 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
           💡 Travel times will be automatically calculated and updated based on Google Maps routing data
         </p>
       </div>
-      
+
       <div className="border rounded-lg overflow-hidden shadow-lg">
         <Wrapper 
           apiKey={apiKey} 
           render={render}
           libraries={['geometry']}
         >
-          <Map tripItems={mappableItems} onUpdateTravelTime={onUpdateTravelTime} />
+          <Map tripItems={mappableItems} onUpdateTravelTime={onUpdateTravelTime} activeIndex={activeIndex} setActiveIndex={setActiveIndex} />
         </Wrapper>
       </div>
-      
+
+      {/* Scrollable mini-timeline */}
       <div className="mt-4">
         <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Timeline</h4>
-        <div className="space-y-2">
-          {tripItems.map((item, index) => (
-            <div key={item.id} className={`p-3 rounded-lg border flex items-center space-x-3 ${
-              item.type === 'note' ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'
-            }`}>
-              <span className={`text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                item.type === 'note' ? 'bg-purple-500' : 'bg-indigo-600'
-              }`}>
-                {index + 1}
-              </span>
-              <div className="flex-grow">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-800">
-                      {item.location}
-                      {item.type === 'note' && (
-                        <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                          Note (not mapped)
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-sm text-gray-600">{item.accommodation}</p>
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1 sm:mt-0">
-                    <div>{item.date}</div>
-                    {item.travelTime && item.type !== 'note' && (
-                      <div className="text-xs text-blue-600 mt-1">
-                        🚗 {item.travelTime}{item.distance ? ` (${item.distance})` : ''}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
+          {tripItems.map((item, index) => {
+            const isActive = activeIndex === index;
+            const isAccom = item.type === 'roofed' || item.type === 'camp';
+            return (
+              <button
+                key={item.id}
+                className={`flex flex-col items-center min-w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
+                  isActive ? 'border-orange-400 bg-orange-50 shadow' : isAccom ? 'border-indigo-200 bg-indigo-50' : item.type === 'note' ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-gray-50'
+                }`}
+                onClick={() => setActiveIndex(index)}
+                style={{ cursor: 'pointer' }}
+              >
+                <span className={`text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold mb-1 ${
+                  isAccom ? 'bg-indigo-600' : item.type === 'note' ? 'bg-purple-500' : 'bg-gray-400'
+                }`}>
+                  {index + 1}
+                </span>
+                <span className="font-semibold text-gray-800 text-xs truncate max-w-[70px]">{getPlaceName(item.location)}</span>
+                {isAccom && (
+                  <span className="text-[10px] text-indigo-500 mt-1">Stay</span>
+                )}
+                {item.type === 'note' && (
+                  <span className="text-[10px] text-purple-500 mt-1">Note</span>
+                )}
+                {!isAccom && item.type !== 'note' && (
+                  <span className="text-[10px] text-gray-500 mt-1">Enroute</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
