@@ -38,19 +38,27 @@ export class AIImportService {
       }
 
       const parsedData = await llmService.parseBookingInformation(content);
-      
-      // Ensure proper ID generation
-      if (Array.isArray(parsedData)) {
-        parsedData.forEach((item, index) => {
-          if (!item.id) {
-            item.id = `ai-import-${Date.now()}-${index}`;
-          }
-        });
-      } else {
-        if (!parsedData.id) {
-          parsedData.id = `ai-import-${Date.now()}`;
-        }
+
+      // Validate result: must be array of objects with required fields
+      const requiredFields = ["date","location","accommodation","status","type","travelTime","activities","notes"];
+      let valid = Array.isArray(parsedData) && parsedData.length > 0 && parsedData.every(item =>
+        typeof item === 'object' && requiredFields.every(f => f in item)
+      );
+      if (!valid) {
+        return {
+          success: false,
+          error: 'AI import failed: The parsed data was not in the expected format. Please check your input or try again.',
+          sourceType: detectedType,
+          contentLength: content.length
+        };
       }
+
+      // Ensure proper ID generation
+      parsedData.forEach((item, index) => {
+        if (!item.id) {
+          item.id = `ai-import-${Date.now()}-${index}`;
+        }
+      });
 
       return {
         success: true,

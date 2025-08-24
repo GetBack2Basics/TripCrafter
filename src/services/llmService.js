@@ -19,21 +19,22 @@ export class LLMService {
   buildPrompt(text) {
     return `You are an expert travel assistant. Parse the following travel booking information and extract structured data.
 
-IMPORTANT: Return ONLY valid JSON with no additional text, formatting, or explanation.
+IMPORTANT: Return ONLY valid JSON, no markdown, no explanation, no extra text.
 
-Expected format for single booking:
-{
-  "date": "YYYY-MM-DD",
-  "location": "Full address or location name",
-  "accommodation": "Hotel/accommodation name",
-  "status": "Booked|Unconfirmed|Cancelled|Not booked", 
-  "type": "roofed|camp|enroute",
-  "travelTime": "Estimated travel time (e.g., '2h 30m')",
-  "activities": "Activities or description for the day",
-  "notes": "Any additional notes, booking numbers, guest details"
-}
-
-For multiple bookings, return an array of objects.
+Return an ARRAY of objects, one per day or booking, in this exact format:
+[
+  {
+    "date": "YYYY-MM-DD",
+    "location": "Full address or location name",
+    "accommodation": "Hotel/accommodation name",
+    "status": "Booked|Unconfirmed|Cancelled|Not booked", 
+    "type": "roofed|camp|enroute",
+    "travelTime": "Estimated travel time (e.g., '2h 30m')",
+    "activities": "Activities or description for the day",
+    "notes": "Any additional notes, booking numbers, guest details"
+  },
+  ...
+]
 
 Field Guidelines:
 - date: Extract check-in date in YYYY-MM-DD format
@@ -48,7 +49,7 @@ Field Guidelines:
 Text to parse:
 ${text}
 
-Return only JSON:`;
+Return only valid JSON as described above.`;
   }
 
   async callOpenAI(prompt) {
