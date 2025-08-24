@@ -102,7 +102,7 @@ function App() {
   const [showTripSettings, setShowTripSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   // eslint-disable-next-line no-unused-vars
-  const [version, setVersion] = useState('1.0.0');
+  const [version, setVersion] = useState('1.0.1');
   const [appIdentifier, setAppIdentifier] = useState('default-app-id');
   const [viewMode, setViewMode] = useState('table'); // Default to 'table' view
 
