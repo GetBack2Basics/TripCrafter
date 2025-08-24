@@ -2,14 +2,13 @@
 
 export class LLMService {
   constructor() {
-    this.openaiApiKey = process.env.REACT_APP_OPENAI_API_KEY;
+    this.geminiApiKey = process.env.REACT_APP_GEMINI_API_KEY;
   }
 
   async parseBookingInformation(text) {
     const prompt = this.buildPrompt(text);
-    
-    if (this.openaiApiKey && this.openaiApiKey !== 'your_openai_api_key_here') {
-      return await this.callOpenAI(prompt);
+    if (this.geminiApiKey && this.geminiApiKey !== 'your_gemini_api_key_here') {
+      return await this.callGemini(prompt);
     } else {
       // Fallback to mock parsing for demo purposes
       return this.mockParse(text);
@@ -52,50 +51,36 @@ ${text}
 Return only valid JSON as described above.`;
   }
 
-  async callOpenAI(prompt) {
+  async callGemini(prompt) {
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + this.geminiApiKey, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.openaiApiKey}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a helpful assistant that parses travel booking information into structured JSON data. Always return valid JSON only, no additional text.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.1,
-          max_tokens: 2000
+          contents: [{ parts: [{ text: prompt }] }]
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`OpenAI API error: ${errorData.error?.message || response.statusText}`);
+        throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`);
       }
 
       const data = await response.json();
-      const content = data.choices[0].message.content.trim();
-      
+      // Gemini returns candidates[0].content.parts[0].text
+      const content = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
       // Remove any markdown code block formatting
       const cleanContent = content.replace(/```json\n?|\n?```/g, '');
-      
       try {
         return JSON.parse(cleanContent);
       } catch (parseError) {
-        console.error('Failed to parse OpenAI response as JSON:', content);
+        console.error('Failed to parse Gemini response as JSON:', content);
         throw new Error('LLM returned invalid JSON format');
       }
     } catch (error) {
-      console.error('OpenAI API call failed:', error);
+      console.error('Gemini API call failed:', error);
       throw error;
     }
   }
