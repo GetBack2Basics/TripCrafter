@@ -4,6 +4,7 @@ import { GripVertical, ChevronDown, ChevronUp, Car, BedDouble, Tent, Ship, Info,
 function getTypeIcon(type, item) {
   if (type === 'roofed') return <BedDouble className="inline w-5 h-5 text-indigo-400" title="Accommodation" />;
   if (type === 'camp') return <Tent className="inline w-5 h-5 text-green-500" title="Camping" />;
+  if (type === 'enroute') return <Car className="inline w-5 h-5 text-orange-400" title="Enroute" />;
   if (type === 'note') return <Info className="inline w-5 h-5 text-gray-400" title="Note" />;
   if (type === 'ferry' || (item && item.accommodation?.toLowerCase().includes('spirit'))) return <Ship className="inline w-5 h-5 text-blue-400" title="Ferry" />;
   if (type === 'car') return <Car className="inline w-5 h-5 text-gray-500" title="Car" />;
@@ -50,10 +51,7 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Accommodation</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activities</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activity Link</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             <th></th>
           </tr>
         </thead>
@@ -75,7 +73,21 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                   <td className="px-2 py-3 cursor-grab text-gray-400 align-middle">
                     <GripVertical className="w-5 h-5" />
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{formatDate(item.date)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {formatDate(item.date)}
+                    <div className="flex gap-2 mt-1 items-center">
+                      {/* Type icon (now includes enroute) */}
+                      {['roofed', 'camp', 'enroute', 'note', 'ferry', 'car'].includes(item.type) && (
+                        <span>{getTypeIcon(item.type, item)}</span>
+                      )}
+                      <button onClick={() => handleEditClick && handleEditClick(item)} className="p-1 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
+                        <Pen className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDeleteItem && handleDeleteItem(item.id)} className="p-1 rounded hover:bg-red-100 text-red-600" title="Delete">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{item.location}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     {item.accommodation && item.activityLink ? (
@@ -86,7 +98,6 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                       item.accommodation
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">{getTypeIcon(item.type, item)}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     {item.activities && item.activityLink ? (
                       <a href={item.activityLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
@@ -95,14 +106,6 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                     ) : (
                       item.activities
                     )}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium flex gap-2 justify-end">
-                    <button onClick={() => handleEditClick && handleEditClick(item)} className="p-1 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
-                      <Pen className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDeleteItem && handleDeleteItem(item.id)} className="p-1 rounded hover:bg-red-100 text-red-600" title="Delete">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </td>
                   <td className="px-2 py-3 align-middle">
                     <button onClick={() => setExpandedIndex(isExpanded ? null : idx)} className="text-gray-400 hover:text-indigo-600">

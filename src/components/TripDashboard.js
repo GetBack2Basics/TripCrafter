@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, query, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
@@ -9,8 +11,8 @@ import TripMap from '../TripMap';
 import BottomNav from './BottomNav';
 import AIImportButton from './AIImportButton';
 
-
 export default function TripDashboard() {
+  const [showCarousel, setShowCarousel] = useState(true);
   const [activeView, setActiveView] = useState('itinerary');
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
@@ -20,6 +22,16 @@ export default function TripDashboard() {
   const [appIdentifier, setAppIdentifier] = useState('default-app-id');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Handlers for edit and delete actions in TripList
+  const handleEditClick = (item) => {
+    alert(`Edit: ${item.location}`);
+  };
+  const handleDeleteItem = (id) => {
+    if (window.confirm('Delete this item?')) {
+      setTripItems(tripItems.filter(item => item.id !== id));
+    }
+  };
 
   // Firebase initialization
   useEffect(() => {
@@ -125,16 +137,6 @@ export default function TripDashboard() {
     }
   }, [db, currentTripId, appIdentifier]);
 
-  // Figma-style tabbed view switcher and summary
-  // Discover carousel sample data
-  const discoverStops = [
-    { id: 1, name: 'Cradle Mountain', img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80', desc: 'Iconic hiking & views' },
-    { id: 2, name: 'Wineglass Bay', img: 'https://images.unsplash.com/photo-1464983953574-0892a716854b?auto=format&fit=crop&w=400&q=80', desc: 'Famous beach & lookout' },
-    { id: 3, name: 'MONA', img: 'https://images.unsplash.com/photo-1519125323398-675f0ddb6308?auto=format&fit=crop&w=400&q=80', desc: 'Modern art museum' },
-    { id: 4, name: 'Port Arthur', img: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=400&q=80', desc: 'Historic site' },
-    { id: 5, name: 'Bay of Fires', img: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=400&q=80', desc: 'Stunning coastline' },
-  ];
-
   return (
     <div className="flex flex-col min-h-[60vh]">
       {/* CTA Row */}
@@ -147,21 +149,15 @@ export default function TripDashboard() {
         </div>
       </div>
 
-      {/* Discover Carousel */}
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-indigo-700 mb-2">Discover Tasmania</h3>
-        <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar">
-          {discoverStops.map(stop => (
-            <div key={stop.id} className="min-w-[180px] bg-white rounded-xl shadow border border-gray-100 flex-shrink-0">
-              <img src={stop.img} alt={stop.name} className="h-28 w-full object-cover rounded-t-xl" />
-              <div className="p-3">
-                <div className="font-bold text-indigo-700 text-sm mb-1">{stop.name}</div>
-                <div className="text-xs text-gray-500">{stop.desc}</div>
-              </div>
-            </div>
-          ))}
+      {/* Discover Carousel (responsive, fixed, hideable, max 3) */}
+      {showCarousel && (
+        <DiscoverCarousel tripItems={tripItems.slice(0, 3)} onHide={() => setShowCarousel(false)} />
+      )}
+      {!showCarousel && (
+        <div className="mb-2 flex justify-end">
+          <button onClick={() => setShowCarousel(true)} className="text-xs text-gray-400 hover:text-indigo-600 px-2 py-1">Show Discover</button>
         </div>
-      </div>
+      )}
 
       {/* Summary/Header Area + Tabbed View Switcher */}
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -198,8 +194,8 @@ export default function TripDashboard() {
           <div className="text-center text-gray-400 py-8">Loading trip data...</div>
         ) : (
           <>
-            {activeView === 'itinerary' && <TripTable tripItems={tripItems} />}
-            {activeView === 'list' && <TripList tripItems={tripItems} />}
+            {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
+            {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
             {activeView === 'map' && <TripMap tripItems={tripItems} />}
           </>
         )}
@@ -211,4 +207,73 @@ export default function TripDashboard() {
       </div>
     </div>
   );
+}
+
+function DiscoverCarousel({ tripItems, onHide }) {
+  const [images, setImages] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchImages() {
+      const results = await Promise.all(tripItems.map(async (item) => {
+        try {
+          const res = await axios.get(`/api/pexels-proxy?q=${encodeURIComponent(item.location)}`);
+          return {
+            url: res.data.url,
+            photographer: res.data.photographer,
+            photographer_url: res.data.photographer_url,
+            alt: res.data.alt,
+            location: item.location,
+            accommodation: item.accommodation,
+            activities: item.activities,
+            id: item.id,
+          };
+        } catch (e) {
+          return {
+            url: '/logo512.png', // fallback to static placeholder
+            photographer: null,
+            photographer_url: null,
+            alt: item.location,
+            location: item.location,
+            accommodation: item.accommodation,
+            activities: item.activities,
+            id: item.id,
+          };
+        }
+      }));
+      if (!cancelled) setImages(results);
+    }
+    fetchImages();
+    return () => { cancelled = true; };
+  }, [tripItems]);
+
+  return (
+    <div className="mb-4 z-30 bg-white sticky top-0" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+      <div className="flex items-center justify-between px-2 pt-2">
+        <h3 className="text-lg font-semibold text-indigo-700 mb-2">Discover Tasmania</h3>
+        <button onClick={onHide} className="text-xs text-gray-400 hover:text-indigo-600 px-2 py-1">Hide</button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 px-2 pb-2">
+        {images.map((img, idx) => (
+          <div key={img.id} className="bg-white rounded-xl shadow border border-gray-100 flex flex-col">
+            <a href={img.photographer_url || img.url} target="_blank" rel="noopener noreferrer">
+              <img
+                src={img.url}
+                alt={img.alt || img.location}
+                className="h-40 w-full object-cover rounded-t-xl"
+                onError={e => { e.target.onerror = null; e.target.src = '/logo512.png'; }}
+              />
+            </a>
+            <div className="p-3 flex-1 flex flex-col">
+              <div className="font-bold text-indigo-700 text-sm mb-1">{img.location}</div>
+              <div className="text-xs text-gray-500 flex-1">{img.accommodation || img.activities || ''}</div>
+              {img.photographer && (
+                <div className="text-[10px] text-gray-400 mt-1">Photo: <a href={img.photographer_url} target="_blank" rel="noopener noreferrer" className="underline">{img.photographer}</a> / Pexels</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
 }

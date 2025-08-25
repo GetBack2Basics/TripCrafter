@@ -25,6 +25,7 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
   const [map, setMap] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastProcessedData, setLastProcessedData] = useState(null);
+  const [currentZoom, setCurrentZoom] = useState(7);
 
   // Initialize map only once
   useEffect(() => {
@@ -42,6 +43,10 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
         fullscreenControl: true
       });
       setMap(newMap);
+      // Listen for zoom changes
+      newMap.addListener('zoom_changed', () => {
+        setCurrentZoom(newMap.getZoom());
+      });
     }
   }, [ref, map]);
 
@@ -51,7 +56,6 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
       console.log('Skipping processLocations:', { map: !!map, tripItemsLength: tripItems.length, isProcessing });
       return;
     }
-    
     setIsProcessing(true);
     console.log('Processing locations:', tripItems.map(item => item.location));
 
@@ -66,7 +70,6 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
           strokeOpacity: 0.8
         }
       });
-      
       directionsRenderer.setMap(map);
 
       // Clear existing elements
@@ -74,9 +77,22 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
       const markers = [];
       const validLocations = [];
 
-      // Process each location sequentially to avoid API rate limits
+      // Group by location for accommodation pin sizing
+      const accomNights = {};
+      tripItems.forEach(item => {
+        if (item.type === 'roofed' || item.type === 'camp') {
+          accomNights[item.location] = (accomNights[item.location] || 0) + (item.nights || 1);
+        }
+      });
+
+      // Determine which pins to show based on zoom
+      const showEnroute = currentZoom >= 9; // threshold for enroute pins
+
       for (let i = 0; i < tripItems.length; i++) {
         const item = tripItems[i];
+        // Only show enroute if zoomed in, always show accommodation
+        if (item.type === 'enroute' && !showEnroute) continue;
+        if (item.type === 'note') continue;
         try {
           const results = await new Promise((resolve, reject) => {
             geocoder.geocode({ address: item.location }, (results, status) => {
@@ -84,10 +100,25 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
               else reject(new Error(`Geocoding failed for ${item.location}: ${status}`));
             });
           });
-
           if (results && results[0]) {
             const position = results[0].geometry.location;
-            // Create marker
+            // Pin size logic
+            let scale = 12;
+            let fillColor = '#4F46E5';
+            let strokeColor = 'white';
+            if (item.type === 'roofed' || item.type === 'camp') {
+              scale = 12 + 4 * (accomNights[item.location] - 1); // bigger for more nights
+              fillColor = '#2563eb'; // blue for accommodation
+              strokeColor = '#1e293b';
+            } else if (item.type === 'enroute') {
+              scale = 8;
+              fillColor = '#f59e42'; // orange for enroute
+              strokeColor = '#fbbf24';
+            }
+            if (activeIndex === i) {
+              fillColor = '#f59e42';
+              strokeColor = '#f59e42';
+            }
             const marker = new window.google.maps.Marker({
               position: position,
               map: map,
@@ -99,31 +130,29 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
               },
               icon: {
                 path: window.google.maps.SymbolPath.CIRCLE,
-                scale: 12,
-                fillColor: activeIndex === i ? '#f59e42' : '#4F46E5',
+                scale,
+                fillColor,
                 fillOpacity: 1,
-                strokeColor: activeIndex === i ? '#f59e42' : 'white',
+                strokeColor,
                 strokeWeight: 2
               },
               zIndex: activeIndex === i ? 999 : 1
             });
-
             // Add info window
             const infoWindow = new window.google.maps.InfoWindow({
               content: `
                 <div style="font-family: sans-serif;">
                   <h3 style="margin: 0 0 8px 0; color: #4F46E5;">${item.location}</h3>
                   <p style="margin: 0; color: #666;"><strong>Date:</strong> ${item.date}</p>
-                  <p style="margin: 0; color: #666;"><strong>Stay:</strong> ${item.accommodation}</p>
+                  <p style="margin: 0; color: #666;"><strong>Stay:</strong> ${item.accommodation || ''}</p>
+                  ${(item.type === 'roofed' || item.type === 'camp') ? `<p style='margin:0;color:#2563eb;'><strong>Nights:</strong> ${accomNights[item.location]}</p>` : ''}
                 </div>
               `
             });
-
             marker.addListener('click', () => {
               infoWindow.open(map, marker);
               setActiveIndex && setActiveIndex(i);
             });
-
             markers.push(marker);
             bounds.extend(position);
             validLocations.push(item.location);
@@ -203,7 +232,7 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
     } finally {
       setIsProcessing(false);
     }
-  }, [map, tripItems, isProcessing, onUpdateTravelTime, activeIndex, setActiveIndex]);
+  }, [map, tripItems, isProcessing, onUpdateTravelTime, activeIndex, setActiveIndex, currentZoom]);
 
   // Process locations when map and data are ready
   useEffect(() => {

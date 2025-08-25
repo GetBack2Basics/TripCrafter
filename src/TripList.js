@@ -45,6 +45,7 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
   const getTransportIcon = (type, item) => {
     if (type === 'roofed') return <BedDouble className="inline w-5 h-5 text-indigo-400 mr-1" title="Accommodation" />;
     if (type === 'camp') return <Tent className="inline w-5 h-5 text-green-500 mr-1" title="Camping" />;
+    if (type === 'enroute') return <Car className="inline w-5 h-5 text-orange-400 mr-1" title="Enroute" />;
     if (type === 'note') return <Info className="inline w-5 h-5 text-gray-400 mr-1" title="Note" />;
     if (type === 'ferry' || (item && item.accommodation?.toLowerCase().includes('spirit'))) return <Ship className="inline w-5 h-5 text-blue-400 mr-1" title="Ferry" />;
     if (type === 'car') return <Car className="inline w-5 h-5 text-gray-500 mr-1" title="Car" />;
@@ -95,7 +96,6 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs text-gray-400">{item.date}</span>
-                {getTransportIcon(item.type, item)}
                 <span className="text-lg font-bold text-indigo-800">{item.location}</span>
               </div>
               <div className="flex items-center gap-2 mb-1">
@@ -140,8 +140,12 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
                 </div>
               )}
             </div>
-            {/* Actions */}
-            <div className="flex flex-row md:flex-col gap-2 md:gap-1 items-center md:items-end ml-2">
+            {/* Actions: Type | Edit | Delete (vertical) */}
+            <div className="flex flex-col gap-2 items-center ml-2">
+              {/* Type icon (now includes enroute) */}
+              {['roofed', 'camp', 'enroute', 'note', 'ferry', 'car'].includes(item.type) && (
+                <span>{getTransportIcon(item.type, item)}</span>
+              )}
               {handleEditClick && (
                 <button onClick={() => handleEditClick(item)} className="p-2 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
                   <Pen className="w-4 h-4" />
