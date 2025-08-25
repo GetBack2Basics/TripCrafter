@@ -8,11 +8,16 @@ import defaultTasmaniaTripData from '../Trip-Default_Tasmania2025';
 import TripTable from '../TripTable';
 import TripList from '../TripList';
 import TripMap from '../TripMap';
+
 import BottomNav from './BottomNav';
 import AIImportButton from './AIImportButton';
+import AIImportModal from './AIImportModal';
+import TripHelpModal from './TripHelpModal';
+import TripForm from '../TripForm';
 
 export default function TripDashboard() {
-  const [showCarousel, setShowCarousel] = useState(true);
+  // Hide Discover carousel by default
+  const [showCarousel, setShowCarousel] = useState(false);
   const [activeView, setActiveView] = useState('itinerary');
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
@@ -22,10 +27,62 @@ export default function TripDashboard() {
   const [appIdentifier, setAppIdentifier] = useState('default-app-id');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+  const [editingItem, setEditingItem] = useState(null);
+  const [showAIImportModal, setShowAIImportModal] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [pexelsError, setPexelsError] = useState(null);
 
   // Handlers for edit and delete actions in TripList
   const handleEditClick = (item) => {
-    alert(`Edit: ${item.location}`);
+    setEditingItem(item);
+    setNewItem(item);
+    setShowAddForm(true);
+  };
+  // Add item handler
+  const handleAddItem = async () => {
+    if (!db || !currentTripId) {
+      alert('Database not ready. Please try again later.');
+      return;
+    }
+    try {
+      const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
+      const newItemRef = doc(itineraryCollectionRef);
+      const itemToAdd = {
+        ...newItem,
+        id: newItemRef.id,
+        order: Date.now(),
+      };
+      await setDoc(newItemRef, itemToAdd);
+      setShowAddForm(false);
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+    } catch (error) {
+      alert('Error adding trip item: ' + error.message);
+    }
+  };
+
+  // Save edit handler
+  const handleSaveEdit = async () => {
+    if (!db || !currentTripId || !editingItem) {
+      alert('Database not ready or no item selected.');
+      return;
+    }
+    try {
+      const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
+      await setDoc(docRef, newItem, { merge: true });
+      setShowAddForm(false);
+      setEditingItem(null);
+      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+    } catch (error) {
+      alert('Error saving trip item: ' + error.message);
+    }
+  };
+
+  // Input change handler
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewItem(prev => ({ ...prev, [name]: value }));
   };
   const handleDeleteItem = (id) => {
     if (window.confirm('Delete this item?')) {
@@ -141,17 +198,29 @@ export default function TripDashboard() {
     <div className="flex flex-col min-h-[60vh]">
       {/* CTA Row */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div className="flex gap-2">
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg shadow transition text-sm flex items-center">
+        <div className="flex gap-2 justify-center w-full">
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg shadow transition text-sm flex items-center"
+            onClick={() => setShowAddForm(true)}
+          >
             + Add Stop
           </button>
-          <AIImportButton size="default" />
+          <AIImportButton size="default" onClick={() => setShowAIImportModal(true)} />
+          <button
+            className="bg-gray-200 hover:bg-gray-300 text-indigo-700 font-semibold px-4 py-2 rounded-lg shadow transition text-sm flex items-center"
+            onClick={() => setShowHelp(true)}
+          >
+            Help
+          </button>
         </div>
       </div>
 
       {/* Discover Carousel (responsive, fixed, hideable, max 3) */}
+      {pexelsError && (
+        <div className="bg-red-100 text-red-700 p-2 rounded mb-2 text-sm">{pexelsError}</div>
+      )}
       {showCarousel && (
-        <DiscoverCarousel tripItems={tripItems.slice(0, 3)} onHide={() => setShowCarousel(false)} />
+        <DiscoverCarousel tripItems={tripItems.slice(0, 3)} onHide={() => setShowCarousel(false)} setPexelsError={setPexelsError} />
       )}
       {!showCarousel && (
         <div className="mb-2 flex justify-end">
@@ -205,15 +274,56 @@ export default function TripDashboard() {
       <div className="md:hidden mt-4">
         <BottomNav activeView={activeView} setActiveView={setActiveView} />
       </div>
+
+      {/* Modals */}
+      <AIImportModal
+        isOpen={showAIImportModal}
+        onClose={() => setShowAIImportModal(false)}
+        onImportSuccess={() => setShowAIImportModal(false)}
+        onError={msg => alert(msg)}
+      />
+      <TripHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      {/* Add/Edit Trip Item Modal */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-0 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl font-bold z-10"
+              onClick={() => {
+                setShowAddForm(false);
+                setEditingItem(null);
+                setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+              }}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <TripForm
+              newItem={newItem}
+              handleInputChange={handleInputChange}
+              onAddItem={handleAddItem}
+              onSaveEdit={handleSaveEdit}
+              onCancelEdit={() => {
+                setShowAddForm(false);
+                setEditingItem(null);
+                setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+              }}
+              openModal={msg => alert(msg)}
+              isEditing={!!editingItem}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function DiscoverCarousel({ tripItems, onHide }) {
+function DiscoverCarousel({ tripItems, onHide, setPexelsError }) {
   const [images, setImages] = useState([]);
   useEffect(() => {
     let cancelled = false;
     async function fetchImages() {
+      setPexelsError && setPexelsError(null);
       const results = await Promise.all(tripItems.map(async (item) => {
         try {
           const res = await axios.get(`/api/pexels-proxy?q=${encodeURIComponent(item.location)}`);
@@ -228,6 +338,7 @@ function DiscoverCarousel({ tripItems, onHide }) {
             id: item.id,
           };
         } catch (e) {
+          setPexelsError && setPexelsError('Could not load images from Pexels. Please check your API key and Netlify function logs.');
           return {
             url: '/logo512.png', // fallback to static placeholder
             photographer: null,
@@ -244,7 +355,7 @@ function DiscoverCarousel({ tripItems, onHide }) {
     }
     fetchImages();
     return () => { cancelled = true; };
-  }, [tripItems]);
+  }, [tripItems, setPexelsError]);
 
   return (
     <div className="mb-4 z-30 bg-white sticky top-0" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -275,5 +386,4 @@ function DiscoverCarousel({ tripItems, onHide }) {
       </div>
     </div>
   );
-
 }

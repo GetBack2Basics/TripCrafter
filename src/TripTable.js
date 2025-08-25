@@ -76,9 +76,15 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                     {formatDate(item.date)}
                     <div className="flex gap-2 mt-1 items-center">
-                      {/* Type icon (now includes enroute) */}
+                      {/* Only show icon by type, no text */}
                       {['roofed', 'camp', 'enroute', 'note', 'ferry', 'car'].includes(item.type) && (
                         <span>{getTypeIcon(item.type, item)}</span>
+                      )}
+                      {/* Show travel time and distance if available */}
+                      {(item.travelTime || item.distance) && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          {item.travelTime}{item.travelTime && item.distance ? ' • ' : ''}{item.distance}
+                        </span>
                       )}
                       <button onClick={() => handleEditClick && handleEditClick(item)} className="p-1 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
                         <Pen className="w-4 h-4" />

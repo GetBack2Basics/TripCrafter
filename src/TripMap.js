@@ -1,4 +1,15 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { BedDouble, Tent, Car, Info, Ship } from 'lucide-react';
+// Icon by type for timeline
+function getTypeIcon(type, item) {
+  if (type === 'roofed') return <BedDouble className="w-5 h-5 text-indigo-600" title="Accommodation" />;
+  if (type === 'camp') return <Tent className="w-5 h-5 text-green-600" title="Camping" />;
+  if (type === 'enroute') return <Car className="w-5 h-5 text-orange-500" title="Enroute" />;
+  if (type === 'note') return <Info className="w-5 h-5 text-purple-500" title="Note" />;
+  if (type === 'ferry' || (item && item.accommodation?.toLowerCase().includes('spirit'))) return <Ship className="w-5 h-5 text-blue-500" title="Ferry" />;
+  if (type === 'car') return <Car className="w-5 h-5 text-gray-500" title="Car" />;
+  return null;
+}
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 
 const render = (status) => {
@@ -351,30 +362,21 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
         <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
           {tripItems.map((item, index) => {
             const isActive = activeIndex === index;
-            const isAccom = item.type === 'roofed' || item.type === 'camp';
             return (
               <button
                 key={item.id}
                 className={`flex flex-col items-center min-w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
-                  isActive ? 'border-orange-400 bg-orange-50 shadow' : isAccom ? 'border-indigo-200 bg-indigo-50' : item.type === 'note' ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-gray-50'
+                  isActive ? 'border-orange-400 bg-orange-50 shadow' : 'border-gray-200 bg-gray-50'
                 }`}
                 onClick={() => setActiveIndex(index)}
                 style={{ cursor: 'pointer' }}
               >
-                <span className={`text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold mb-1 ${
-                  isAccom ? 'bg-indigo-600' : item.type === 'note' ? 'bg-purple-500' : 'bg-gray-400'
-                }`}>
-                  {index + 1}
-                </span>
+                <span className="mb-1">{getTypeIcon(item.type, item)}</span>
                 <span className="font-semibold text-gray-800 text-xs truncate max-w-[70px]">{getPlaceName(item.location)}</span>
-                {isAccom && (
-                  <span className="text-[10px] text-indigo-500 mt-1">Stay</span>
-                )}
-                {item.type === 'note' && (
-                  <span className="text-[10px] text-purple-500 mt-1">Note</span>
-                )}
-                {!isAccom && item.type !== 'note' && (
-                  <span className="text-[10px] text-gray-500 mt-1">Enroute</span>
+                {(item.travelTime || item.distance) && (
+                  <span className="text-[10px] text-gray-500 mt-1 text-center">
+                    {item.travelTime}{item.travelTime && item.distance ? ' • ' : ''}{item.distance}
+                  </span>
                 )}
               </button>
             );
