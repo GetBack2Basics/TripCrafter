@@ -1,6 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, query, onSnapshot, getDocs, doc, setDoc } from 'firebase/firestore';
@@ -16,8 +15,8 @@ import TripHelpModal from './TripHelpModal';
 import TripForm from '../TripForm';
 
 export default function TripDashboard() {
-  // Hide Discover carousel by default
-  const [showCarousel, setShowCarousel] = useState(false);
+  // Show Discover carousel by default
+  const [showCarousel, setShowCarousel] = useState(true);
   const [activeView, setActiveView] = useState('itinerary');
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
@@ -318,44 +317,53 @@ export default function TripDashboard() {
   );
 }
 
-function DiscoverCarousel({ tripItems, onHide, setPexelsError }) {
-  const [images, setImages] = useState([]);
+// Get up to 3 images for a location from /discover-images/
+function getLocalDiscoverImages(location) {
+  if (!location) return ['/logo512.png'];
+  const base = location.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  // Try numbered variants, fallback to base
+  const images = [];
+  for (let i = 1; i <= 3; i++) {
+    images.push(`/discover-images/${base}_${i}.jpg`);
+  }
+  images.push(`/discover-images/${base}.jpg`); // fallback
+  return images;
+}
+
+
+
+function DiscoverCarousel({ tripItems, onHide }) {
+  // Show up to 3 locations at a time, each cycling through its images every 10s
+  const [visibleStart, setVisibleStart] = useState(0);
+  const [imageIndexes, setImageIndexes] = useState([0, 0, 0]); // per location
+  const intervalRef = useRef();
+
+  // Only show up to 3 locations at a time
+  const visibleLocations = tripItems.slice(visibleStart, visibleStart + 3);
+
+  // For each visible location, get its images
+  const locationImages = visibleLocations.map(item => getLocalDiscoverImages(item.location));
+
+  // Cycle images every 10s
   useEffect(() => {
-    let cancelled = false;
-    async function fetchImages() {
-      setPexelsError && setPexelsError(null);
-      const results = await Promise.all(tripItems.map(async (item) => {
-        try {
-          const res = await axios.get(`/api/pexels-proxy?q=${encodeURIComponent(item.location)}`);
-          return {
-            url: res.data.url,
-            photographer: res.data.photographer,
-            photographer_url: res.data.photographer_url,
-            alt: res.data.alt,
-            location: item.location,
-            accommodation: item.accommodation,
-            activities: item.activities,
-            id: item.id,
-          };
-        } catch (e) {
-          setPexelsError && setPexelsError('Could not load images from Pexels. Please check your API key and Netlify function logs.');
-          return {
-            url: '/logo512.png', // fallback to static placeholder
-            photographer: null,
-            photographer_url: null,
-            alt: item.location,
-            location: item.location,
-            accommodation: item.accommodation,
-            activities: item.activities,
-            id: item.id,
-          };
-        }
+    intervalRef.current = setInterval(() => {
+      setImageIndexes(prev => prev.map((idx, i) => {
+        const imgs = locationImages[i] || [];
+        if (imgs.length === 0) return 0;
+        return (idx + 1) % imgs.length;
       }));
-      if (!cancelled) setImages(results);
-    }
-    fetchImages();
-    return () => { cancelled = true; };
-  }, [tripItems, setPexelsError]);
+    }, 10000);
+    return () => clearInterval(intervalRef.current);
+  }, [locationImages.length, visibleStart]);
+
+  // Reset image indexes when visible locations change
+  useEffect(() => {
+    setImageIndexes([0, 0, 0]);
+  }, [visibleStart]);
+
+  // Scroll handlers (could be tied to itinerary scroll, here use buttons for demo)
+  const canScrollLeft = visibleStart > 0;
+  const canScrollRight = visibleStart + 3 < tripItems.length;
 
   return (
     <div className="mb-4 z-30 bg-white sticky top-0" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -363,26 +371,37 @@ function DiscoverCarousel({ tripItems, onHide, setPexelsError }) {
         <h3 className="text-lg font-semibold text-indigo-700 mb-2">Discover Tasmania</h3>
         <button onClick={onHide} className="text-xs text-gray-400 hover:text-indigo-600 px-2 py-1">Hide</button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 px-2 pb-2">
-        {images.map((img, idx) => (
-          <div key={img.id} className="bg-white rounded-xl shadow border border-gray-100 flex flex-col">
-            <a href={img.photographer_url || img.url} target="_blank" rel="noopener noreferrer">
-              <img
-                src={img.url}
-                alt={img.alt || img.location}
-                className="h-40 w-full object-cover rounded-t-xl"
-                onError={e => { e.target.onerror = null; e.target.src = '/logo512.png'; }}
-              />
-            </a>
-            <div className="p-3 flex-1 flex flex-col">
-              <div className="font-bold text-indigo-700 text-sm mb-1">{img.location}</div>
-              <div className="text-xs text-gray-500 flex-1">{img.accommodation || img.activities || ''}</div>
-              {img.photographer && (
-                <div className="text-[10px] text-gray-400 mt-1">Photo: <a href={img.photographer_url} target="_blank" rel="noopener noreferrer" className="underline">{img.photographer}</a> / Pexels</div>
-              )}
-            </div>
-          </div>
-        ))}
+      <div className="flex justify-between items-center px-2 pb-2">
+        <button
+          onClick={() => setVisibleStart(s => Math.max(0, s - 1))}
+          disabled={!canScrollLeft}
+          className={`text-lg px-2 py-1 rounded ${canScrollLeft ? 'hover:bg-gray-100' : 'opacity-30 cursor-not-allowed'}`}
+        >&#8592;</button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 flex-1">
+          {visibleLocations.map((item, i) => {
+            const imgs = locationImages[i] || [];
+            const imgUrl = imgs[imageIndexes[i]] || '/logo512.png';
+            return (
+              <div key={item.id} className="bg-white rounded-xl shadow border border-gray-100 flex flex-col">
+                <img
+                  src={imgUrl}
+                  alt={item.location}
+                  className="h-40 w-full object-cover rounded-t-xl"
+                  onError={e => { e.target.onerror = null; e.target.src = '/logo512.png'; }}
+                />
+                <div className="p-3 flex-1 flex flex-col">
+                  <div className="font-bold text-indigo-700 text-sm mb-1">{item.location}</div>
+                  <div className="text-xs text-gray-500 flex-1">{item.accommodation || item.activities || ''}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button
+          onClick={() => setVisibleStart(s => Math.min(tripItems.length - 3, s + 1))}
+          disabled={!canScrollRight}
+          className={`text-lg px-2 py-1 rounded ${canScrollRight ? 'hover:bg-gray-100' : 'opacity-30 cursor-not-allowed'}`}
+        >&#8594;</button>
       </div>
     </div>
   );
