@@ -36,43 +36,60 @@ function downloadImage(url, dest) {
 const PEXELS_API_KEY = 'LHHAbVyEUsUiHxHFMXpV3ghKgPiwRLo8qD8BI2Gjxc7262qgJ68Pr4lP';
 const PEXELS_API_URL = 'https://api.pexels.com/v1/search';
 
-async function getPexelsImageUrl(query) {
+
+async function getPexelsImageUrls(query, count = 3) {
   try {
     const response = await axios.get(PEXELS_API_URL, {
       headers: { Authorization: PEXELS_API_KEY },
-      params: { query, per_page: 1, orientation: 'landscape' },
+      params: { query, per_page: count, orientation: 'landscape' },
     });
     if (response.data && response.data.photos && response.data.photos.length > 0) {
-      return response.data.photos[0].src.large || response.data.photos[0].src.original;
+      return response.data.photos.map(photo => photo.src.large || photo.src.original);
     }
-    return null;
+    return [];
   } catch (e) {
     console.error(`Pexels API error for '${query}':`, e.message);
-    return null;
+    return [];
   }
 }
 
 async function main() {
   const locations = Array.from(new Set(tripData.map(item => item.location)));
   for (const location of locations) {
-    const filename = sanitizeFilename(location) + '.jpg';
-    const dest = path.join(outDir, filename);
-    if (fs.existsSync(dest)) {
-      console.log(`Already downloaded: ${filename}`);
-      continue;
-    }
+    const base = sanitizeFilename(location);
+    // Download up to 3 images per location
     console.log(`Searching Pexels for: ${location}`);
-    const imageUrl = await getPexelsImageUrl(location);
-    if (!imageUrl) {
-      console.error(`No image found for ${location}`);
+    const imageUrls = await getPexelsImageUrls(location, 3);
+    if (!imageUrls.length) {
+      console.error(`No images found for ${location}`);
       continue;
     }
-    console.log(`Downloading for ${location} from ${imageUrl}...`);
-    try {
-      await downloadImage(imageUrl, dest);
-      console.log(`Saved: ${filename}`);
-    } catch (e) {
-      console.error(`Failed for ${location}:`, e.message);
+    for (let i = 0; i < imageUrls.length; i++) {
+      const filename = `${base}_${i+1}.jpg`;
+      const dest = path.join(outDir, filename);
+      if (fs.existsSync(dest)) {
+        console.log(`Already downloaded: ${filename}`);
+        continue;
+      }
+      const imageUrl = imageUrls[i];
+      console.log(`Downloading for ${location} [${i+1}] from ${imageUrl}...`);
+      try {
+        await downloadImage(imageUrl, dest);
+        console.log(`Saved: ${filename}`);
+      } catch (e) {
+        console.error(`Failed for ${location} [${i+1}]:`, e.message);
+      }
+    }
+    // Also save the first image as the fallback base.jpg if not present
+    const fallbackFilename = `${base}.jpg`;
+    const fallbackDest = path.join(outDir, fallbackFilename);
+    if (!fs.existsSync(fallbackDest) && imageUrls[0]) {
+      try {
+        await downloadImage(imageUrls[0], fallbackDest);
+        console.log(`Saved fallback: ${fallbackFilename}`);
+      } catch (e) {
+        console.error(`Failed for fallback ${location}:`, e.message);
+      }
     }
   }
 }

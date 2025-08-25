@@ -46,12 +46,12 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
       if (result.success) {
         setReviewData(result.data);
       } else {
-        // On error, show the generated prompt for manual LLM use
+        // On error, show the generated prompt for manual LLM use and show JSON page immediately
         const prompt = await aiImportService.getPrompt(source, importType);
         setLlmPrompt(prompt);
         setShowPrompt(true);
         onError(result.error);
-        handleClose();
+        // Do NOT close the modal, let user see the JSON page immediately
       }
     } catch (error) {
       onError(error.message);

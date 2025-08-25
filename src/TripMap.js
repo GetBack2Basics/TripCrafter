@@ -1,7 +1,14 @@
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { BedDouble, Tent, Car, Info, Ship } from 'lucide-react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
+
+// Helper to get local discover image path for a location
+function getLocalDiscoverImage(location) {
+  if (!location) return null;
+  // Use the same sanitize logic as in download-discover-images.js
+  const filename = location.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.jpg';
+  return `/discover-images/${filename}`;
+}
 
 // Icon by type for timeline
 function getTypeIcon(type, item) {
@@ -373,10 +380,22 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
                 onClick={() => setActiveIndex(index)}
                 style={{ cursor: 'pointer' }}
               >
-                <span className="mb-1">{getTypeIcon(item.type, item)}</span>
+                <span className="mb-1 relative block w-10 h-10 rounded-full overflow-hidden bg-gray-100" style={{marginBottom: 4}}>
+                  {/* Show local discover image as background, fallback to icon if not found */}
+                  <img
+                    src={getLocalDiscoverImage(item.location)}
+                    alt={getPlaceName(item.location)}
+                    className="object-cover w-full h-full"
+                    onError={e => { e.target.style.display = 'none'; }}
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    {getTypeIcon(item.type, item)}
+                  </span>
+                </span>
                 <span className="font-semibold text-gray-800 text-xs truncate max-w-[70px]">{getPlaceName(item.location)}</span>
                 {(item.travelTime || item.distance) && (
                   <span className="text-[10px] text-gray-500 mt-1 text-center">
+                    {/* Only show travel time and distance, no 'from x' text */}
                     {item.travelTime}{item.travelTime && item.distance ? ' • ' : ''}{item.distance}
                   </span>
                 )}
