@@ -135,7 +135,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
       if (setUserEmail) setUserEmail(null);
       if (setUserAvatar) setUserAvatar(null);
     }
-  }, []);
+  }, [setUserEmail, setUserAvatar]);
 
   // Trip initialization (create default trip if none exists)
   useEffect(() => {
