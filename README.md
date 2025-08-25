@@ -4,6 +4,7 @@ Trip Crafter is a collaborative web application designed to help you plan and ma
 
 It has been created entirely using LLM's with some tech stacks the author had never used before. The initial prompts can be seen at https://gemini.google.com/app/9b31fbc8fff71c8c before it was moved to Codespaces in GitHub with VS Code chat online.
 
+
 ✨ Features
 
 🤖 **AI Import**: Import trip data from booking confirmation URLs, PDF documents, or text using advanced AI parsing - accessible from any view with a single click!
@@ -18,6 +19,8 @@ It has been created entirely using LLM's with some tech stacks the author had ne
 
 🤝 **Real-time Collaboration**: All trip data is stored in a publicly accessible Firebase Firestore collection, allowing everyone with access to the app to view and update the same itinerary in real-time.
 
+
+🖼️ **Discover Pane**: At the top of your dashboard, see up to 3 locations from your itinerary, each cycling through up to 3 downloaded images every 10 seconds. Use the arrows to scroll through more locations, or let the images cycle automatically. As you scroll your itinerary, the Discover pane updates to show relevant locations. All images are downloaded in advance for reliability and speed.
 🗺️ **Interactive Map View**: Visualize your trip route on Google Maps with turn-by-turn directions between locations and automatic travel time calculations.
 
 🏝️ **Sample Trip**: The app comes pre-populated with an example Tasmania trip itinerary to get you started!
@@ -44,10 +47,12 @@ It has been created entirely using LLM's with some tech stacks the author had ne
 - PDF.js: Client-side PDF text extraction
 - Custom Pattern Matching: Intelligent fallback parsing without API requirements
 
+
 **Maps & Location:**
 - Google Maps API: Integrated for displaying interactive maps and routing between trip locations
 - Directions API: Automatic travel time calculations and route optimization
 - Geocoding API: Address lookup and location validation (optional)
+- **Discover Images:** Uses a script to download up to 3 images per location from Pexels, stored locally in `/public/discover-images/` for fast, reliable display in the Discover pane.
 
 **Deployment:**
 - Netlify: Continuous deployment and hosting
@@ -106,6 +111,10 @@ Netlify will automatically build and deploy your application, providing you with
 
 ### 📋 Project Structure
 ```
+scripts/
+   download-discover-images.js   # Downloads up to 3 images per location for Discover pane
+```
+```
 TripCrafter/
 ├── public/                    # Static files
 ├── src/
@@ -141,6 +150,7 @@ The app includes sample booking data for testing AI Import functionality:
 - Test AI Import with sample data before using real bookings
 - Check browser console for debugging information
 - Use responsive design testing for mobile compatibility
+- To update Discover images, run `node scripts/download-discover-images.js` to fetch the latest images for your trip locations.
 
 ### 🤝 Contributing
 

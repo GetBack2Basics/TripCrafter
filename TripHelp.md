@@ -44,6 +44,11 @@ Camping, RV parks, caravan sites
 Transport, activities, day trips
 ✨ Discovers local attractions and things to do
 
+
+## 🖼️ Discover Pane
+
+At the top of your dashboard, the Discover section shows up to 3 locations from your itinerary, each cycling through up to 3 images every 10 seconds. Use the arrows to scroll through more locations, or let the images cycle automatically. As you scroll your itinerary, the Discover pane updates to show relevant locations. All images are downloaded in advance for reliability and speed.
+
 ## 👀 Different Ways to View Your Trip
 
 ### 📋 Table View
