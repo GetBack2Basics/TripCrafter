@@ -4,7 +4,7 @@ import { GripVertical, BedDouble, Tent, Ship, Car, Plane, Info, Pen, Trash2 } fr
 export default TripList;
 
 // Figma-aligned TripList: modern card design, clear actions, responsive
-function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteItem, handleMoveUp, handleMoveDown, handleInputChange, handleSaveEdit, loadingInitialData }) {
+function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteItem, handleMoveUp, handleMoveDown, handleInputChange, handleSaveEdit, loadingInitialData, handleReorder }) {
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [expandedIndex, setExpandedIndex] = useState(null);
@@ -30,12 +30,7 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
     e.preventDefault();
     setDragOverIndex(null);
     if (draggedItem && draggedItem.index !== targetIndex) {
-      const sourceIndex = draggedItem.index;
-      if (sourceIndex < targetIndex) {
-        for (let i = 0; i < (targetIndex - sourceIndex); i++) handleMoveDown && handleMoveDown(draggedItem.item.id);
-      } else {
-        for (let i = 0; i < (sourceIndex - targetIndex); i++) handleMoveUp && handleMoveUp(draggedItem.item.id);
-      }
+      if (handleReorder) handleReorder(draggedItem.index, targetIndex);
     }
     setDraggedItem(null);
   };

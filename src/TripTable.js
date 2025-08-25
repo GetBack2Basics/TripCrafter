@@ -11,7 +11,7 @@ function getTypeIcon(type, item) {
   return null;
 }
 
-function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingInitialData }) {
+function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingInitialData, handleReorder }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [expandedIndex, setExpandedIndex] = useState(null);
@@ -33,7 +33,7 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
   const handleDragOver = (index) => setDragOverIndex(index);
   const handleDrop = (index) => {
     if (draggedIndex === null || draggedIndex === index) return;
-    // Reorder logic should be implemented in parent, here we just reset
+    if (handleReorder) handleReorder(draggedIndex, index);
     setDraggedIndex(null);
     setDragOverIndex(null);
   };

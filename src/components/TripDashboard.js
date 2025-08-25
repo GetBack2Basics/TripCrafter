@@ -39,11 +39,19 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
     setNewItem(item);
     setShowAddForm(true);
   };
-  // Add item handler
+  // Add item handler with date order and accommodation conflict check (roofed or camp)
   const handleAddItem = async () => {
     if (!db || !currentTripId) {
       alert('Database not ready. Please try again later.');
       return;
+    }
+    // Accommodation conflict check for 'roofed' or 'camp'
+    if ((newItem.type === 'roofed' || newItem.type === 'camp') && newItem.date) {
+      const conflict = tripItems.find(item => item.date === newItem.date && (item.type === 'roofed' || item.type === 'camp'));
+      if (conflict) {
+        alert('Accommodation already exists for this date (roofed or camp). Only one accommodation is allowed per date.');
+        return;
+      }
     }
     try {
       const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
@@ -59,6 +67,36 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
     } catch (error) {
       alert('Error adding trip item: ' + error.message);
     }
+  };
+  // Reorder handler for drag-and-drop
+  const handleReorder = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+    const updated = [...tripItems];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+    // Optionally update the date to match the new position (if sorted by date)
+    // Here, we update the moved item's date to fit between its new neighbors
+    if (updated.length > 1 && moved.date) {
+      let newDate = moved.date;
+      if (toIndex > 0 && toIndex < updated.length - 1) {
+        // Between two items: average the dates
+        const prevDate = new Date(updated[toIndex - 1].date);
+        const nextDate = new Date(updated[toIndex + 1].date);
+        const avgTime = Math.round((prevDate.getTime() + nextDate.getTime()) / 2);
+        newDate = new Date(avgTime).toISOString().slice(0, 10);
+      } else if (toIndex === 0 && updated[1].date) {
+        // Before first item
+        const nextDate = new Date(updated[1].date);
+        newDate = new Date(nextDate.getTime() - 86400000).toISOString().slice(0, 10);
+      } else if (toIndex === updated.length - 1 && updated[updated.length - 2].date) {
+        // After last item
+        const prevDate = new Date(updated[updated.length - 2].date);
+        newDate = new Date(prevDate.getTime() + 86400000).toISOString().slice(0, 10);
+      }
+      updated[toIndex] = { ...moved, date: newDate };
+    }
+    setTripItems(updated);
+    // Optionally, persist the new order to Firestore here
   };
 
   // Save edit handler
@@ -269,8 +307,8 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
           <div className="text-center text-gray-400 py-8">Loading trip data...</div>
         ) : (
           <>
-            {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
-            {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
+            {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} />}
+            {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} />}
             {activeView === 'map' && <TripMap tripItems={tripItems} />}
           </>
         )}

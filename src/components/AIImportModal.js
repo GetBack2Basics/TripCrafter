@@ -46,16 +46,30 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError }) {
       if (result.success) {
         setReviewData(result.data);
       } else {
-        // On error, show the generated prompt for manual LLM use and show JSON page immediately
-        const prompt = await aiImportService.getPrompt(source, importType);
+        // On error or missing key, show the generated prompt for manual LLM use and show JSON page immediately
+        let prompt = '';
+        try {
+          prompt = await aiImportService.getPrompt(source, importType);
+        } catch (e) {
+          prompt = 'No prompt available. Please check your API key or try manual import.';
+        }
         setLlmPrompt(prompt);
         setShowPrompt(true);
-        onError(result.error);
+        onError(result.error || 'AI import failed. Use manual JSON import below.');
         // Do NOT close the modal, let user see the JSON page immediately
       }
     } catch (error) {
-      onError(error.message);
-      handleClose();
+      // If error is due to missing key or network, show manual JSON fallback
+      let prompt = '';
+      try {
+        prompt = await aiImportService.getPrompt(source, importType);
+      } catch (e) {
+        prompt = 'No prompt available. Please check your API key or try manual import.';
+      }
+      setLlmPrompt(prompt);
+      setShowPrompt(true);
+      onError(error.message || 'AI import failed. Use manual JSON import below.');
+      // Do NOT close the modal, let user see the JSON page immediately
     } finally {
       setIsProcessing(false);
     }
