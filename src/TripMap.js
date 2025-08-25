@@ -203,7 +203,7 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
     } finally {
       setIsProcessing(false);
     }
-  }, [map, tripItems, isProcessing, onUpdateTravelTime]);
+  }, [map, tripItems, isProcessing, onUpdateTravelTime, activeIndex, setActiveIndex]);
 
   // Process locations when map and data are ready
   useEffect(() => {
