@@ -39,9 +39,15 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
     setNewItem(item);
     setShowAddForm(true);
   };
-  // Add item handler with date order and accommodation conflict check (roofed or camp)
+  // Add item handler with date order and accommodation conflict check
   const handleAddItem = async () => {
-    if (!db || !currentTripId) {
+    const isLocal = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.endsWith('.app.github.dev') ||
+      window.location.hostname.endsWith('.codespaces.dev')
+    );
+    if (!isLocal && (!db || !currentTripId)) {
       alert('Database not ready. Please try again later.');
       return;
     }
@@ -53,19 +59,31 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
         return;
       }
     }
-    try {
-      const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
-      const newItemRef = doc(itineraryCollectionRef);
+    if (isLocal) {
+      // Add to local state only
       const itemToAdd = {
         ...newItem,
-        id: newItemRef.id,
+        id: Math.random().toString(36).substr(2, 9),
         order: Date.now(),
       };
-      await setDoc(newItemRef, itemToAdd);
+      setTripItems([...tripItems, itemToAdd]);
       setShowAddForm(false);
       setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
-    } catch (error) {
-      alert('Error adding trip item: ' + error.message);
+    } else {
+      try {
+        const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
+        const newItemRef = doc(itineraryCollectionRef);
+        const itemToAdd = {
+          ...newItem,
+          id: newItemRef.id,
+          order: Date.now(),
+        };
+        await setDoc(newItemRef, itemToAdd);
+        setShowAddForm(false);
+        setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+      } catch (error) {
+        alert('Error adding trip item: ' + error.message);
+      }
     }
   };
   // Reorder handler for drag-and-drop
@@ -75,28 +93,39 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
     const [moved] = updated.splice(fromIndex, 1);
     updated.splice(toIndex, 0, moved);
     // Optionally update the date to match the new position (if sorted by date)
-    // Here, we update the moved item's date to fit between its new neighbors
     if (updated.length > 1 && moved.date) {
       let newDate = moved.date;
       if (toIndex > 0 && toIndex < updated.length - 1) {
-        // Between two items: average the dates
         const prevDate = new Date(updated[toIndex - 1].date);
         const nextDate = new Date(updated[toIndex + 1].date);
         const avgTime = Math.round((prevDate.getTime() + nextDate.getTime()) / 2);
         newDate = new Date(avgTime).toISOString().slice(0, 10);
       } else if (toIndex === 0 && updated[1].date) {
-        // Before first item
         const nextDate = new Date(updated[1].date);
         newDate = new Date(nextDate.getTime() - 86400000).toISOString().slice(0, 10);
       } else if (toIndex === updated.length - 1 && updated[updated.length - 2].date) {
-        // After last item
         const prevDate = new Date(updated[updated.length - 2].date);
         newDate = new Date(prevDate.getTime() + 86400000).toISOString().slice(0, 10);
       }
       updated[toIndex] = { ...moved, date: newDate };
     }
-    setTripItems(updated);
-    // Optionally, persist the new order to Firestore here
+    // Update order field for all items
+    const reordered = updated.map((item, idx) => ({ ...item, order: idx * 1000 }));
+    setTripItems(reordered);
+    // Persist the new order to Firestore if available and not local
+    const isLocal = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.endsWith('.app.github.dev') ||
+      window.location.hostname.endsWith('.codespaces.dev')
+    );
+    if (!isLocal && typeof db !== 'undefined' && db && currentTripId) {
+      const itineraryCollectionRef = require('firebase/firestore').collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
+      reordered.forEach(async (item) => {
+        const docRef = require('firebase/firestore').doc(itineraryCollectionRef, item.id);
+        await require('firebase/firestore').setDoc(docRef, { order: item.order }, { merge: true });
+      });
+    }
   };
 
   // Save edit handler
