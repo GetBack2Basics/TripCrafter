@@ -354,7 +354,7 @@ function DiscoverCarousel({ tripItems, onHide }) {
       }));
     }, 10000);
     return () => clearInterval(intervalRef.current);
-  }, [locationImages.length, visibleStart]);
+  }, [locationImages, visibleStart]);
 
   // Reset image indexes when visible locations change
   useEffect(() => {
