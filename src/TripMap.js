@@ -1,5 +1,8 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { BedDouble, Tent, Car, Info, Ship } from 'lucide-react';
+import { Wrapper, Status } from '@googlemaps/react-wrapper';
+
 // Icon by type for timeline
 function getTypeIcon(type, item) {
   if (type === 'roofed') return <BedDouble className="w-5 h-5 text-indigo-600" title="Accommodation" />;
@@ -10,7 +13,6 @@ function getTypeIcon(type, item) {
   if (type === 'car') return <Car className="w-5 h-5 text-gray-500" title="Car" />;
   return null;
 }
-import { Wrapper, Status } from '@googlemaps/react-wrapper';
 
 const render = (status) => {
   switch (status) {
