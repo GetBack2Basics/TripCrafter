@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Pen, Trash2, CheckCircle2, XCircle } from 'lucide-react';
 
 function AIImportReview({ importedData, onMerge, onIgnore, onReplace, onEdit, onCancel }) {
