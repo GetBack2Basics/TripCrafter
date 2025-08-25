@@ -14,7 +14,7 @@ import AIImportModal from './AIImportModal';
 import TripHelpModal from './TripHelpModal';
 import TripForm from '../TripForm';
 
-export default function TripDashboard() {
+export default function TripDashboard({ setUserEmail, setUserAvatar }) {
   // Show Discover carousel by default
   const [showCarousel, setShowCarousel] = useState(true);
   const [activeView, setActiveView] = useState('itinerary');
@@ -113,11 +113,16 @@ export default function TripDashboard() {
       const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
         if (user) {
           setUserId(user.uid);
+          // Set user email and avatar if available
+          if (setUserEmail) setUserEmail(user.email || null);
+          if (setUserAvatar) setUserAvatar(user.photoURL || null);
         } else {
           try {
             await signInAnonymously(firebaseAuth);
           } catch (error) {
             setUserId('local-fallback-user');
+            if (setUserEmail) setUserEmail(null);
+            if (setUserAvatar) setUserAvatar(null);
           }
         }
         setIsAuthReady(true);
@@ -127,6 +132,8 @@ export default function TripDashboard() {
       setTripItems(defaultTasmaniaTripData.sort((a, b) => new Date(a.date) - new Date(b.date)));
       setLoading(false);
       setIsAuthReady(true);
+      if (setUserEmail) setUserEmail(null);
+      if (setUserAvatar) setUserAvatar(null);
     }
   }, []);
 
