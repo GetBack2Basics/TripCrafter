@@ -7,14 +7,10 @@ import TripDashboard from './components/TripDashboard';
 
 import { useState } from 'react';
 function App() {
-  // App-level state for user info
-  const [userEmail, setUserEmail] = useState(null);
-  const [userAvatar, setUserAvatar] = useState(null);
   return (
-    <div className="font-inter text-gray-800">
-      <AppHeader userEmail={userEmail} userAvatar={userAvatar} />
+    <div className="font-inter text-gray-800 w-full min-w-full max-w-full overflow-x-hidden">
       <MainLayout>
-        <TripDashboard setUserEmail={setUserEmail} setUserAvatar={setUserAvatar} />
+        <TripDashboard />
       </MainLayout>
     </div>
   );

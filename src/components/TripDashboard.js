@@ -7,6 +7,7 @@ import defaultTasmaniaTripData from '../Trip-Default_Tasmania2025';
 import TripTable from '../TripTable';
 import TripList from '../TripList';
 import TripMap from '../TripMap';
+import TripDiscover from '../TripDiscover';
 
 import BottomNav from './BottomNav';
 import AIImportButton from './AIImportButton';
@@ -14,12 +15,17 @@ import AIImportModal from './AIImportModal';
 import TripHelpModal from './TripHelpModal';
 import TripForm from '../TripForm';
 
-export default function TripDashboard({ setUserEmail, setUserAvatar }) {
+import AppHeader from './AppHeader';
+import { useState as useReactState } from 'react';
+export default function TripDashboard() {
+  // App-level state for user info
+  const [userEmail, setUserEmail] = useReactState(null);
+  const [userAvatar, setUserAvatar] = useReactState(null);
   // Modal state for conflict resolution
   const [modalOptions, setModalOptions] = useState({ show: false });
   // Show Discover carousel by default
   const [showCarousel, setShowCarousel] = useState(true);
-  const [activeView, setActiveView] = useState('itinerary');
+  const [activeView, setActiveView] = useState('itinerary'); // itinerary, list, map, discover
   const [tripItems, setTripItems] = useState([]);
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
@@ -311,77 +317,36 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
 
   return (
     <div className="flex flex-col min-h-[60vh]">
-      {/* CTA Row */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div className="flex gap-2 justify-center w-full">
-          <button
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg shadow transition text-sm flex items-center"
-            onClick={() => {
-              // Set default date to latest in tripItems, or today if none
-              let latestDate = '';
-              if (tripItems.length > 0) {
-                latestDate = tripItems.reduce((max, item) => {
-                  return (!max || new Date(item.date) > new Date(max)) ? item.date : max;
-                }, '');
-              }
-              setNewItem(prev => ({
-                ...prev,
-                date: latestDate || new Date().toISOString().slice(0, 10)
-              }));
-              setShowAddForm(true);
-            }}
-          >
-            + Add Stop
-          </button>
-          <AIImportButton size="default" onClick={() => setShowAIImportModal(true)} />
-          <button
-            className="bg-gray-200 hover:bg-gray-300 text-indigo-700 font-semibold px-4 py-2 rounded-lg shadow transition text-sm flex items-center"
-            onClick={() => setShowHelp(true)}
-          >
-            Help
-          </button>
-        </div>
-      </div>
+  <AppHeader
+    userEmail={userEmail}
+    userAvatar={userAvatar}
+    activeView={activeView}
+    setActiveView={setActiveView}
+    onAddStop={() => {
+      let latestDate = '';
+      if (tripItems.length > 0) {
+        latestDate = tripItems.reduce((max, item) => {
+          return (!max || new Date(item.date) > new Date(max)) ? item.date : max;
+        }, '');
+      }
+      setNewItem(prev => ({
+        ...prev,
+        date: latestDate || new Date().toISOString().slice(0, 10)
+      }));
+      setShowAddForm(true);
+    }}
+    onAIImport={() => setShowAIImportModal(true)}
+    onHelpClick={() => setShowHelp(true)}
+  />
 
-      {/* Discover Carousel (responsive, fixed, hideable, max 3) */}
-      {pexelsError && (
-        <div className="bg-red-100 text-red-700 p-2 rounded mb-2 text-sm">{pexelsError}</div>
-      )}
-      {showCarousel && (
-  <DiscoverCarousel tripItems={tripItems} onHide={() => setShowCarousel(false)} setPexelsError={setPexelsError} />
-      )}
-      {!showCarousel && (
-        <div className="mb-2 flex justify-end">
-          <button onClick={() => setShowCarousel(true)} className="text-xs text-gray-400 hover:text-indigo-600 px-2 py-1">Show Discover</button>
-        </div>
-      )}
+
+
 
       {/* Summary/Header Area + Tabbed View Switcher */}
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
           <h2 className="text-2xl font-bold text-indigo-700 tracking-tight">Trip Itinerary</h2>
           <div className="text-gray-500 text-sm mt-1">Plan, organize, and visualize your trip</div>
-        </div>
-        {/* Tabbed View Switcher */}
-        <div className="flex space-x-2 bg-gray-100 rounded-lg p-1 mt-2 md:mt-0">
-          <button
-            className={`px-4 py-2 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'itinerary' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
-            onClick={() => setActiveView('itinerary')}
-          >
-            Table
-          </button>
-          <button
-            className={`px-4 py-2 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'list' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
-            onClick={() => setActiveView('list')}
-          >
-            Cards
-          </button>
-          <button
-            className={`px-4 py-2 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'map' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
-            onClick={() => setActiveView('map')}
-          >
-            Map
-          </button>
         </div>
       </div>
 
@@ -394,6 +359,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
             {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} />}
             {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} />}
             {activeView === 'map' && <TripMap tripItems={tripItems} />}
+            {activeView === 'discover' && <TripDiscover tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
           </>
         )}
       </div>
