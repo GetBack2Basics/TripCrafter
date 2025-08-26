@@ -28,7 +28,15 @@ export default function BottomNav({ activeView, setActiveView }) {
           onClick={() => setActiveView('itinerary')}
         >
           <Calendar className="w-4 h-4 mr-2" />
-          Itinerary
+          Table
+        </Button>
+        <Button
+          variant={activeView === 'list' ? 'default' : 'ghost'}
+          className="flex-1"
+          onClick={() => setActiveView('list')}
+        >
+          <Calendar className="w-4 h-4 mr-2" />
+          Cards
         </Button>
         <Button
           variant={activeView === 'map' ? 'default' : 'ghost'}

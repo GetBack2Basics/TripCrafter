@@ -87,7 +87,7 @@ function App() {
   const [userEmail, setUserEmail] = useState(null);
   const [currentTripId, setCurrentTripId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
-  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+  const [newItem, setNewItem] = useState({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
@@ -442,9 +442,12 @@ function App() {
     }
   };
 
-  const openModal = (message, confirmAction = null) => {
+  // Enhanced modal: supports multiple custom actions (for merge/delete/ignore)
+  const [modalActions, setModalActions] = useState(null);
+  const openModal = (message, confirmAction = null, actions = null) => {
     setModalMessage(message);
     setModalConfirmAction(() => confirmAction);
+    setModalActions(actions);
     setIsModalOpen(true);
   };
 
@@ -452,11 +455,21 @@ function App() {
     setIsModalOpen(false);
     setModalMessage('');
     setModalConfirmAction(null);
+    setModalActions(null);
   };
 
+  // For single-action modals (legacy)
   const handleConfirmAction = () => {
     if (modalConfirmAction) {
       modalConfirmAction();
+    }
+    closeModal();
+  };
+
+  // For multi-action modals (merge/delete/ignore)
+  const handleCustomAction = (value) => {
+    if (modalConfirmAction) {
+      modalConfirmAction(value);
     }
     closeModal();
   };
@@ -513,8 +526,8 @@ function App() {
   // --- End Authentication Handlers ---
 
   const handleAddItem = async () => {
-    if (!newItem.date || !newItem.location || !newItem.accommodation) {
-      openModal('Please fill in all required fields (Date, Location, Accommodation).');
+    if (!newItem.date || !newItem.location || !newItem.title) {
+      openModal('Please fill in all required fields (Date, Location, Title).');
       return;
     }
     if (!currentTripId) {
@@ -522,9 +535,48 @@ function App() {
       return;
     }
 
+    // Check for existing title on the same date (roofed/camp)
+    const existingTitle = tripItems.find(
+      (item) => item.date === newItem.date && (item.type === 'roofed' || item.type === 'camp')
+    );
+
+    if (existingTitle) {
+      openModal(
+        `A booking already exists for this date (${existingTitle.title}). What would you like to do?`,
+        async (action) => {
+          if (action === 'merge') {
+            // Merge: update existing item with new details (except id/order)
+            const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, existingTitle.id);
+            await updateDoc(docRef, { ...existingTitle, ...newItem });
+            setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+            openModal('Booking merged successfully!');
+          } else if (action === 'delete') {
+            // Delete existing and add new
+            const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, existingTitle.id);
+            await deleteDoc(docRef);
+            const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
+            const newItemRef = doc(itineraryCollectionRef);
+            const itemToAdd = { ...newItem, id: newItemRef.id, order: Date.now() };
+            await setDoc(newItemRef, itemToAdd);
+            setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+            openModal('Existing booking deleted and new item added!');
+          } else {
+            // Ignore: do nothing
+            openModal('No changes made.');
+          }
+        },
+        [
+          { label: 'Merge', value: 'merge', style: 'bg-green-600 text-white' },
+          { label: 'Delete Existing & Add New', value: 'delete', style: 'bg-red-600 text-white' },
+          { label: 'Ignore', value: 'ignore', style: 'bg-gray-300 text-gray-700' }
+        ]
+      );
+      return;
+    }
+
+    // No conflict, proceed as normal
     const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
     const newItemRef = doc(itineraryCollectionRef);
-    // Set order to current timestamp to add at the end
     const itemToAdd = { 
       ...newItem, 
       id: newItemRef.id,
@@ -533,7 +585,7 @@ function App() {
 
     try {
       await setDoc(newItemRef, itemToAdd);
-      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+      setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
       openModal('Trip item added successfully!');
     } catch (error) {
       console.error("Error adding document: ", error);
@@ -595,8 +647,8 @@ function App() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editingItem.date || !editingItem.location || !editingItem.accommodation) {
-      openModal('Please fill in all required fields (Date, Location, Accommodation).');
+    if (!editingItem.date || !editingItem.location || !editingItem.title) {
+      openModal('Please fill in all required fields (Date, Location, Title).');
       return;
     }
     if (!currentTripId) {
@@ -608,7 +660,7 @@ function App() {
       const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
       await updateDoc(docRef, editingItem); // Update the document with the editedItem state
       setEditingItem(null); // Clear editing item state
-      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' }); // Clear form
+  setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' }); // Clear form
       setViewMode('table'); // Go back to table view after saving
       openModal('Trip item updated successfully!');
     } catch (error) {
@@ -1030,8 +1082,18 @@ function App() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
               <p className="text-lg text-center mb-6">{modalMessage}</p>
-              <div className="flex justify-around">
-                {modalConfirmAction ? (
+              <div className="flex flex-wrap justify-around gap-2">
+                {modalActions && Array.isArray(modalActions) && modalActions.length > 0 ? (
+                  modalActions.map((action) => (
+                    <button
+                      key={action.value}
+                      onClick={() => handleCustomAction(action.value)}
+                      className={`font-bold py-2 px-4 rounded-full shadow-md transition duration-300 transform hover:scale-105 ${action.style || 'bg-gray-300 text-gray-800'}`}
+                    >
+                      {action.label}
+                    </button>
+                  ))
+                ) : modalConfirmAction ? (
                   <>
                     <button
                       onClick={handleConfirmAction}

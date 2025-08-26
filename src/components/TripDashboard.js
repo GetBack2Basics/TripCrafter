@@ -15,6 +15,8 @@ import TripHelpModal from './TripHelpModal';
 import TripForm from '../TripForm';
 
 export default function TripDashboard({ setUserEmail, setUserAvatar }) {
+  // Modal state for conflict resolution
+  const [modalOptions, setModalOptions] = useState({ show: false });
   // Show Discover carousel by default
   const [showCarousel, setShowCarousel] = useState(true);
   const [activeView, setActiveView] = useState('itinerary');
@@ -27,7 +29,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newItem, setNewItem] = useState({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+  const [newItem, setNewItem] = useState({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
   const [editingItem, setEditingItem] = useState(null);
   const [showAIImportModal, setShowAIImportModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -40,7 +42,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
     setShowAddForm(true);
   };
   // Add item handler with date order and accommodation conflict check
-  const handleAddItem = async () => {
+  const handleAddItem = async (itemToAddArg) => {
     const isLocal = typeof window !== 'undefined' && (
       window.location.hostname === 'localhost' ||
       window.location.hostname === '127.0.0.1' ||
@@ -51,36 +53,76 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
       alert('Database not ready. Please try again later.');
       return;
     }
-    // Accommodation conflict check for 'roofed' or 'camp'
-    if ((newItem.type === 'roofed' || newItem.type === 'camp') && newItem.date) {
-      const conflict = tripItems.find(item => item.date === newItem.date && (item.type === 'roofed' || item.type === 'camp'));
+    // Title conflict check for 'roofed' or 'camp'
+    const itemToAdd = itemToAddArg || newItem;
+    if ((itemToAdd.type === 'roofed' || itemToAdd.type === 'camp') && itemToAdd.date) {
+      const conflict = tripItems.find(item => item.date === itemToAdd.date && (item.type === 'roofed' || item.type === 'camp'));
       if (conflict) {
-        alert('Accommodation already exists for this date (roofed or camp). Only one accommodation is allowed per date.');
+        // Show modal with merge/delete/ignore options (reuse AI import modal logic)
+        setModalOptions({
+          show: true,
+          message: `A booking already exists for this date (${conflict.title}). What would you like to do?`,
+          actions: [
+            {
+              label: 'Merge',
+              onClick: async () => {
+                if (isLocal) {
+                  setTripItems(tripItems.map(item =>
+                    item.id === conflict.id ? { ...item, ...itemToAdd } : item
+                  ));
+                } else {
+                  const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, conflict.id);
+                  await setDoc(docRef, { ...conflict, ...itemToAdd });
+                }
+                setModalOptions({ show: false });
+                setShowAddForm(false);
+                setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+              }
+            },
+            {
+              label: 'Delete Existing & Add New',
+              onClick: async () => {
+                if (isLocal) {
+                  const itemWithId = { ...itemToAdd, id: Math.random().toString(36).substr(2, 9), order: Date.now() };
+                  const updated = [...tripItems.filter(item => item.id !== conflict.id), itemWithId].sort((a, b) => new Date(a.date) - new Date(b.date));
+                  setTripItems(updated);
+                } else {
+                  const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, conflict.id);
+                  await setDoc(docRef, {}, { merge: true });
+                  const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
+                  const newItemRef = doc(itineraryCollectionRef);
+                  const itemWithId = { ...itemToAdd, id: newItemRef.id, order: Date.now() };
+                  await setDoc(newItemRef, itemWithId);
+                }
+                setModalOptions({ show: false });
+                setShowAddForm(false);
+                setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+              }
+            },
+            {
+              label: 'Ignore',
+              onClick: () => setModalOptions({ show: false })
+            }
+          ]
+        });
         return;
-      }
+  }
     }
     if (isLocal) {
       // Add to local state only
-      const itemToAdd = {
-        ...newItem,
-        id: Math.random().toString(36).substr(2, 9),
-        order: Date.now(),
-      };
-      setTripItems([...tripItems, itemToAdd]);
+      const itemWithId = { ...itemToAdd, id: Math.random().toString(36).substr(2, 9), order: Date.now() };
+      const updatedItems = [...tripItems, itemWithId].sort((a, b) => new Date(a.date) - new Date(b.date));
+      setTripItems(updatedItems);
       setShowAddForm(false);
-      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+      setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
     } else {
       try {
         const itineraryCollectionRef = collection(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`);
         const newItemRef = doc(itineraryCollectionRef);
-        const itemToAdd = {
-          ...newItem,
-          id: newItemRef.id,
-          order: Date.now(),
-        };
-        await setDoc(newItemRef, itemToAdd);
+        const itemWithId = { ...itemToAdd, id: newItemRef.id, order: Date.now() };
+        await setDoc(newItemRef, itemWithId);
         setShowAddForm(false);
-        setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+        setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
       } catch (error) {
         alert('Error adding trip item: ' + error.message);
       }
@@ -129,17 +171,17 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
   };
 
   // Save edit handler
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = async (itemToSaveArg) => {
     if (!db || !currentTripId || !editingItem) {
       alert('Database not ready or no item selected.');
       return;
     }
     try {
       const docRef = doc(db, `artifacts/${appIdentifier}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
-      await setDoc(docRef, newItem, { merge: true });
+      await setDoc(docRef, itemToSaveArg || newItem, { merge: true });
       setShowAddForm(false);
       setEditingItem(null);
-      setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+      setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
     } catch (error) {
       alert('Error saving trip item: ' + error.message);
     }
@@ -274,7 +316,20 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
         <div className="flex gap-2 justify-center w-full">
           <button
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg shadow transition text-sm flex items-center"
-            onClick={() => setShowAddForm(true)}
+            onClick={() => {
+              // Set default date to latest in tripItems, or today if none
+              let latestDate = '';
+              if (tripItems.length > 0) {
+                latestDate = tripItems.reduce((max, item) => {
+                  return (!max || new Date(item.date) > new Date(max)) ? item.date : max;
+                }, '');
+              }
+              setNewItem(prev => ({
+                ...prev,
+                date: latestDate || new Date().toISOString().slice(0, 10)
+              }));
+              setShowAddForm(true);
+            }}
           >
             + Add Stop
           </button>
@@ -293,7 +348,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
         <div className="bg-red-100 text-red-700 p-2 rounded mb-2 text-sm">{pexelsError}</div>
       )}
       {showCarousel && (
-        <DiscoverCarousel tripItems={tripItems.slice(0, 3)} onHide={() => setShowCarousel(false)} setPexelsError={setPexelsError} />
+  <DiscoverCarousel tripItems={tripItems} onHide={() => setShowCarousel(false)} setPexelsError={setPexelsError} />
       )}
       {!showCarousel && (
         <div className="mb-2 flex justify-end">
@@ -319,7 +374,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
             className={`px-4 py-2 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'list' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
             onClick={() => setActiveView('list')}
           >
-            List
+            Cards
           </button>
           <button
             className={`px-4 py-2 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'map' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
@@ -365,7 +420,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
               onClick={() => {
                 setShowAddForm(false);
                 setEditingItem(null);
-                setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+                setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
               }}
               aria-label="Close"
             >
@@ -379,7 +434,7 @@ export default function TripDashboard({ setUserEmail, setUserAvatar }) {
               onCancelEdit={() => {
                 setShowAddForm(false);
                 setEditingItem(null);
-                setNewItem({ date: '', location: '', accommodation: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+                setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
               }}
               openModal={msg => alert(msg)}
               isEditing={!!editingItem}
@@ -407,18 +462,22 @@ function getLocalDiscoverImages(location) {
 
 
 function DiscoverCarousel({ tripItems, onHide }) {
-  // Show up to 3 locations at a time, each cycling through its images every 10s
+  // Responsive: show 1 on mobile, 2 on sm, 3 on md+
   const [visibleStart, setVisibleStart] = useState(0);
-  const [imageIndexes, setImageIndexes] = useState([0, 0, 0]); // per location
+  const [visibleCount, setVisibleCount] = useState(typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : (window.innerWidth < 768 ? 2 : 3));
+  const [imageIndexes, setImageIndexes] = useState([0]);
   const intervalRef = useRef();
-
-  // Only show up to 3 locations at a time
-  const visibleLocations = tripItems.slice(visibleStart, visibleStart + 3);
-
-  // For each visible location, get its images
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640) setVisibleCount(1);
+      else if (window.innerWidth < 768) setVisibleCount(2);
+      else setVisibleCount(3);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  const visibleLocations = tripItems.slice(visibleStart, visibleStart + visibleCount);
   const locationImages = visibleLocations.map(item => getLocalDiscoverImages(item.location));
-
-  // Cycle images every 10s
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       setImageIndexes(prev => prev.map((idx, i) => {
@@ -429,15 +488,11 @@ function DiscoverCarousel({ tripItems, onHide }) {
     }, 10000);
     return () => clearInterval(intervalRef.current);
   }, [locationImages, visibleStart]);
-
-  // Reset image indexes when visible locations change
   useEffect(() => {
-    setImageIndexes([0, 0, 0]);
-  }, [visibleStart]);
-
-  // Scroll handlers (could be tied to itinerary scroll, here use buttons for demo)
+    setImageIndexes(Array(visibleCount).fill(0));
+  }, [visibleStart, visibleCount]);
   const canScrollLeft = visibleStart > 0;
-  const canScrollRight = visibleStart + 3 < tripItems.length;
+  const canScrollRight = visibleStart + visibleCount < tripItems.length;
 
   return (
     <div className="mb-4 z-30 bg-white sticky top-0" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -451,7 +506,7 @@ function DiscoverCarousel({ tripItems, onHide }) {
           disabled={!canScrollLeft}
           className={`text-lg px-2 py-1 rounded ${canScrollLeft ? 'hover:bg-gray-100' : 'opacity-30 cursor-not-allowed'}`}
         >&#8592;</button>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 flex-1">
+        <div className={`grid grid-cols-1 ${visibleCount > 1 ? 'sm:grid-cols-2' : ''} ${visibleCount > 2 ? 'md:grid-cols-3' : ''} gap-4 flex-1`}>
           {visibleLocations.map((item, i) => {
             const imgs = locationImages[i] || [];
             const imgUrl = imgs[imageIndexes[i]] || '/logo512.png';
@@ -465,14 +520,14 @@ function DiscoverCarousel({ tripItems, onHide }) {
                 />
                 <div className="p-3 flex-1 flex flex-col">
                   <div className="font-bold text-indigo-700 text-sm mb-1">{item.location}</div>
-                  <div className="text-xs text-gray-500 flex-1">{item.accommodation || item.activities || ''}</div>
+                  <div className="text-xs text-gray-500 flex-1">{item.title || item.activities || ''}</div>
                 </div>
               </div>
             );
           })}
         </div>
         <button
-          onClick={() => setVisibleStart(s => Math.min(tripItems.length - 3, s + 1))}
+          onClick={() => setVisibleStart(s => Math.min(tripItems.length - visibleCount, s + 1))}
           disabled={!canScrollRight}
           className={`text-lg px-2 py-1 rounded ${canScrollRight ? 'hover:bg-gray-100' : 'opacity-30 cursor-not-allowed'}`}
         >&#8594;</button>

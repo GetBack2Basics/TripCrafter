@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { GripVertical, ChevronDown, ChevronUp, Car, BedDouble, Tent, Ship, Info, Pen, Trash2 } from 'lucide-react';
 
 function getTypeIcon(type, item) {
-  if (type === 'roofed') return <BedDouble className="inline w-5 h-5 text-indigo-400" title="Accommodation" />;
+  if (type === 'roofed') return <BedDouble className="inline w-5 h-5 text-indigo-400" title="Title" />;
   if (type === 'camp') return <Tent className="inline w-5 h-5 text-green-500" title="Camping" />;
   if (type === 'enroute') return <Car className="inline w-5 h-5 text-orange-400" title="Enroute" />;
   if (type === 'note') return <Info className="inline w-5 h-5 text-gray-400" title="Note" />;
-  if (type === 'ferry' || (item && item.accommodation?.toLowerCase().includes('spirit'))) return <Ship className="inline w-5 h-5 text-blue-400" title="Ferry" />;
+  if (type === 'ferry' || (item && item.title?.toLowerCase().includes('spirit'))) return <Ship className="inline w-5 h-5 text-blue-400" title="Ferry" />;
   if (type === 'car') return <Car className="inline w-5 h-5 text-gray-500" title="Car" />;
   return null;
 }
@@ -50,7 +50,7 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
             <th></th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Accommodation</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activities</th>
             <th></th>
           </tr>
@@ -96,12 +96,12 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{item.location}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                    {item.accommodation && item.activityLink ? (
+                    {item.title && item.activityLink ? (
                       <a href={item.activityLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
-                        {item.accommodation}
+                        {item.title}
                       </a>
                     ) : (
-                      item.accommodation
+                      item.title
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">

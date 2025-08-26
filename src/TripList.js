@@ -38,11 +38,11 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
 
   // Card rendering with drag handle, icons, pill tags, and expand/collapse
   const getTransportIcon = (type, item) => {
-    if (type === 'roofed') return <BedDouble className="inline w-5 h-5 text-indigo-400 mr-1" title="Accommodation" />;
+  if (type === 'roofed') return <BedDouble className="inline w-5 h-5 text-indigo-400 mr-1" title="Title" />;
     if (type === 'camp') return <Tent className="inline w-5 h-5 text-green-500 mr-1" title="Camping" />;
     if (type === 'enroute') return <Car className="inline w-5 h-5 text-orange-400 mr-1" title="Enroute" />;
     if (type === 'note') return <Info className="inline w-5 h-5 text-gray-400 mr-1" title="Note" />;
-    if (type === 'ferry' || (item && item.accommodation?.toLowerCase().includes('spirit'))) return <Ship className="inline w-5 h-5 text-blue-400 mr-1" title="Ferry" />;
+  if (type === 'ferry' || (item && item.title?.toLowerCase().includes('spirit'))) return <Ship className="inline w-5 h-5 text-blue-400 mr-1" title="Ferry" />;
     if (type === 'car') return <Car className="inline w-5 h-5 text-gray-500 mr-1" title="Car" />;
     if (type === 'plane') return <Plane className="inline w-5 h-5 text-orange-400 mr-1" title="Flight" />;
     return null;
@@ -94,12 +94,12 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
                 <span className="text-lg font-bold text-indigo-800">{item.location}</span>
               </div>
               <div className="flex items-center gap-2 mb-1">
-                {item.accommodation && item.activityLink ? (
+                {item.title && item.activityLink ? (
                   <a href={item.activityLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline text-sm">
-                    {item.accommodation}
+                    {item.title}
                   </a>
                 ) : (
-                  <span className="text-sm text-gray-700">{item.accommodation}</span>
+                  <span className="text-sm text-gray-700">{item.title}</span>
                 )}
               </div>
               {item.travelTime && (
@@ -128,7 +128,7 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
                   {item.activityLink && (
                     <div className="text-xs text-blue-600">
                       <a href={item.activityLink} target="_blank" rel="noopener noreferrer" className="underline">
-                        {item.type === 'roofed' ? 'View accommodation options' : item.type === 'camp' ? 'Find camping spots' : item.type === 'note' ? 'Things to do' : 'Activities'}
+                        {item.type === 'roofed' ? 'View hotel options' : item.type === 'camp' ? 'Find camping spots' : item.type === 'note' ? 'Things to do' : 'Activities'}
                       </a>
                     </div>
                   )}
