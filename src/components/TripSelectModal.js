@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { collection, query, getDocs, where } from 'firebase/firestore';
 
 export default function TripSelectModal({ isOpen, onClose, userId, onTripSelect }) {
   const [trips, setTrips] = useState([]);
@@ -11,7 +11,7 @@ export default function TripSelectModal({ isOpen, onClose, userId, onTripSelect 
     setLoading(true);
     const fetchTrips = async () => {
       const tripsRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`);
-      const q = query(tripsRef);
+      const q = userId ? query(tripsRef, where('ownerId', '==', userId)) : query(tripsRef);
       const snapshot = await getDocs(q);
       const tripList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setTrips(tripList);
