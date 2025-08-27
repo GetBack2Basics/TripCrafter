@@ -43,28 +43,28 @@ export default function AppHeader({
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 justify-center">
         <div className="flex flex-row flex-wrap gap-2 bg-gray-100 rounded-lg p-1 justify-center">
           <button
-            className={`px-3 py-1 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'itinerary' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
+            className={`px-4 py-2 rounded-md font-semibold transition text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'discover' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
+            onClick={() => setActiveView('discover')}
+          >
+            Discover
+          </button>
+          <button
+            className={`px-4 py-2 rounded-md font-semibold transition text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'itinerary' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
             onClick={() => setActiveView('itinerary')}
           >
             Table
           </button>
           <button
-            className={`px-3 py-1 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'list' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
+            className={`px-4 py-2 rounded-md font-semibold transition text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'list' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
             onClick={() => setActiveView('list')}
           >
             Cards
           </button>
           <button
-            className={`px-3 py-1 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'map' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
+            className={`px-4 py-2 rounded-md font-semibold transition text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'map' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
             onClick={() => setActiveView('map')}
           >
             Map
-          </button>
-          <button
-            className={`px-3 py-1 rounded-md font-medium transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${activeView === 'discover' ? 'bg-white shadow text-indigo-700' : 'text-gray-600 hover:bg-white/80'}`}
-            onClick={() => setActiveView('discover')}
-          >
-            Discover
           </button>
         </div>
         {/* Actions: Add Stop, AI Import, Help */}

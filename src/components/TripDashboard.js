@@ -1,6 +1,10 @@
+
+import React, { useState } from 'react';
+import defaultTasmaniaTripDataRaw from '../Trip-Default_Tasmania2025';
 import TripList from '../TripList';
 import TripMap from '../TripMap';
 import TripDiscover from '../TripDiscover';
+import TripTable from '../TripTable';
 import BottomNav from './BottomNav';
 import AIImportModal from './AIImportModal';
 import TripHelpModal from './TripHelpModal';
@@ -13,18 +17,69 @@ import TripCreateModal from './TripCreateModal';
 
 export default function TripDashboard() {
   // Minimal state for UI skeleton
-  const [activeView, setActiveView] = useState('itinerary');
+  const [activeView, setActiveView] = useState('discover');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIImportModal, setShowAIImportModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  // Use local test data for local development
-  const [tripItems, setTripItems] = useState([
-    { id: '1', date: '2025-12-22', location: 'Hobart', title: 'Arrive in Hobart', status: 'Confirmed', notes: '', travelTime: '', activities: 'Explore city', type: 'roofed', activityLink: '' },
-    { id: '2', date: '2025-12-23', location: 'Freycinet', title: 'Freycinet National Park', status: 'Planned', notes: '', travelTime: '', activities: 'Hiking', type: 'camp', activityLink: '' }
-  ]);
+  // Use normalized default trip data for demo (not-logged-in) users
+  // Helper to create a slug for image filenames
+  function locationSlug(location) {
+    if (!location) return 'default';
+    return location
+      .replace(/,?\s*tas(\s*\d{4})?/i, '')
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+  }
+
+  function discoverImagesForLocation(location) {
+    const slug = locationSlug(location);
+    // Assume images are in public/discover-images/ and named as slug_1.jpg, slug_2.jpg, slug_3.jpg
+    return [1, 2, 3].map(i => `/discover-images/${slug}_${i}.jpg`);
+  }
+
+  function normalizeTripItem(item) {
+    // Ensure all required fields exist and are named consistently
+    return {
+      id: item.id || Math.random().toString(36).substr(2, 9),
+      date: item.date || '',
+      location: item.location || '',
+      title: item.title || item.activities || '',
+      status: item.status || 'Unconfirmed',
+      notes: item.notes || '',
+      travelTime: item.travelTime || '',
+      activities: item.activities || '',
+      type: item.type || 'roofed',
+      activityLink: item.activityLink || '',
+      discoverImages: discoverImagesForLocation(item.location),
+    };
+  }
+  const [tripItems, setTripItems] = useState(defaultTasmaniaTripDataRaw.map(normalizeTripItem));
   const [newItem, setNewItem] = useState({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
   const [editingItem, setEditingItem] = useState(null);
-  // ...add more state as needed for full restore
+
+  // Demo trip editing logic (add, edit, delete)
+  const handleAddItem = () => {
+    const itemWithId = { ...newItem, id: Math.random().toString(36).substr(2, 9) };
+    setTripItems([...tripItems, itemWithId]);
+    setShowAddForm(false);
+    setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+  };
+  const handleEditClick = (item) => {
+    setEditingItem(item);
+    setNewItem(item);
+    setShowAddForm(true);
+  };
+  const handleSaveEdit = () => {
+    setTripItems(tripItems.map(item => item.id === editingItem.id ? newItem : item));
+    setShowAddForm(false);
+    setEditingItem(null);
+    setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+  };
+  const handleDeleteItem = (id) => {
+    setTripItems(tripItems.filter(item => item.id !== id));
+  };
 
   return (
     <div className="flex flex-col min-h-[60vh]">
@@ -50,10 +105,10 @@ export default function TripDashboard() {
       </div>
       {/* Main Content Area */}
       <div className="flex-1">
-        {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={() => {}} handleDeleteItem={() => {}} />}
-        {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={() => {}} handleDeleteItem={() => {}} />}
-        {activeView === 'map' && <TripMap tripItems={tripItems} />}
-        {activeView === 'discover' && <TripDiscover tripItems={tripItems} handleEditClick={() => {}} handleDeleteItem={() => {}} />}
+  {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
+  {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
+  {activeView === 'map' && <TripMap tripItems={tripItems} />}
+  {activeView === 'discover' && <TripDiscover tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
       </div>
       {/* Bottom Navigation for mobile */}
       <div className="md:hidden mt-4">
@@ -80,8 +135,8 @@ export default function TripDashboard() {
             <TripForm
               newItem={newItem}
               handleInputChange={e => setNewItem(prev => ({ ...prev, [e.target.name]: e.target.value }))}
-              onAddItem={() => {}}
-              onSaveEdit={() => {}}
+              onAddItem={handleAddItem}
+              onSaveEdit={handleSaveEdit}
               onCancelEdit={() => {
                 setShowAddForm(false);
                 setEditingItem(null);

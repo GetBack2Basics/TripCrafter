@@ -341,13 +341,28 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
     <div className="w-full">
       <div className="mb-4">
         <h3 className="text-xl font-semibold text-indigo-700 mb-2">Trip Route Map</h3>
-        <p className="text-gray-600 text-sm">
+        <p className="text-gray-600 text-sm flex flex-wrap gap-1 items-center">
           {mappableItems.length === 1 
-            ? `Showing location: ${getPlaceName(mappableItems[0].location)}`
-            : `Route through ${mappableItems.length} locations: ${mappableItems.map(item => getPlaceName(item.location)).join(' → ')}`
+            ? <>
+                Showing location: <span>{getPlaceName(mappableItems[0].location)}</span>
+              </>
+            : <>
+                Route through {mappableItems.length} locations: {
+                  mappableItems.map((item, idx) => {
+                    let color = 'text-gray-700';
+                    let font = '';
+                    if (item.type === 'roofed') { color = 'text-indigo-700'; font = 'font-bold'; }
+                    else if (item.type === 'camp') { color = 'text-green-700'; font = 'font-bold'; }
+                    else if (item.type === 'enroute') color = 'text-orange-600';
+                    else if (item.type === 'note') color = 'text-purple-600';
+                    else if (item.type === 'ferry') color = 'text-blue-600';
+                    return <span key={item.id} className={`${color} ${font}`}>{getPlaceName(item.location)}{idx < mappableItems.length-1 && <span className="text-gray-400"> → </span>}</span>;
+                  })
+                }
+              </>
           }
           {tripItems.length > mappableItems.length && 
-            ` (${tripItems.length - mappableItems.length} note items excluded from map)`
+            <span className="text-gray-400">({tripItems.length - mappableItems.length} note items excluded from map)</span>
           }
         </p>
         <p className="text-blue-600 text-xs mt-1">
@@ -368,13 +383,13 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
       {/* Scrollable mini-timeline */}
       <div className="mt-4">
         <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Timeline</h4>
-        <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
+  <div className="flex flex-wrap gap-3 pb-2">
           {tripItems.map((item, index) => {
             const isActive = activeIndex === index;
             return (
               <button
                 key={item.id}
-                className={`flex flex-col items-center min-w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
+                className={`flex flex-col items-center w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
                   isActive ? 'border-orange-400 bg-orange-50 shadow' : 'border-gray-200 bg-gray-50'
                 }`}
                 onClick={() => setActiveIndex(index)}
@@ -395,7 +410,6 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
                 <span className="font-semibold text-gray-800 text-xs truncate max-w-[70px]">{getPlaceName(item.location)}</span>
                 {(item.travelTime || item.distance) && (
                   <span className="text-[10px] text-gray-500 mt-1 text-center">
-                    {/* Only show travel time and distance, no 'from x' text */}
                     {item.travelTime}{item.travelTime && item.distance ? ' • ' : ''}{item.distance}
                   </span>
                 )}
