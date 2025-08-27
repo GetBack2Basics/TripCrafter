@@ -384,38 +384,58 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
       <div className="mt-4">
         <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Timeline</h4>
   <div className="flex flex-wrap gap-3 pb-2">
-          {tripItems.map((item, index) => {
-            const isActive = activeIndex === index;
-            return (
-              <button
-                key={item.id}
-                className={`flex flex-col items-center w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
-                  isActive ? 'border-orange-400 bg-orange-50 shadow' : 'border-gray-200 bg-gray-50'
-                }`}
-                onClick={() => setActiveIndex(index)}
-                style={{ cursor: 'pointer' }}
-              >
-                <span className="mb-1 relative block w-10 h-10 rounded-full overflow-hidden bg-gray-100" style={{marginBottom: 4}}>
-                  {/* Show local discover image as background, fallback to icon if not found */}
-                  <img
-                    src={getLocalDiscoverImage(item.location)}
-                    alt={getPlaceName(item.location)}
-                    className="object-cover w-full h-full"
-                    onError={e => { e.target.style.display = 'none'; }}
-                  />
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    {getTypeIcon(item.type, item)}
-                  </span>
-                </span>
-                <span className="font-semibold text-gray-800 text-xs truncate max-w-[70px]">{getPlaceName(item.location)}</span>
-                {(item.travelTime || item.distance) && (
-                  <span className="text-[10px] text-gray-500 mt-1 text-center">
-                    {item.travelTime}{item.travelTime && item.distance ? ' • ' : ''}{item.distance}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+    {tripItems.map((item, index) => {
+      const isActive = activeIndex === index;
+      // Per-item image index state
+      const [imageIndexes, setImageIndexes] = React.useState({});
+      const imgIdx = imageIndexes[item.id] || 0;
+      const images = Array.isArray(item.discoverImages) ? item.discoverImages : [getLocalDiscoverImage(item.location)];
+      const showPrev = images.length > 1;
+      const showNext = images.length > 1;
+      const handlePrev = (e) => {
+        e.stopPropagation();
+        setImageIndexes(idxes => ({ ...idxes, [item.id]: (imgIdx - 1 + images.length) % images.length }));
+      };
+      const handleNext = (e) => {
+        e.stopPropagation();
+        setImageIndexes(idxes => ({ ...idxes, [item.id]: (imgIdx + 1) % images.length }));
+      };
+      return (
+        <button
+          key={item.id}
+          className={`flex flex-col items-center w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
+            isActive ? 'border-orange-400 bg-orange-50 shadow' : 'border-gray-200 bg-gray-50'
+          }`}
+          onClick={() => setActiveIndex(index)}
+          style={{ cursor: 'pointer' }}
+        >
+          <span className="mb-1 relative block w-10 h-10 rounded-full overflow-hidden bg-gray-100" style={{marginBottom: 4}}>
+            {/* Cycling discover images */}
+            <img
+              src={images[imgIdx]}
+              alt={getPlaceName(item.location)}
+              className="object-cover w-full h-full"
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+            <span className="absolute inset-0 flex items-center justify-center">
+              {getTypeIcon(item.type, item)}
+            </span>
+            {showPrev && (
+              <button type="button" className="absolute left-0 top-1/2 -translate-y-1/2 bg-white bg-opacity-60 rounded-full px-1 text-xs" onClick={handlePrev}>&lt;</button>
+            )}
+            {showNext && (
+              <button type="button" className="absolute right-0 top-1/2 -translate-y-1/2 bg-white bg-opacity-60 rounded-full px-1 text-xs" onClick={handleNext}>&gt;</button>
+            )}
+          </span>
+          <span className="font-semibold text-gray-800 text-xs truncate max-w-[70px]">{getPlaceName(item.location)}</span>
+          {(item.travelTime || item.distance) && (
+            <span className="text-[10px] text-gray-500 mt-1 text-center">
+              {item.travelTime}{item.travelTime && item.distance ? ' • ' : ''}{item.distance}
+            </span>
+          )}
+        </button>
+      );
+    })}
         </div>
       </div>
     </div>

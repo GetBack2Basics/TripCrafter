@@ -29,7 +29,8 @@ export default function TripDashboard() {
       .replace(/,?\s*tas(\s*\d{4})?/i, '')
       .replace(/[^a-z0-9]+/gi, '_')
       .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '')
+      .replace(/,/g, '__')
+      .replace(/^_+|_+$/g, '')
       .toLowerCase();
   }
 

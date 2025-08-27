@@ -11,14 +11,25 @@ function getTypeIcon(type, item) {
   return null;
 }
 
+
+// Use the same slug logic as TripDashboard.js
+function locationSlug(location) {
+  if (!location) return 'default';
+  return location
+    .replace(/[^a-z0-9]+/gi, '_')
+    .replace(/_+/g, '_')
+    .replace(/,/g, '__')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+}
+
 function getLocalDiscoverImages(location) {
-  if (!location) return [];
-  const base = location.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  const slug = locationSlug(location);
   const images = [];
   for (let i = 1; i <= 3; i++) {
-    images.push(`/discover-images/${base}_${i}.jpg`);
+    images.push(`/discover-images/${slug}_${i}.jpg`);
   }
-  images.push(`/discover-images/${base}.jpg`); // fallback
+  images.push(`/discover-images/${slug}.jpg`); // fallback
   return images;
 }
 
@@ -30,15 +41,18 @@ export default function TripDiscover({ tripItems = [], handleEditClick, handleDe
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
       {tripItems.map((item) => {
         const images = getLocalDiscoverImages(item.location);
-        const imgUrl = images[0] || '/logo512.png';
+  const imgUrl = images[0] || '/logo512.png';
+  console.log('Discover image URL:', imgUrl, 'for location:', item.location);
         return (
-          <div key={item.id} className="bg-white rounded-xl shadow border border-gray-100 flex flex-col">
-            <img
-              src={imgUrl}
-              alt={item.location}
-              className="h-40 w-full object-cover rounded-t-xl"
-              onError={e => { e.target.onerror = null; e.target.src = '/logo512.png'; }}
-            />
+          <div key={item.id} className="bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col hover:shadow-2xl transition-shadow duration-200">
+            <div className="overflow-hidden rounded-t-xl">
+              <img
+                src={imgUrl}
+                alt={item.location}
+                className="h-40 w-full object-cover border-b border-gray-200 transition-transform duration-200 hover:scale-105"
+                style={{ background: '#f8fafc' }}
+              />
+            </div>
             <div className="p-3 flex-1 flex flex-col">
               <div className="font-bold text-indigo-700 text-sm mb-1 flex items-center gap-2">
                 {getTypeIcon(item.type, item)}

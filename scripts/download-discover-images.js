@@ -11,7 +11,11 @@ const outDir = path.join(__dirname, '../public/discover-images');
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
 function sanitizeFilename(str) {
-  return str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  return str
+    .replace(/[^a-z0-9]/gi, '_') // replace non-alphanum with _
+    .replace(/_+/g, '_')         // collapse multiple _ to single _
+    .replace(/^_+|_+$/g, '')     // trim leading/trailing _
+    .toLowerCase();
 }
 
 function downloadImage(url, dest) {
