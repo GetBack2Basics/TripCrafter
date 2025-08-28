@@ -92,10 +92,13 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs text-gray-400">{item.date}</span>
                 <span className="text-lg font-bold text-indigo-800">{item.location}</span>
+                {item._pendingMerge && (
+                  <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Pending merge</span>
+                )}
               </div>
               <div className="flex items-center gap-2 mb-1">
-                {item.title && item.activityLink ? (
-                  <a href={item.activityLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline text-sm">
+                {item.title && item.titleLink ? (
+                  <a href={item.titleLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline text-sm">
                     {item.title}
                   </a>
                 ) : (

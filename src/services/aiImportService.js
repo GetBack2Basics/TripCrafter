@@ -1,9 +1,9 @@
 // ...removed duplicate class declaration...
 // AI Import service for parsing various content types into trip data format
-import { llmService } from './llmService';
+import { llmService } from './llmService.js';
 
 export class AIImportService {
-  async getPrompt(source, type = 'auto') {
+  async getPrompt(source, type = 'auto', profile = {}) {
     let content = '';
     let detectedType = type;
     if (type === 'auto') {
@@ -22,7 +22,8 @@ export class AIImportService {
       default:
         content = '';
     }
-    return llmService.buildPrompt(content);
+  // Provide a prompt with an explicit example to improve LLM output consistency
+  return llmService.buildPromptWithExample(content, profile);
   }
   constructor() {
     this.supportedTypes = {
@@ -32,7 +33,7 @@ export class AIImportService {
     };
   }
 
-  async importFromSource(source, type = 'auto') {
+  async importFromSource(source, type = 'auto', profile = {}) {
     try {
       let content = '';
       let detectedType = type;
@@ -59,11 +60,40 @@ export class AIImportService {
         throw new Error('No content could be extracted from the source');
       }
 
-      const parsedData = await llmService.parseBookingInformation(content);
+  let parsedData = await llmService.parseBookingInformation(content, profile);
+
+      // If LLM returned a single object, wrap it into an array for consistency
+      if (!Array.isArray(parsedData) && parsedData && typeof parsedData === 'object') {
+        parsedData = [parsedData];
+      }
+
+      // Post-process parsedData: strip empty/null fields
+      const cleaned = Array.isArray(parsedData) ? parsedData.map(item => {
+        const out = {};
+        Object.keys(item || {}).forEach(k => {
+          const v = item[k];
+          if (v !== null && v !== undefined && !(typeof v === 'string' && v.trim() === '')) {
+            out[k] = v;
+          }
+        });
+        return out;
+      }) : [];
+
+      // Ensure required fields exist on each cleaned item (fill with empty strings/defaults)
+      const requiredFields = ["date","location","title","status","type","activities","notes"];
+      cleaned.forEach(item => {
+        if (!item || typeof item !== 'object') return;
+        if (!('date' in item)) item.date = '';
+        if (!('location' in item)) item.location = '';
+        if (!('title' in item)) item.title = '';
+        if (!('status' in item)) item.status = 'Unconfirmed';
+        if (!('type' in item)) item.type = 'roofed';
+        if (!('activities' in item)) item.activities = '';
+        if (!('notes' in item)) item.notes = '';
+      });
 
       // Validate result: must be array of objects with required fields
-      const requiredFields = ["date","location","accommodation","status","type","travelTime","activities","notes"];
-      let valid = Array.isArray(parsedData) && parsedData.length > 0 && parsedData.every(item =>
+      let valid = Array.isArray(cleaned) && cleaned.length > 0 && cleaned.every(item =>
         typeof item === 'object' && requiredFields.every(f => f in item)
       );
       if (!valid) {
@@ -76,7 +106,7 @@ export class AIImportService {
       }
 
       // Ensure proper ID generation
-      parsedData.forEach((item, index) => {
+      cleaned.forEach((item, index) => {
         if (!item.id) {
           item.id = `ai-import-${Date.now()}-${index}`;
         }
@@ -84,7 +114,7 @@ export class AIImportService {
 
       return {
         success: true,
-        data: parsedData,
+        data: cleaned,
         sourceType: detectedType,
         contentLength: content.length
       };

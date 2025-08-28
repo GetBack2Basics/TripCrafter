@@ -5,17 +5,17 @@ export class LLMService {
     this.geminiApiKey = process.env.REACT_APP_GEMINI_API_KEY;
   }
 
-  async parseBookingInformation(text) {
-    const prompt = this.buildPrompt(text);
+  async parseBookingInformation(text, profile = {}) {
+    const prompt = this.buildPromptWithExample(text, profile);
     if (this.geminiApiKey && this.geminiApiKey !== 'your_gemini_api_key_here') {
       return await this.callGemini(prompt);
     } else {
       // Fallback to mock parsing for demo purposes
-      return this.mockParse(text);
+      return this.mockParse(text, profile);
     }
   }
 
-  buildPrompt(text) {
+  buildPrompt(text, profile = {}) {
     return `You are an expert travel assistant. Parse the following travel booking information and extract structured data.
 
 IMPORTANT: Return ONLY valid JSON, no markdown, no explanation, no extra text.
@@ -25,10 +25,9 @@ Return an ARRAY of objects, one per day or booking, in this exact format:
   {
     "date": "YYYY-MM-DD",
     "location": "Full address or location name",
-    "accommodation": "Hotel/accommodation name",
-    "status": "Booked|Unconfirmed|Cancelled|Not booked", 
-    "type": "roofed|camp|enroute",
-    "travelTime": "Estimated travel time (e.g., '2h 30m')",
+  "title": "Hotel/accommodation name",
+  "status": "Booked|Unconfirmed|Cancelled|Not booked", 
+  "type": "roofed|camp|enroute",
     "activities": "Activities or description for the day",
     "notes": "Any additional notes, booking numbers, guest details"
   },
@@ -39,16 +38,47 @@ Field Guidelines:
 - date: Extract check-in date in YYYY-MM-DD format
 - location: Full address if available, otherwise city/area name
 - accommodation: Name of hotel, campsite, ferry, etc.
+ - title: Name/title of the hotel, campsite, ferry, or accommodation for the day
 - status: "Booked" if confirmed, "Unconfirmed" otherwise
 - type: "roofed" for hotels/motels, "camp" for camping/caravan parks, "enroute" for transport/activities
-- travelTime: Estimate based on transport type or leave empty
 - activities: What's planned for this day/booking
 - notes: Booking numbers, guest details, special instructions
+ - activities: If the source does not clearly state activities, you may SUGGEST activities. When suggesting, use the phrasing: "Suggest activities in [Location] for [profile description]" and wrap suggestions with [AI suggestion]...[/AI suggestion]. Use the provided trip profile below to tailor suggestions.
+ - notes: Booking numbers, guest details, special instructions. If there is no booking or notes information in the source, leave this field as an empty string ("").
+
+Trip profile (use these values to tailor activity suggestions):
+Number of adults: ${profile.adults || ''}
+Number under 16: ${profile.children || ''}
+Interests: ${Array.isArray(profile.interests) ? profile.interests.join(', ') : ''}
+Food / diet: ${profile.diet || ''}
 
 Text to parse:
 ${text}
 
 Return only valid JSON as described above.`;
+  }
+
+  // Guidance: if activities or notes cannot be reliably extracted from the source,
+  // the LLM should generate plausible content and clearly mark it as a suggestion by
+  // wrapping the text with [AI suggestion]...[/AI suggestion]. For example:
+  // "activities": "[AI suggestion]Coastal walk and beach time[/AI suggestion]"
+  // This makes it clear which fields were inferred by the AI and which came from the source.
+
+  // A helper to embed an example in the prompt for better LLM outputs
+  buildPromptWithExample(text, profile = {}) {
+    const example = [
+      {
+        "date": "2025-12-24",
+        "location": "Scamander Sanctuary Holiday Park, Winifred Dr, Scamander TAS 7215, Australia",
+        "title": "Scamander Sanctuary Holiday Park",
+        "status": "Booked",
+        "type": "camp",
+        "activities": "Christmas Eve stay, coastal walk",
+        "notes": "Booking #27366. 2 adults, 1 vehicle."
+      }
+    ];
+
+  return this.buildPrompt(text, profile) + "\n\nExample output:\n" + JSON.stringify(example, null, 2) + "\n\nReturn only the JSON array exactly as shown above.";
   }
 
   async callGemini(prompt) {
@@ -85,7 +115,7 @@ Return only valid JSON as described above.`;
     }
   }
 
-  mockParse(text) {
+  mockParse(text, profile = {}) {
     console.log('Using improved mock parser for text:', text.substring(0, 200) + '...');
     // Split lines and scan for date lines
     // Remove summary, 'View site details', 'km', and other non-place lines
@@ -128,29 +158,47 @@ Return only valid JSON as described above.`;
         const [day, monthStr, year] = line.split(' ');
         const month = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].findIndex(m => m === monthStr.toLowerCase().slice(0,3)) + 1;
         const date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        // Build activities suggestion using profile if present
+        const profileDesc = [];
+        if (profile.adults) profileDesc.push(`${profile.adults} adults`);
+        if (profile.children) profileDesc.push(`${profile.children} children`);
+        if (profile.interests && Array.isArray(profile.interests) && profile.interests.length) profileDesc.push(`interests: ${profile.interests.join(', ')}`);
+        if (profile.diet) profileDesc.push(`diet: ${profile.diet}`);
+        const profileText = profileDesc.length ? profileDesc.join('; ') : 'general travellers';
+
+        // If the source text contains booking/reservation identifiers, include a notes suggestion; otherwise leave notes blank
+        const hasBookingInfo = /booking|booking #|reservation|reference|confirmation number|confirmation|PNR|booking ref/i.test(text);
+
         items.push({
           date,
           location: address || place || 'Location',
-          accommodation: place || 'Accommodation',
+          title: place || 'Accommodation',
           status: 'Unconfirmed',
           type,
-          travelTime: '',
-          activities: '',
-          notes: 'Extracted from itinerary text.'
+          activities: `[AI suggestion]Suggest activities in ${place || 'the area'} for ${profileText}[/AI suggestion]`,
+          notes: hasBookingInfo ? '[AI suggestion]Booking details found in source — verify and extract booking numbers[/AI suggestion]' : ''
         });
       }
     }
     // Fallback: if no items found, return a single generic item
     if (items.length === 0) {
+      const profileDesc = [];
+      if (profile.adults) profileDesc.push(`${profile.adults} adults`);
+      if (profile.children) profileDesc.push(`${profile.children} children`);
+      if (profile.interests && Array.isArray(profile.interests) && profile.interests.length) profileDesc.push(`interests: ${profile.interests.join(', ')}`);
+      if (profile.diet) profileDesc.push(`diet: ${profile.diet}`);
+      const profileText = profileDesc.length ? profileDesc.join('; ') : 'general travellers';
+
+      const hasBookingInfo = /booking|booking #|reservation|reference|confirmation number|confirmation|PNR|booking ref/i.test(text);
+
       return {
         date: new Date().toISOString().split('T')[0],
         location: 'Location from PDF',
-        accommodation: 'Accommodation from PDF',
+        title: 'Accommodation from PDF',
         status: 'Unconfirmed',
         type: 'roofed',
-        travelTime: '',
-        activities: `Activities extracted from PDF content`,
-        notes: 'Extracted from PDF.'
+        activities: `[AI suggestion]Suggest activities in the area for ${profileText}[/AI suggestion]`,
+        notes: hasBookingInfo ? '[AI suggestion]Booking details found in source — verify and extract booking numbers[/AI suggestion]' : ''
       };
     }
     return items;

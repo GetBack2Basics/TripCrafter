@@ -76,6 +76,9 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                     {formatDate(item.date)}
                     <div className="flex gap-2 mt-1 items-center">
+                      {item._pendingMerge && (
+                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded mr-2">Pending merge</span>
+                      )}
                       {/* Only show icon by type, no text */}
                       {['roofed', 'camp', 'enroute', 'note', 'ferry', 'car'].includes(item.type) && (
                         <span>{getTypeIcon(item.type, item)}</span>
@@ -96,13 +99,13 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{item.location}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                    {item.title && item.activityLink ? (
-                      <a href={item.activityLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
-                        {item.title}
-                      </a>
-                    ) : (
-                      item.title
-                    )}
+                      {item.title && item.titleLink ? (
+                        <a href={item.titleLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
+                          {item.title}
+                        </a>
+                      ) : (
+                        item.title
+                      )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     {item.activities && item.activityLink ? (
