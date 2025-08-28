@@ -6,8 +6,9 @@ import { Wrapper, Status } from '@googlemaps/react-wrapper';
 function getLocalDiscoverImage(location) {
   if (!location) return null;
   // Use the same sanitize logic as in download-discover-images.js
-  const filename = location.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.jpg';
-  return `/discover-images/${filename}`;
+  // Always use Unsplash dynamic image URLs for map thumbnails (smaller size)
+  const q = encodeURIComponent((location || 'travel').split(',')[0]);
+  return `https://source.unsplash.com/400x300/?${q}`;
 }
 
 // Icon by type for timeline

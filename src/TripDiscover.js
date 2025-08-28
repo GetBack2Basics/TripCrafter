@@ -25,12 +25,9 @@ function locationSlug(location) {
 
 function getLocalDiscoverImages(location) {
   const slug = locationSlug(location);
-  const images = [];
-  for (let i = 1; i <= 3; i++) {
-    images.push(`/discover-images/${slug}_${i}.jpg`);
-  }
-  images.push(`/discover-images/${slug}.jpg`); // fallback
-  return images;
+  // Always return Unsplash dynamic source images (no local download required)
+  const q = encodeURIComponent((location || 'travel').split(',')[0]);
+  return [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${q}&sig=${i}`);
 }
 
 export default function TripDiscover({ tripItems = [], handleEditClick, handleDeleteItem }) {

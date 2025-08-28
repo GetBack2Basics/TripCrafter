@@ -6,7 +6,6 @@ import { collection, query, addDoc, updateDoc, deleteDoc, onSnapshot, doc, where
 import defaultTasmaniaTripDataRaw from '../Trip-Default_Tasmania2025';
 import TripList from '../TripList';
 import TripMap from '../TripMap';
-import TripDiscover from '../TripDiscover';
 import TripTable from '../TripTable';
 import BottomNav from './BottomNav';
 import AIImportModal from './AIImportModal';
@@ -20,7 +19,8 @@ import TripCreateModal from './TripCreateModal';
 
 export default function TripDashboard() {
   // Minimal state for UI skeleton
-  const [activeView, setActiveView] = useState('discover');
+  // Start on itinerary view to avoid showing Discover while Unsplash access is pending
+  const [activeView, setActiveView] = useState('itinerary');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIImportModal, setShowAIImportModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -48,9 +48,9 @@ export default function TripDashboard() {
   }
 
   function discoverImagesForLocation(location) {
-    const slug = locationSlug(location);
-    // Assume images are in public/discover-images/ and named as slug_1.jpg, slug_2.jpg, slug_3.jpg
-    return [1, 2, 3].map(i => `/discover-images/${slug}_${i}.jpg`);
+  const q = encodeURIComponent((location || 'travel').split(',')[0]);
+  // Use size-based Unsplash Source URLs (more reliable): /800x600/?<query>
+  return [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${q}&sig=${i}`);
   }
 
   function normalizeTripItem(item) {
@@ -272,7 +272,7 @@ export default function TripDashboard() {
   {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
   {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
   {activeView === 'map' && <TripMap tripItems={tripItems} />}
-  {activeView === 'discover' && <TripDiscover tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
+  {/* Discover view temporarily hidden while Unsplash account is in review */}
       </div>
       {/* Bottom Navigation for mobile */}
       <div className="md:hidden mt-4">

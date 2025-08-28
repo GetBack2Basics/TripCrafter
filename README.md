@@ -20,7 +20,7 @@ It has been created entirely using LLM's with some tech stacks the author had ne
 🤝 **Real-time Collaboration**: All trip data is stored in a publicly accessible Firebase Firestore collection, allowing everyone with access to the app to view and update the same itinerary in real-time.
 
 
-🖼️ **Discover Pane**: At the top of your dashboard, see up to 3 locations from your itinerary, each cycling through up to 3 downloaded images every 10 seconds. Use the arrows to scroll through more locations, or let the images cycle automatically. As you scroll your itinerary, the Discover pane updates to show relevant locations. All images are downloaded in advance for reliability and speed.
+🖼️ **Discover Pane**: At the top of your dashboard, see up to 3 locations from your itinerary, each cycling through up to 3 images every 10 seconds. Use the arrows to scroll through more locations, or let the images cycle automatically. The app loads images directly from Unsplash at runtime.
 🗺️ **Interactive Map View**: Visualize your trip route on Google Maps with turn-by-turn directions between locations and automatic travel time calculations.
 
 🏝️ **Sample Trip**: The app comes pre-populated with an example Tasmania trip itinerary to get you started!
@@ -52,7 +52,7 @@ It has been created entirely using LLM's with some tech stacks the author had ne
 - Google Maps API: Integrated for displaying interactive maps and routing between trip locations
 - Directions API: Automatic travel time calculations and route optimization
 - Geocoding API: Address lookup and location validation (optional)
-- **Discover Images:** Uses a script to download up to 3 images per location from Pexels, stored locally in `/public/discover-images/` for fast, reliable display in the Discover pane.
+- **Discover Images:** Loaded dynamically from Unsplash (source.unsplash.com) at runtime for the Discover pane.
 
 **Deployment:**
 - Netlify: Continuous deployment and hosting
@@ -112,7 +112,7 @@ Netlify will automatically build and deploy your application, providing you with
 ### 📋 Project Structure
 ```
 scripts/
-   download-discover-images.js   # Downloads up to 3 images per location for Discover pane
+   # (no download script) Discover images are loaded directly from Unsplash at runtime
 ```
 ```
 TripCrafter/
@@ -150,7 +150,7 @@ The app includes sample booking data for testing AI Import functionality:
 - Test AI Import with sample data before using real bookings
 - Check browser console for debugging information
 - Use responsive design testing for mobile compatibility
-- To update Discover images, run `node scripts/download-discover-images.js` to fetch the latest images for your trip locations.
+- To update Discover images: the app now uses Unsplash dynamic image URLs (source.unsplash.com) and does not require pre-downloading images. Set `REACT_APP_USE_UNSPLASH=true` if you want to force Unsplash usage in development.
 
 ### 🤝 Contributing
 
