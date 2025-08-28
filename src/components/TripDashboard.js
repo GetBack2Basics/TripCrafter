@@ -520,7 +520,10 @@ export default function TripDashboard() {
       (async () => {
         try {
           const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
-          await addDoc(itineraryRef, itemToAdd);
+          // ensure we don't send an `id` field to addDoc (Firestore will create the doc id)
+          const payload = { ...itemToAdd };
+          delete payload.id;
+          await addDoc(itineraryRef, payload);
           // onSnapshot will update local state; just reset UI
           resetLocal();
         } catch (err) {
@@ -628,7 +631,7 @@ export default function TripDashboard() {
               // delete existing doc then add new one
               try {
                 await deleteDoc(itemDocRef);
-                await addDoc(itineraryRef, incoming);
+                const payload = { ...incoming }; delete payload.id; await addDoc(itineraryRef, payload);
                 summary.replaced += 1;
               } catch (e) {
                 console.error('Replace (delete+add) failed', e);
@@ -648,7 +651,7 @@ export default function TripDashboard() {
           } else {
             // add new document
             try {
-              await addDoc(itineraryRef, incoming);
+              const payload = { ...incoming }; delete payload.id; await addDoc(itineraryRef, payload);
               summary.created += 1;
             } catch (e) {
               console.error('Add failed', e);
@@ -729,7 +732,7 @@ export default function TripDashboard() {
           const existingDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, existing.id);
           await deleteDoc(existingDocRef);
           const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
-          await addDoc(itineraryRef, incoming);
+          const payload = { ...incoming }; delete payload.id; await addDoc(itineraryRef, payload);
         } catch (e) {
           console.error('Remote replace failed', e);
           addToast('Remote replace failed — check network', 'warning');
@@ -804,7 +807,7 @@ export default function TripDashboard() {
             for (const rawItem of defaultTasmaniaTripDataRaw) {
               const itemToAdd = { ...rawItem, profile: tripProfile };
               try {
-                await addDoc(itineraryRef, itemToAdd);
+                const payload = { ...itemToAdd }; delete payload.id; await addDoc(itineraryRef, payload);
               } catch (e) {
                 // ignore individual item failures
               }
@@ -830,7 +833,10 @@ export default function TripDashboard() {
     const unsubscribe = onSnapshot(itineraryRef, (snapshot) => {
       (async () => {
         try {
-          const rawItems = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          // Prefer the Firestore-generated document id as the canonical id.
+          // Avoid overwriting it with any `id` field stored inside the document data
+          // which previously caused seeding to write to incorrect/new doc ids.
+          const rawItems = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
           // Normalize items first
           const norm = rawItems.map(normalizeTripItem);
           // Group by date and find groups that need seeding (missing numeric position on any item)
@@ -963,7 +969,7 @@ export default function TripDashboard() {
         }
         for (const it of items) {
           try {
-            await addDoc(itineraryRef, it);
+            const payload = { ...it }; delete payload.id; await addDoc(itineraryRef, payload);
           } catch (e) {
             // ignore
           }
