@@ -789,9 +789,14 @@ export default function TripDashboard() {
           }
 
           const updatedLocal = norm.slice();
-          if (toSeed.length > 0 && currentTripId) {
+          // We'll always compute and persist a canonical displayIndex per item so views can show stable numbers.
+          // Prepare a batch if we need to write position or displayIndex changes.
+          let batch = null;
+          let haveWrites = false;
+          if (currentTripId) batch = writeBatch(db);
+
+          if (toSeed.length > 0) {
             // Batch update positions for groups that need seeding
-            const batch = writeBatch(db);
             for (const g of toSeed) {
               // Sort existing by id stable order then assign positions
               g.items.sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')));
@@ -801,19 +806,40 @@ export default function TripDashboard() {
                 // Update local copy
                 const locIdx = updatedLocal.findIndex(x => x.id === it.id);
                 if (locIdx !== -1) updatedLocal[locIdx] = { ...updatedLocal[locIdx], position: p };
-                // Prepare remote update
-                const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
-                // eslint-disable-next-line no-console
-                console.log('Seeding position for', it.id, '->', p);
-                batch.set(itemDocRef, { position: p }, { merge: true });
+                if (currentTripId) {
+                  const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
+                  // eslint-disable-next-line no-console
+                  console.log('Seeding position for', it.id, '->', p);
+                  batch.set(itemDocRef, { position: p }, { merge: true });
+                  haveWrites = true;
+                }
               }
             }
+          }
+
+          // Now compute canonical displayIndex for the whole trip (sorted globally). Persist when missing or different.
+          const sortedForIndex = sortTripItems(updatedLocal);
+          for (let i = 0; i < sortedForIndex.length; i++) {
+            const it = sortedForIndex[i];
+            const desired = i + 1;
+            const locIdx = updatedLocal.findIndex(x => x.id === it.id);
+            if (locIdx !== -1 && updatedLocal[locIdx].displayIndex !== desired) {
+              updatedLocal[locIdx] = { ...updatedLocal[locIdx], displayIndex: desired };
+              if (currentTripId) {
+                const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
+                batch.set(itemDocRef, { displayIndex: desired }, { merge: true });
+                haveWrites = true;
+              }
+            }
+          }
+
+          if (haveWrites && currentTripId) {
             try {
               await batch.commit();
-              addToast('Seeded ordering positions for trip', 'info');
+              addToast('Seeded ordering positions and display indices for trip', 'info');
             } catch (e) {
-              console.error('Failed to seed positions', e);
-              addToast('Could not seed ordering positions remotely', 'warning');
+              console.error('Failed to seed positions/displayIndex', e);
+              addToast('Could not seed ordering/display indices remotely', 'warning');
             }
           }
 
@@ -892,14 +918,23 @@ export default function TripDashboard() {
   const tripDeletes = pendingOps.filter(p => p.op === 'trip-delete');
   const tripShares = pendingOps.filter(p => p.op === 'trip-share');
 
-      // First perform creates (addDoc) and map tempIds -> realIds
+    // Compute canonical displayIndex from current local sorted tripItems
+    const canonicalSorted = sortTripItems(tripItems || []);
+    const displayMap = {};
+    for (let i = 0; i < canonicalSorted.length; i++) displayMap[canonicalSorted[i].id] = i + 1;
+
+    // First perform creates (addDoc) and map tempIds -> realIds
       const tempToReal = {};
       for (const c of creates) {
   // Build a normalized payload with automated fields (titleLink, activityLink, discoverImages, position numeric)
   const stagedLocal = tripItems.find(t => t.id === c.tempId) || {};
   // Merge staged local (which may contain assigned position) with the payload from pending op
   const mergedForNormalize = { ...stagedLocal, ...c.payload };
+  // Inject displayIndex if available for this tempId (computed from local order)
+  if (!mergedForNormalize.displayIndex) mergedForNormalize.displayIndex = displayMap[c.tempId] || undefined;
   const normalized = normalizeTripItem(mergedForNormalize);
+  // Ensure displayIndex is included if present
+  if (typeof mergedForNormalize.displayIndex === 'number') normalized.displayIndex = mergedForNormalize.displayIndex;
   const payload = stripUndefined({ ...normalized }); delete payload.id;
   const docRef = await addDoc(itineraryRef, payload);
   tempToReal[c.tempId] = docRef.id;
@@ -914,7 +949,10 @@ export default function TripDashboard() {
   // For updates, merge with current local item to compute automated fields
   const localItem = tripItems.find(t => t.id === u.id) || (u.id && u.id.startsWith('temp_') ? (tripItems.find(t => t.id === (tempToReal[u.id] || u.id)) || {}) : {});
   const baseForNormalize = { ...localItem, ...(u.payload || {}) };
+  // Ensure displayIndex is preserved/updated according to local ordering
+  if (!baseForNormalize.displayIndex) baseForNormalize.displayIndex = displayMap[u.id] || undefined;
   const normalizedUpdate = normalizeTripItem(baseForNormalize);
+  if (typeof baseForNormalize.displayIndex === 'number') normalizedUpdate.displayIndex = baseForNormalize.displayIndex;
   batch.set(itemDocRef, stripUndefined(normalizedUpdate), { merge: true });
       }
       for (const d of deletes) {
@@ -1106,7 +1144,6 @@ export default function TripDashboard() {
       <div className="flex-1">
   {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
   {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
-  {activeView === 'map' && <TripMap tripItems={tripItems} />}
   {activeView === 'map' && <TripMap tripItems={tripItems} onUpdateTravelTime={handleUpdateTravelTime} />}
   {/* Discover view temporarily hidden while Unsplash account is in review */}
       </div>

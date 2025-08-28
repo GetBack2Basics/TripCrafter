@@ -49,6 +49,7 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-indigo-50">
           <tr>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
             <th></th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
@@ -72,6 +73,7 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                     `${dragOverIndex === idx ? 'bg-indigo-50' : ''} ${draggedIndex === idx ? 'opacity-50' : ''}`
                   }
                 >
+                  <td className="px-3 py-3 text-sm text-gray-600 align-middle">{idx + 1}</td>
                   <td className="px-2 py-3 cursor-grab text-gray-400 align-middle">
                     <GripVertical className="w-5 h-5" />
                   </td>

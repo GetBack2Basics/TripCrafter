@@ -278,8 +278,9 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
       <div className="mt-4">
         <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Timeline</h4>
            <div className="flex flex-wrap gap-3 pb-2">
-          {sortedMappableItems.map((item, index) => {
+      {sortedMappableItems.map((item, index) => {
       const isActive = activeIndex === index;
+    const displayIndex = index + 1;
       const imgIdx = imageIndexes[item.id] || 0;
       const images = Array.isArray(item.discoverImages) ? item.discoverImages : [getLocalDiscoverImage(item.location)];
       const showPrev = images.length > 1;
@@ -292,7 +293,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
         e.stopPropagation();
         setImageIndexes(idxes => ({ ...idxes, [item.id]: ((idxes[item.id] || 0) + 1) % images.length }));
       };
-      return (
+          return (
         <button
           key={item.id}
           className={`flex flex-col items-center w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
@@ -312,6 +313,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
             <span className="absolute inset-0 flex items-center justify-center">
               {getTypeIcon(item.type, item)}
             </span>
+            <span className="absolute -top-2 -left-2 bg-indigo-600 text-white text-[10px] font-semibold rounded-full w-6 h-6 flex items-center justify-center">{displayIndex}</span>
             {showPrev && (
               <button type="button" className="absolute left-0 top-1/2 -translate-y-1/2 bg-white bg-opacity-60 rounded-full px-1 text-xs" onClick={handlePrev}>&lt;</button>
             )}
