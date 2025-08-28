@@ -267,7 +267,9 @@ export default function TripDashboard() {
             if (locIdx !== -1) newNext[locIdx] = { ...newNext[locIdx], position: p };
             if (currentTripId) {
               const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
-              batch.update(itemDocRef, { position: p });
+              // eslint-disable-next-line no-console
+              console.log('Reindexing (set) position for', it.id, '->', p);
+              batch.set(itemDocRef, { position: p }, { merge: true });
             }
           }
         }
@@ -356,7 +358,9 @@ export default function TripDashboard() {
             if (locIdx !== -1) newNext[locIdx] = { ...newNext[locIdx], position: p };
             if (currentTripId) {
               const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
-              batch.update(itemDocRef, { position: p });
+              // eslint-disable-next-line no-console
+              console.log('Reindexing (set) position for', it.id, '->', p);
+              batch.set(itemDocRef, { position: p }, { merge: true });
             }
           }
         }
@@ -431,7 +435,9 @@ export default function TripDashboard() {
             if (locIdx !== -1) newNext[locIdx] = { ...newNext[locIdx], position: p };
             if (currentTripId) {
               const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
-              batch.update(itemDocRef, { position: p });
+              // eslint-disable-next-line no-console
+              console.log('Reindexing (set) position for', it.id, '->', p);
+              batch.set(itemDocRef, { position: p }, { merge: true });
             }
           }
         }
@@ -539,20 +545,30 @@ export default function TripDashboard() {
     }
   };
   const handleDeleteItem = (id) => {
+    // Optimistic local removal so UI is responsive.
+    setTripItems(prev => sortTripItems(prev.filter(item => item.id !== id)));
+
+    // If a trip is selected, attempt remote delete only for signed-in users.
     if (currentTripId) {
+      if (!userId) {
+        // Not signed in: inform the user that remote deletion requires sign-in.
+        addToast('Sign in to persist deletions to the cloud. Item removed locally only.', 'warning');
+        return;
+      }
       (async () => {
         try {
           const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, id);
           await deleteDoc(itemDocRef);
-          // onSnapshot will update local state
+          addToast('Deleted item', 'success');
+          // onSnapshot will confirm remote state
         } catch (err) {
-          console.error('Failed to delete itinerary item', err);
-          // fallback local removal
-          setTripItems(prev => sortTripItems(prev.filter(item => item.id !== id)));
+          console.error('Failed to delete itinerary item remotely', err);
+          addToast('Could not delete item remotely — it may be a permissions issue', 'warning');
+          // onSnapshot will refresh local state from remote; no further action here
         }
       })();
     } else {
-  setTripItems(prev => sortTripItems(prev.filter(item => item.id !== id)));
+      addToast('Deleted item (local demo)', 'success');
     }
   };
 
@@ -825,7 +841,9 @@ export default function TripDashboard() {
                 if (locIdx !== -1) updatedLocal[locIdx] = { ...updatedLocal[locIdx], position: p };
                 // Prepare remote update
                 const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
-                batch.update(itemDocRef, { position: p });
+                // eslint-disable-next-line no-console
+                console.log('Seeding position for', it.id, '->', p);
+                batch.set(itemDocRef, { position: p }, { merge: true });
               }
             }
             try {
