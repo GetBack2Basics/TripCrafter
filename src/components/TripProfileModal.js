@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function TripProfileModal({ isOpen, profile = {}, tripItems = [], onClose, onSave, onLoad }) {
+export default function TripProfileModal({ isOpen, profile = {}, tripItems = [], onClose, onSave, onLoad, userTrips = [], userId, currentTripId, onCreate, onSelect, onDelete, onShare }) {
   const [adults, setAdults] = useState(profile.adults || 2);
   const [children, setChildren] = useState(profile.children || 0);
   const [interests, setInterests] = useState(profile.interests || []);
@@ -45,6 +45,7 @@ export default function TripProfileModal({ isOpen, profile = {}, tripItems = [],
   };
 
   if (!isOpen) return null;
+  const isOwner = (t) => (t && t.ownerId && userId && t.ownerId === userId) || false;
   const handleFileImport = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -67,7 +68,36 @@ export default function TripProfileModal({ isOpen, profile = {}, tripItems = [],
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-60">
       <div className="bg-white rounded-lg shadow-lg max-w-xl w-full p-4">
-        <h3 className="text-lg font-semibold mb-2">Trip profile</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold mb-2">Trip profile</h3>
+          <div>
+            <button onClick={() => onCreate && onCreate()} className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm">Create trip</button>
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <h4 className="font-semibold">Your trips</h4>
+          {userTrips && userTrips.length > 0 ? (
+            <ul className="divide-y max-h-40 overflow-y-auto mb-2">
+              {userTrips.map(t => (
+                <li key={t.id} className="py-2 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">{t.name || t.id} {currentTripId === t.id && <span className="text-xs text-gray-500">(selected)</span>}</div>
+                    <div className="text-xs text-gray-500">Owner: {t.ownerId}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="px-2 py-1 bg-indigo-600 text-white rounded text-sm" onClick={() => { onSelect && onSelect(t); }}>Select</button>
+                    <button className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm" onClick={() => { onShare && onShare(t); }}>Share</button>
+                    {isOwner(t) && <button className="px-2 py-1 bg-red-100 text-red-700 rounded text-sm" onClick={() => { if (confirm('Stage delete for this trip?')) onDelete && onDelete(t); }}>Delete</button>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-sm text-gray-500 mb-2">No trips found</div>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="text-sm">Number of adults</label>

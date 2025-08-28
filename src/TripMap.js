@@ -117,6 +117,12 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
             const infoWindow = new window.google.maps.InfoWindow({ content: `<div style="font-family: sans-serif;"><h3 style="margin: 0 0 8px 0; color: #4F46E5;">${item.location}</h3><p style="margin: 0; color: #666;"><strong>Date:</strong> ${item.date}</p><p style="margin: 0; color: #666;"><strong>Stay:</strong> ${item.accommodation || ''}</p>${(item.type === 'roofed' || item.type === 'camp') ? `<p style='margin:0;color:#2563eb;'><strong>Nights:</strong> ${accomNights[item.location]}</p>` : ''}</div>` });
             marker.addListener('click', () => { infoWindow.open(map, marker); setActiveIndex && setActiveIndex(i); });
             markers.push(marker); bounds.extend(position); validLocations.push(item.location);
+            // report coordinates back to parent so they can be persisted/staged
+            if (onUpdateTravelTime) {
+              const coords = { lat: position.lat(), lng: position.lng() };
+              // duration/distance unknown here; only coords
+              onUpdateTravelTime(item.id, item.travelTime || null, item.distance || null, coords);
+            }
             await new Promise(r => setTimeout(r, 100));
           }
         } catch (e) {
@@ -143,7 +149,7 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
               const distance = leg.distance.text;
               const destinationLocation = validLocations[i + 1];
               const tripItem = sortedTripItems.find(item => item.location === destinationLocation);
-              if (tripItem) onUpdateTravelTime(tripItem.id, duration, distance);
+              if (tripItem) onUpdateTravelTime(tripItem.id, duration, distance, null);
             }
           }
         } catch (e) {

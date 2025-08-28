@@ -859,6 +859,26 @@ export default function TripDashboard() {
     addToast('Discarded staged changes', 'muted');
   };
 
+  // Called by TripMap when travel time/distance or coordinates are computed.
+  const handleUpdateTravelTime = (itemId, duration, distance, coords) => {
+    if (!itemId) return;
+    // Update local UI immediately
+    setTripItems(prev => prev.map(it => it.id === itemId ? { ...it, travelTime: duration || it.travelTime, distance: distance || it.distance, coords: coords || it.coords } : it));
+    // Stage a pending update (merge into any existing pending update for this id)
+    setPendingOps(prev => {
+      const next = prev.slice();
+      const idx = next.findIndex(p => p.op === 'update' && p.id === itemId);
+      const payload = stripUndefined({ ...(duration ? { travelTime: duration } : {}), ...(distance ? { distance } : {}), ...(coords ? { coords } : {}) });
+      if (Object.keys(payload).length === 0) return prev;
+      if (idx !== -1) {
+        next[idx] = { ...next[idx], payload: { ...next[idx].payload, ...payload } };
+      } else {
+        next.push({ op: 'update', id: itemId, payload });
+      }
+      return next;
+    });
+  };
+
   const savePendingChanges = async () => {
     if (!currentTripId) { addToast('No trip selected to save to', 'warning'); return; }
     if (!userId) { addToast('Sign in to save changes to Firestore', 'warning'); return; }
@@ -875,9 +895,14 @@ export default function TripDashboard() {
       // First perform creates (addDoc) and map tempIds -> realIds
       const tempToReal = {};
       for (const c of creates) {
-  const payload = stripUndefined({ ...c.payload }); delete payload.id;
+  // Build a normalized payload with automated fields (titleLink, activityLink, discoverImages, position numeric)
+  const stagedLocal = tripItems.find(t => t.id === c.tempId) || {};
+  // Merge staged local (which may contain assigned position) with the payload from pending op
+  const mergedForNormalize = { ...stagedLocal, ...c.payload };
+  const normalized = normalizeTripItem(mergedForNormalize);
+  const payload = stripUndefined({ ...normalized }); delete payload.id;
   const docRef = await addDoc(itineraryRef, payload);
-        tempToReal[c.tempId] = docRef.id;
+  tempToReal[c.tempId] = docRef.id;
       }
 
       // Batch updates and deletes
@@ -886,7 +911,11 @@ export default function TripDashboard() {
         const targetId = u.id && u.id.startsWith('temp_') ? (tempToReal[u.id] || null) : u.id;
         if (!targetId) continue;
   const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, targetId);
-  batch.set(itemDocRef, stripUndefined(u.payload), { merge: true });
+  // For updates, merge with current local item to compute automated fields
+  const localItem = tripItems.find(t => t.id === u.id) || (u.id && u.id.startsWith('temp_') ? (tripItems.find(t => t.id === (tempToReal[u.id] || u.id)) || {}) : {});
+  const baseForNormalize = { ...localItem, ...(u.payload || {}) };
+  const normalizedUpdate = normalizeTripItem(baseForNormalize);
+  batch.set(itemDocRef, stripUndefined(normalizedUpdate), { merge: true });
       }
       for (const d of deletes) {
         const targetId = d.id && d.id.startsWith('temp_') ? (tempToReal[d.id] || null) : d.id;
@@ -1078,6 +1107,7 @@ export default function TripDashboard() {
   {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
   {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
   {activeView === 'map' && <TripMap tripItems={tripItems} />}
+  {activeView === 'map' && <TripMap tripItems={tripItems} onUpdateTravelTime={handleUpdateTravelTime} />}
   {/* Discover view temporarily hidden while Unsplash account is in review */}
       </div>
       {/* Bottom Navigation for mobile */}
@@ -1087,7 +1117,7 @@ export default function TripDashboard() {
       {/* Modals (stubbed) */}
   <AIImportModal isOpen={showAIImportModal} onClose={() => setShowAIImportModal(false)} onImportSuccess={handleImportResult} onError={msg => alert(msg)} initialProfile={tripProfile} />
   <MergeRequestModal requests={mergeRequests} onResolve={handleResolveMergeRequest} onClose={() => setMergeRequests([])} />
-  <TripProfileModal isOpen={showProfileModal} profile={tripProfile} tripItems={tripItems} onLoad={handleImportProfileLoad} onClose={() => setShowProfileModal(false)} onSave={(p) => {
+  <TripProfileModal isOpen={showProfileModal} profile={tripProfile} tripItems={tripItems} userTrips={userTrips} userId={userId} currentTripId={currentTripId} onLoad={handleImportProfileLoad} onClose={() => setShowProfileModal(false)} onCreate={() => setShowTripCreateModal(true)} onSelect={(trip) => { handleTripSelect(trip); setShowProfileModal(false); }} onDelete={(trip) => handleStageDeleteTrip(trip)} onShare={(trip) => handleOpenShareModal(trip)} onSave={(p) => {
         setTripProfile(p);
         // Persist profile to Firestore trip document when a trip is selected
         if (currentTripId) {
