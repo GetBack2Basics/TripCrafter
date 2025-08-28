@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { collection, query, addDoc, updateDoc, deleteDoc, onSnapshot, doc, where, writeBatch } from 'firebase/firestore';
+import { collection, query, addDoc, updateDoc, deleteDoc, onSnapshot, doc, where, writeBatch, getDocs, arrayUnion } from 'firebase/firestore';
 import defaultTasmaniaTripDataRaw from '../Trip-Default_Tasmania2025';
 import TripList from '../TripList';
 import TripMap from '../TripMap';
@@ -17,6 +17,7 @@ import AppHeader from './AppHeader';
 import LoginModal from './LoginModal';
 import TripSelectModal from './TripSelectModal';
 import TripCreateModal from './TripCreateModal';
+import TripShareModal from './TripShareModal';
 
 
 export default function TripDashboard() {
@@ -37,6 +38,8 @@ export default function TripDashboard() {
   const [showTripSelectModal, setShowTripSelectModal] = useState(false);
   const [showTripCreateModal, setShowTripCreateModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedTripForShare, setSelectedTripForShare] = useState(null);
   const [tripProfile, setTripProfile] = useState({ adults: 2, children: 0, interests: [], diet: 'everything' });
   // Use normalized default trip data for demo (not-logged-in) users
   // Helper to create a slug for image filenames
@@ -161,6 +164,17 @@ export default function TripDashboard() {
       position: (typeof item.position === 'number') ? item.position : (item.position ? parseFloat(item.position) : undefined)
     };
   }
+  // Strip undefined values from an object recursively (shallow) before sending to Firestore
+  const stripUndefined = (obj) => {
+    if (!obj || typeof obj !== 'object') return obj;
+    const out = {};
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      if (typeof v === 'undefined') continue;
+      out[k] = v;
+    }
+    return out;
+  };
   // Ensure trip items are always stored in date order (handles empty dates safely)
   function sortTripItems(items) {
     if (!Array.isArray(items)) return [];
@@ -550,7 +564,7 @@ export default function TripDashboard() {
               // delete existing doc then add new one
               try {
                 await deleteDoc(itemDocRef);
-                const payload = { ...incoming }; delete payload.id; await addDoc(itineraryRef, payload);
+                const payload = stripUndefined({ ...incoming }); delete payload.id; await addDoc(itineraryRef, payload);
                 summary.replaced += 1;
               } catch (e) {
                 console.error('Replace (delete+add) failed', e);
@@ -570,7 +584,7 @@ export default function TripDashboard() {
           } else {
             // add new document
             try {
-              const payload = { ...incoming }; delete payload.id; await addDoc(itineraryRef, payload);
+              const payload = stripUndefined({ ...incoming }); delete payload.id; await addDoc(itineraryRef, payload);
               summary.created += 1;
             } catch (e) {
               console.error('Add failed', e);
@@ -651,7 +665,7 @@ export default function TripDashboard() {
           const existingDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, existing.id);
           await deleteDoc(existingDocRef);
           const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
-          const payload = { ...incoming }; delete payload.id; await addDoc(itineraryRef, payload);
+              const payload = stripUndefined({ ...incoming }); delete payload.id; await addDoc(itineraryRef, payload);
         } catch (e) {
           console.error('Remote replace failed', e);
           addToast('Remote replace failed — check network', 'warning');
@@ -726,7 +740,7 @@ export default function TripDashboard() {
             for (const rawItem of defaultTasmaniaTripDataRaw) {
               const itemToAdd = { ...rawItem, profile: tripProfile };
               try {
-                const payload = { ...itemToAdd }; delete payload.id; await addDoc(itineraryRef, payload);
+                const payload = stripUndefined({ ...itemToAdd }); delete payload.id; await addDoc(itineraryRef, payload);
               } catch (e) {
                 // ignore individual item failures
               }
@@ -852,15 +866,17 @@ export default function TripDashboard() {
     setIsSaving(true);
     try {
       const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
-      const creates = pendingOps.filter(p => p.op === 'create');
-      const updates = pendingOps.filter(p => p.op === 'update');
-      const deletes = pendingOps.filter(p => p.op === 'delete');
+  const creates = pendingOps.filter(p => p.op === 'create');
+  const updates = pendingOps.filter(p => p.op === 'update');
+  const deletes = pendingOps.filter(p => p.op === 'delete');
+  const tripDeletes = pendingOps.filter(p => p.op === 'trip-delete');
+  const tripShares = pendingOps.filter(p => p.op === 'trip-share');
 
       // First perform creates (addDoc) and map tempIds -> realIds
       const tempToReal = {};
       for (const c of creates) {
-        const payload = { ...c.payload }; delete payload.id;
-        const docRef = await addDoc(itineraryRef, payload);
+  const payload = stripUndefined({ ...c.payload }); delete payload.id;
+  const docRef = await addDoc(itineraryRef, payload);
         tempToReal[c.tempId] = docRef.id;
       }
 
@@ -869,8 +885,8 @@ export default function TripDashboard() {
       for (const u of updates) {
         const targetId = u.id && u.id.startsWith('temp_') ? (tempToReal[u.id] || null) : u.id;
         if (!targetId) continue;
-        const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, targetId);
-        batch.set(itemDocRef, u.payload, { merge: true });
+  const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, targetId);
+  batch.set(itemDocRef, stripUndefined(u.payload), { merge: true });
       }
       for (const d of deletes) {
         const targetId = d.id && d.id.startsWith('temp_') ? (tempToReal[d.id] || null) : d.id;
@@ -879,6 +895,37 @@ export default function TripDashboard() {
         batch.delete(itemDocRef);
       }
       await batch.commit();
+
+        // Process trip-share operations (update trip doc with sharedWith entries)
+        for (const s of tripShares) {
+          try {
+            const tripDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`, s.tripId);
+            await updateDoc(tripDocRef, { sharedWith: arrayUnion(s.payload) });
+          } catch (e) {
+            console.error('Failed to apply trip share', e);
+          }
+        }
+
+        // Process trip deletes (delete trip and its items)
+        for (const td of tripDeletes) {
+          try {
+            // delete itinerary items first
+            const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${td.tripId}/itineraryItems`);
+            const snap = await getDocs(itineraryRef);
+            const docs = snap.docs || [];
+            const chunkSize = 400;
+            for (let i = 0; i < docs.length; i += chunkSize) {
+              const b = writeBatch(db);
+              const slice = docs.slice(i, i + chunkSize);
+              for (const d of slice) b.delete(doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${td.tripId}/itineraryItems`, d.id));
+              await b.commit();
+            }
+            // delete trip doc
+            await deleteDoc(doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`, td.tripId));
+          } catch (e) {
+            console.error('Failed to delete trip during save', e);
+          }
+        }
 
       addToast('Saved staged changes to Firestore', 'success');
       setPendingOps([]);
@@ -895,6 +942,31 @@ export default function TripDashboard() {
 
   const handleTripSelect = (trip) => {
     if (trip && trip.id) setCurrentTripId(trip.id);
+  };
+
+  // Stage a trip delete (will be persisted only when Save changes is clicked)
+  const handleStageDeleteTrip = (trip) => {
+    if (!trip || !trip.id) return;
+    if (!userId) { addToast('Sign in to stage deletions', 'warning'); return; }
+    if (trip.ownerId !== userId) { addToast('Only the trip owner can delete this trip', 'warning'); return; }
+    if (!window.confirm(`Stage delete of trip "${trip.name || trip.id}"? Click OK to stage (Save to apply).`)) return;
+    setPendingOps(prev => [...prev, { op: 'trip-delete', tripId: trip.id, name: trip.name || trip.id }]);
+    addToast('Trip delete staged (click Save changes to apply)', 'info');
+  };
+
+  // Open share modal for a given trip (sharing is staged via modal)
+  const handleOpenShareModal = (trip) => {
+    if (!trip || !trip.id) return;
+    if (!userId) { addToast('Sign in to stage shares', 'warning'); return; }
+    if (trip.ownerId !== userId) { addToast('Only the trip owner can share this trip', 'warning'); return; }
+    setSelectedTripForShare(trip);
+    setShowShareModal(true);
+  };
+
+  const stageShareTrip = (tripId, principal, permission) => {
+    if (!tripId || !principal) return;
+    setPendingOps(prev => [...prev, { op: 'trip-share', tripId, payload: { principal, permission } }]);
+    addToast('Trip share staged (click Save changes to apply)', 'info');
   };
 
   const handleTripCreated = (trip) => {
@@ -945,7 +1017,7 @@ export default function TripDashboard() {
         }
         for (const it of items) {
           try {
-            const payload = { ...it }; delete payload.id; await addDoc(itineraryRef, payload);
+            const payload = stripUndefined({ ...it }); delete payload.id; await addDoc(itineraryRef, payload);
           } catch (e) {
             // ignore
           }
@@ -975,7 +1047,12 @@ export default function TripDashboard() {
       />
       {/* Profile Modals */}
       <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} onLoginSuccess={() => setShowLoginModal(false)} />
-      <TripSelectModal isOpen={showTripSelectModal} onClose={() => setShowTripSelectModal(false)} userId={userId} onTripSelect={(trip) => { handleTripSelect(trip); setShowTripSelectModal(false); }} />
+      <TripSelectModal isOpen={showTripSelectModal} onClose={() => setShowTripSelectModal(false)} userId={userId} onTripSelect={(trip) => { handleTripSelect(trip); setShowTripSelectModal(false); }} onDelete={handleStageDeleteTrip} onShare={handleOpenShareModal} />
+
+      {/* Trip Share Modal (staged) */}
+      {showShareModal && selectedTripForShare && (
+        <TripShareModal isOpen={showShareModal} onClose={() => { setShowShareModal(false); setSelectedTripForShare(null); }} trip={selectedTripForShare} onShare={(principal, permission) => { stageShareTrip(selectedTripForShare.id, principal, permission); setShowShareModal(false); setSelectedTripForShare(null); }} />
+      )}
       <TripCreateModal isOpen={showTripCreateModal} onClose={() => setShowTripCreateModal(false)} userId={userId} onTripCreated={(trip) => { handleTripCreated(trip); setShowTripCreateModal(false); }} />
       {/* Summary/Header Area + Tabbed View Switcher */}
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">

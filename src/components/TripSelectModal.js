@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, getDocs, where } from 'firebase/firestore';
 
-export default function TripSelectModal({ isOpen, onClose, userId, onTripSelect }) {
+export default function TripSelectModal({ isOpen, onClose, userId, onTripSelect, onDelete, onShare }) {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +35,11 @@ export default function TripSelectModal({ isOpen, onClose, userId, onTripSelect 
             {trips.map(trip => (
               <li key={trip.id} className="py-2 flex justify-between items-center">
                 <span>{trip.name || trip.id}</span>
-                <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm" onClick={() => { onTripSelect(trip); onClose(); }}>Select</button>
+                <div className="flex items-center gap-2">
+                  <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm" onClick={() => { onTripSelect(trip); onClose(); }}>Select</button>
+                  {onShare && <button className="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded text-sm" onClick={() => onShare(trip)}>Share</button>}
+                  {onDelete && <button className="bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded text-sm" onClick={() => { if (confirm('Delete this trip?')) { onDelete(trip); onClose(); } }}>Delete</button>}
+                </div>
               </li>
             ))}
           </ul>

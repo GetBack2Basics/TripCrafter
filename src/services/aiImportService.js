@@ -92,6 +92,61 @@ export class AIImportService {
         if (!('notes' in item)) item.notes = '';
       });
 
+      // Normalize fields to safe types and formats
+      const normalizeImportedItem = (raw) => {
+        const item = { ...(raw || {}) };
+        // Trim strings
+        ['location','title','status','type','activities','notes','travelTime','titleLink','activityLink'].forEach(k => {
+          if (k in item && typeof item[k] === 'string') item[k] = item[k].trim();
+        });
+        // Normalize date to YYYY-MM-DD or empty string
+        if (item.date) {
+          const d = new Date(item.date);
+          if (!isNaN(d.getTime())) {
+            item.date = d.toISOString().slice(0,10);
+          } else {
+            // try parsing common formats like DD MMM YYYY
+            const m = item.date.match(/(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})/);
+            if (m) {
+              const [_, day, mon, year] = m;
+              const month = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].findIndex(s => s === mon.toLowerCase().slice(0,3)) + 1;
+              if (month > 0) item.date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+              else item.date = '';
+            } else {
+              item.date = '';
+            }
+          }
+        } else {
+          item.date = '';
+        }
+
+        // Normalize type and status to allowed values
+        const allowedTypes = ['roofed','camp','enroute','note'];
+        if (!allowedTypes.includes(item.type)) item.type = 'roofed';
+        const allowedStatus = ['Booked','Unconfirmed','Cancelled','Not booked'];
+        if (!allowedStatus.includes(item.status)) item.status = 'Unconfirmed';
+
+        // Normalize position: allow numeric strings or numbers; otherwise omit
+        if ('position' in item) {
+          const p = item.position;
+          if (p === null || typeof p === 'undefined' || p === '') {
+            delete item.position;
+          } else if (typeof p === 'number' && Number.isFinite(p)) {
+            item.position = p;
+          } else if (typeof p === 'string' && p.trim() !== '' && !isNaN(Number(p))) {
+            item.position = Number(p);
+          } else {
+            delete item.position;
+          }
+        }
+
+        // Remove any undefined-valued keys
+        Object.keys(item).forEach(k => { if (typeof item[k] === 'undefined') delete item[k]; });
+        return item;
+      };
+
+      const normalized = cleaned.map(normalizeImportedItem);
+
       // Validate result: must be array of objects with required fields
       let valid = Array.isArray(cleaned) && cleaned.length > 0 && cleaned.every(item =>
         typeof item === 'object' && requiredFields.every(f => f in item)
@@ -106,7 +161,7 @@ export class AIImportService {
       }
 
       // Ensure proper ID generation
-      cleaned.forEach((item, index) => {
+      normalized.forEach((item, index) => {
         if (!item.id) {
           item.id = `ai-import-${Date.now()}-${index}`;
         }
@@ -114,7 +169,7 @@ export class AIImportService {
 
       return {
         success: true,
-        data: cleaned,
+        data: normalized,
         sourceType: detectedType,
         contentLength: content.length
       };
