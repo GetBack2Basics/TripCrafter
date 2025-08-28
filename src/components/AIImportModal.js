@@ -12,22 +12,8 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
   const [showPrompt, setShowPrompt] = useState(false);
   const [manualJson, setManualJson] = useState('');
 
-  // Profile inputs state (was missing causing ReferenceError)
-  const [profileAdults, setProfileAdults] = useState(Number(initialProfile.adults) || 2);
-  const [profileChildren, setProfileChildren] = useState(Number(initialProfile.children) || 0);
-  const [profileInterests, setProfileInterests] = useState(Array.isArray(initialProfile.interests) ? initialProfile.interests : []);
-  const [profileDiet, setProfileDiet] = useState(initialProfile.diet || 'everything');
-
-  // Default interest options (shared with TripProfileModal)
-  const interestOptions = ['hiking','biking','history','relax','bars','wildlife','beaches','wine','coastal walks','food & markets'];
-
-  // Keep profile inputs in sync if initialProfile prop changes
-  useEffect(() => {
-    setProfileAdults(Number(initialProfile.adults) || 2);
-    setProfileChildren(Number(initialProfile.children) || 0);
-    setProfileInterests(Array.isArray(initialProfile.interests) ? initialProfile.interests : []);
-    setProfileDiet(initialProfile.diet || 'everything');
-  }, [initialProfile]);
+  // The importer uses the trip profile provided by `initialProfile` (from TripProfileModal)
+  // Build a canonical profile object when needed below instead of using local inputs.
 
   // Accept AI suggestion for a field: strip markers and mark entry as edited
   function handleAcceptSuggestion(entry, field) {
@@ -108,7 +94,14 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
         // On error or missing key, show the generated prompt for manual LLM use and show JSON page immediately
         let prompt = '';
         try {
-          const profile = { adults: profileAdults, children: profileChildren, interests: profileInterests, diet: profileDiet };
+          const profile = {
+            adults: Number(initialProfile.adults) || 2,
+            children: Number(initialProfile.children) || 0,
+            interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
+            diet: initialProfile.diet || 'everything',
+            state: initialProfile.state,
+            country: initialProfile.country
+          };
           prompt = await aiImportService.getPrompt(source, importType, profile);
         } catch (e) {
           prompt = 'No prompt available. Please check your API key or try manual import.';
@@ -122,7 +115,14 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
       // If error is due to missing key or network, show manual JSON fallback
       let prompt = '';
       try {
-        const profile = { adults: profileAdults, children: profileChildren, interests: profileInterests, diet: profileDiet };
+        const profile = {
+          adults: Number(initialProfile.adults) || 2,
+          children: Number(initialProfile.children) || 0,
+          interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
+          diet: initialProfile.diet || 'everything',
+          state: initialProfile.state,
+          country: initialProfile.country
+        };
         prompt = await aiImportService.getPrompt(source, importType, profile);
       } catch (e) {
         prompt = 'No prompt available. Please check your API key or try manual import.';
@@ -321,7 +321,14 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
       const result = await aiImportService.testWithSample(sampleKey);
       
       if (result.success) {
-  const profile = { adults: profileAdults, children: profileChildren, interests: profileInterests, diet: profileDiet };
+  const profile = {
+    adults: Number(initialProfile.adults) || 2,
+    children: Number(initialProfile.children) || 0,
+    interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
+    diet: initialProfile.diet || 'everything',
+    state: initialProfile.state,
+    country: initialProfile.country
+  };
   const payload = result.data.map(d => ({ entry: { ...d, profile }, action: 'import' }));
   onImportSuccess(payload);
   handleClose();
@@ -698,45 +705,9 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                     </div>
                   )}
                 </div>
-                {/* Trip profile inputs */}
-                <div className="mb-4 p-3 border rounded bg-gray-50">
-                  <div className="grid grid-cols-2 gap-3 mb-2">
-                    <div>
-                      <label className="text-sm">Number of adults</label>
-                      <input type="number" min="1" className="w-full p-2 border rounded" value={profileAdults} onChange={e => setProfileAdults(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="text-sm">Number under 16</label>
-                      <input type="number" min="0" className="w-full p-2 border rounded" value={profileChildren} onChange={e => setProfileChildren(e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="mb-2">
-                    <label className="text-sm">Interests</label>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {interestOptions.map(opt => (
-                        <label key={opt} className={`px-2 py-1 border rounded text-sm ${profileInterests.includes(opt) ? 'bg-indigo-100 text-indigo-700' : 'bg-white text-gray-700'}`}>
-                          <input type="checkbox" checked={profileInterests.includes(opt)} onChange={(e) => {
-                            if (e.target.checked) setProfileInterests(prev => [...prev, opt]);
-                            else setProfileInterests(prev => prev.filter(x => x !== opt));
-                          }} className="mr-1" />
-                          {opt}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm">Food / Diet</label>
-                    <select className="w-full p-2 border rounded" value={profileDiet} onChange={e => setProfileDiet(e.target.value)}>
-                      <option value="everything">Everything</option>
-                      <option value="meat">Meat</option>
-                      <option value="vegetarian">Vegetarian</option>
-                      <option value="vegan">Vegan</option>
-                      <option value="local">Local</option>
-                      <option value="chinese">Chinese</option>
-                      <option value="indian">Indian</option>
-                      <option value="western">Western</option>
-                    </select>
-                  </div>
+                {/* Importer uses trip profile settings from Trip Profile modal */}
+                <div className="mb-4 p-3 border rounded bg-gray-50 text-sm text-gray-700">
+                  Using trip profile settings (adults, children, interests, diet) from the Trip Profile modal.
                 </div>
 
                 {/* Action Buttons */}
