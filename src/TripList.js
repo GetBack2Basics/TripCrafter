@@ -147,22 +147,22 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
                 <span>{getTransportIcon(item.type, item)}</span>
               )}
               {handleEditClick && (
-                <button onClick={() => handleEditClick(item)} className="p-2 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
+                <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleEditClick(item)} className="p-2 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
                   <Pen className="w-4 h-4" />
                 </button>
               )}
               {handleDeleteItem && (
-                <button onClick={() => handleDeleteItem(item.id)} className="p-2 rounded hover:bg-red-100 text-red-600" title="Delete">
+                <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleDeleteItem(item.id)} className="p-2 rounded hover:bg-red-100 text-red-600" title="Delete">
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}
               {handleMoveUp && (
-                <button onClick={() => handleMoveUp(item.id)} className="p-2 rounded hover:bg-gray-100 text-gray-500" title="Move Up">
+                <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleMoveUp(item.id)} className="p-2 rounded hover:bg-gray-100 text-gray-500" title="Move Up">
                   ▲
                 </button>
               )}
               {handleMoveDown && (
-                <button onClick={() => handleMoveDown(item.id)} className="p-2 rounded hover:bg-gray-100 text-gray-500" title="Move Down">
+                <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleMoveDown(item.id)} className="p-2 rounded hover:bg-gray-100 text-gray-500" title="Move Down">
                   ▼
                 </button>
               )}

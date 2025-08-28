@@ -91,10 +91,10 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                           {item.travelTime}{item.travelTime && item.distance ? ' • ' : ''}{item.distance}
                         </span>
                       )}
-                      <button onClick={() => handleEditClick && handleEditClick(item)} className="p-1 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
+                      <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleEditClick && handleEditClick(item)} className="p-1 rounded hover:bg-indigo-100 text-indigo-600" title="Edit">
                         <Pen className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDeleteItem && handleDeleteItem(item.id)} className="p-1 rounded hover:bg-red-100 text-red-600" title="Delete">
+                      <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleDeleteItem && handleDeleteItem(item.id)} className="p-1 rounded hover:bg-red-100 text-red-600" title="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -120,10 +120,10 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                   </td>
                   <td className="px-2 py-3 align-middle">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => handleMoveUp && handleMoveUp(item.id)} className="p-1 rounded hover:bg-gray-100 text-gray-600" title="Move up">
+                      <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleMoveUp && handleMoveUp(item.id)} className="p-1 rounded hover:bg-gray-100 text-gray-600" title="Move up">
                         <ChevronUp className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleMoveDown && handleMoveDown(item.id)} className="p-1 rounded hover:bg-gray-100 text-gray-600" title="Move down">
+                      <button type="button" onMouseDown={e => e.stopPropagation()} onClick={() => handleMoveDown && handleMoveDown(item.id)} className="p-1 rounded hover:bg-gray-100 text-gray-600" title="Move down">
                         <ChevronDown className="w-4 h-4" />
                       </button>
                       <button onClick={() => setExpandedIndex(isExpanded ? null : idx)} className="text-gray-400 hover:text-indigo-600">

@@ -12,6 +12,23 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
   const [showPrompt, setShowPrompt] = useState(false);
   const [manualJson, setManualJson] = useState('');
 
+  // Profile inputs state (was missing causing ReferenceError)
+  const [profileAdults, setProfileAdults] = useState(Number(initialProfile.adults) || 2);
+  const [profileChildren, setProfileChildren] = useState(Number(initialProfile.children) || 0);
+  const [profileInterests, setProfileInterests] = useState(Array.isArray(initialProfile.interests) ? initialProfile.interests : []);
+  const [profileDiet, setProfileDiet] = useState(initialProfile.diet || 'everything');
+
+  // Default interest options (shared with TripProfileModal)
+  const interestOptions = ['hiking','biking','history','relax','bars','wildlife','beaches','wine','coastal walks','food & markets'];
+
+  // Keep profile inputs in sync if initialProfile prop changes
+  useEffect(() => {
+    setProfileAdults(Number(initialProfile.adults) || 2);
+    setProfileChildren(Number(initialProfile.children) || 0);
+    setProfileInterests(Array.isArray(initialProfile.interests) ? initialProfile.interests : []);
+    setProfileDiet(initialProfile.diet || 'everything');
+  }, [initialProfile]);
+
   // Accept AI suggestion for a field: strip markers and mark entry as edited
   function handleAcceptSuggestion(entry, field) {
     setReviewData((prev) => {
