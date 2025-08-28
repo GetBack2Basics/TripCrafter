@@ -526,6 +526,59 @@ export default function TripDashboard() {
     }
   };
 
+  // Handle loading an exported trip JSON (profile + items)
+  const handleImportProfileLoad = async (data) => {
+    if (!data || typeof data !== 'object') return;
+    const p = data.profile || {};
+    const items = Array.isArray(data.items) ? data.items.map(normalizeTripItem) : [];
+    // Update local state
+    setTripProfile(p);
+    setTripItems(items);
+    addToast('Loaded trip JSON into local demo', 'success');
+
+    // Persist to Firestore if user has selected a trip
+    if (currentTripId) {
+      try {
+        // update trip doc profile
+        const tripDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`, currentTripId);
+        await updateDoc(tripDocRef, { profile: p });
+        // replace itinerary items: delete all then add new ones
+        const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
+        // fetch existing docs and delete them
+        // Note: this approach assumes lightweight trips; for large trips consider batched deletes
+        const snapshot = await (async () => {
+          const s = await new Promise((resolve, reject) => {
+            try {
+              const q = query(itineraryRef);
+              onSnapshot(q, (snap) => resolve(snap), (err) => reject(err));
+            } catch (e) {
+              reject(e);
+            }
+          });
+          return s;
+        })();
+        for (const d of snapshot.docs) {
+          try {
+            await deleteDoc(doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, d.id));
+          } catch (e) {
+            // ignore
+          }
+        }
+        for (const it of items) {
+          try {
+            await addDoc(itineraryRef, it);
+          } catch (e) {
+            // ignore
+          }
+        }
+        addToast('Replaced trip itinerary in Firestore', 'success');
+      } catch (e) {
+        console.error('Failed to persist imported trip JSON remotely', e);
+        addToast('Could not fully persist trip JSON remotely', 'warning');
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-[60vh]">
       <AppHeader
@@ -573,7 +626,7 @@ export default function TripDashboard() {
       {/* Modals (stubbed) */}
   <AIImportModal isOpen={showAIImportModal} onClose={() => setShowAIImportModal(false)} onImportSuccess={handleImportResult} onError={msg => alert(msg)} initialProfile={tripProfile} />
   <MergeRequestModal requests={mergeRequests} onResolve={handleResolveMergeRequest} onClose={() => setMergeRequests([])} />
-  <TripProfileModal isOpen={showProfileModal} profile={tripProfile} onClose={() => setShowProfileModal(false)} onSave={(p) => {
+  <TripProfileModal isOpen={showProfileModal} profile={tripProfile} tripItems={tripItems} onLoad={handleImportProfileLoad} onClose={() => setShowProfileModal(false)} onSave={(p) => {
         setTripProfile(p);
         // Persist profile to Firestore trip document when a trip is selected
         if (currentTripId) {

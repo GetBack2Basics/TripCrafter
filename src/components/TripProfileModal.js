@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-export default function TripProfileModal({ isOpen, profile = {}, onClose, onSave }) {
+export default function TripProfileModal({ isOpen, profile = {}, tripItems = [], onClose, onSave, onLoad }) {
   const [adults, setAdults] = useState(profile.adults || 2);
   const [children, setChildren] = useState(profile.children || 0);
   const [interests, setInterests] = useState(profile.interests || []);
@@ -11,6 +11,9 @@ export default function TripProfileModal({ isOpen, profile = {}, onClose, onSave
   const [newInterest, setNewInterest] = useState('');
   const [dietOptions, setDietOptions] = useState(['everything','vegetarian','vegan','gluten-free','pescatarian','halal','kosher']);
   const [newDiet, setNewDiet] = useState('');
+  const [importError, setImportError] = useState(null);
+  const fileInputRef = useRef(null);
+  const [selectedImportFileName, setSelectedImportFileName] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -42,6 +45,24 @@ export default function TripProfileModal({ isOpen, profile = {}, onClose, onSave
   };
 
   if (!isOpen) return null;
+  const handleFileImport = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        // Basic validation
+        if (!data || typeof data !== 'object') throw new Error('Invalid JSON');
+        if (!data.profile) data.profile = { adults: 2, children: 0, interests: [], diet: 'everything' };
+        if (!data.items) data.items = [];
+        if (onLoad) onLoad(data);
+        onClose();
+      } catch (e) {
+        setImportError(e.message || 'Failed to parse JSON');
+      }
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-60">
@@ -66,10 +87,10 @@ export default function TripProfileModal({ isOpen, profile = {}, onClose, onSave
                 </label>
               ))}
             </div>
-            <div className="flex gap-2 mt-2">
-              <input placeholder="Add interest" value={newInterest} onChange={e => setNewInterest(e.target.value)} className="p-2 border rounded flex-1" />
-              <button onClick={addInterest} className="px-3 py-2 bg-gray-200 rounded">Add</button>
-            </div>
+              <div className="flex gap-2 mt-2">
+                <input placeholder="Add interest" value={newInterest} onChange={e => setNewInterest(e.target.value)} className="p-2 border rounded flex-1" />
+                <button onClick={addInterest} className="px-3 py-2 bg-gray-200 rounded">Add</button>
+              </div>
           </div>
           <div className="col-span-2">
             <label className="text-sm">Food / Diet</label>
@@ -82,9 +103,57 @@ export default function TripProfileModal({ isOpen, profile = {}, onClose, onSave
             </div>
           </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-2 rounded border">Cancel</button>
-          <button onClick={() => { onSave({ adults, children, interests, diet }); onClose(); }} className="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
+        <div className="flex justify-between items-center gap-2">
+          <div>
+            <button onClick={async () => {
+              const exportObj = {
+                profile: { adults, children, interests, diet },
+                items: tripItems || []
+              };
+              const contents = JSON.stringify(exportObj, null, 2);
+              const suggestedName = `trip-export-${Date.now()}.json`;
+              // Try File System Access API
+              if (window.showSaveFilePicker) {
+                try {
+                  const opts = { suggestedName, types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }] };
+                  const handle = await window.showSaveFilePicker(opts);
+                  const writable = await handle.createWritable();
+                  await writable.write(contents);
+                  await writable.close();
+                  return;
+                } catch (e) {
+                  // fall back to download
+                }
+              }
+              // Fallback: ask for a filename via prompt then download
+              let filename = window.prompt('Save file as', suggestedName) || suggestedName;
+              const blob = new Blob([contents], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+            }} className="px-3 py-2 rounded border bg-white text-sm">Export JSON</button>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <input ref={fileInputRef} id="trip-import-file" type="file" accept=".json,application/json" onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                if (f) {
+                  setSelectedImportFileName(f.name);
+                  handleFileImport(f);
+                }
+              }} style={{ display: 'none' }} />
+              <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="px-3 py-2 border rounded bg-white">Import</button>
+              <div className="text-xs text-gray-500">{selectedImportFileName || 'No file chosen'}</div>
+            </div>
+            {importError && <div className="text-xs text-red-500">{importError}</div>}
+            <button onClick={onClose} className="px-3 py-2 rounded border">Cancel</button>
+            <button onClick={() => { onSave({ adults, children, interests, diet }); onClose(); }} className="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
+          </div>
         </div>
       </div>
     </div>

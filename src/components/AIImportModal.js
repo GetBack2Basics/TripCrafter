@@ -11,13 +11,6 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
   const [llmPrompt, setLlmPrompt] = useState('');
   const [showPrompt, setShowPrompt] = useState(false);
   const [manualJson, setManualJson] = useState('');
-  // Trip profile for tailoring activity suggestions
-  const [profileAdults, setProfileAdults] = useState(String(initialProfile.adults || 2));
-  const [profileChildren, setProfileChildren] = useState(String(initialProfile.children || 0));
-  const [profileInterests, setProfileInterests] = useState(initialProfile.interests || []);
-  const [profileDiet, setProfileDiet] = useState(initialProfile.diet || 'everything');
-
-  const interestOptions = ['hiking','biking','history','relax','bars','wildlife','beaches','wine'];
 
   // Accept AI suggestion for a field: strip markers and mark entry as edited
   function handleAcceptSuggestion(entry, field) {
@@ -71,7 +64,14 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
     setIsProcessing(true);
 
     try {
-      const profile = { adults: profileAdults, children: profileChildren, interests: profileInterests, diet: profileDiet };
+      const profile = {
+        adults: Number(initialProfile.adults) || 2,
+        children: Number(initialProfile.children) || 0,
+        interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
+        diet: initialProfile.diet || 'everything',
+        state: initialProfile.state,
+        country: initialProfile.country
+      };
       const result = await aiImportService.importFromSource(source, importType, profile);
       if (result.success) {
           // attach a status and stable id to each entry and convert AI activity suggestions into usable text
@@ -268,7 +268,14 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
       return;
     }
     // Map statuses to explicit import actions so the caller (omni) can handle replace vs import
-    const profile = { adults: profileAdults, children: profileChildren, interests: profileInterests, diet: profileDiet };
+      const profile = {
+        adults: Number(initialProfile.adults) || 2,
+        children: Number(initialProfile.children) || 0,
+        interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
+        diet: initialProfile.diet || 'everything',
+        state: initialProfile.state,
+        country: initialProfile.country
+      };
     const payload = selected.map(e => {
       const action = e._status === 'replaced' ? 'replace' : 'import';
       const entry = { ...e, title: e.title || e.accommodation || e.name || '', profile };
