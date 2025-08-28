@@ -11,12 +11,14 @@ function getTypeIcon(type, item) {
   return null;
 }
 
-function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingInitialData, handleReorder }) {
+function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingInitialData, handleReorder, handleMoveUp, handleMoveDown }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [expandedIndex, setExpandedIndex] = useState(null);
 
-  if (tripItems.length === 0 && !loadingInitialData) {
+  const sorted = (Array.isArray(tripItems) ? tripItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : []);
+
+  if (sorted.length === 0 && !loadingInitialData) {
     return (
       <p className="text-center text-gray-400 text-lg py-8">No trip items yet for this trip. Add one above!</p>
     );
@@ -56,7 +58,7 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {tripItems.map((item, idx) => {
+          {sorted.map((item, idx) => {
             const isExpanded = expandedIndex === idx;
             return (
               <React.Fragment key={item.id}>
@@ -117,9 +119,17 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                     )}
                   </td>
                   <td className="px-2 py-3 align-middle">
-                    <button onClick={() => setExpandedIndex(isExpanded ? null : idx)} className="text-gray-400 hover:text-indigo-600">
-                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleMoveUp && handleMoveUp(item.id)} className="p-1 rounded hover:bg-gray-100 text-gray-600" title="Move up">
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleMoveDown && handleMoveDown(item.id)} className="p-1 rounded hover:bg-gray-100 text-gray-600" title="Move down">
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setExpandedIndex(isExpanded ? null : idx)} className="text-gray-400 hover:text-indigo-600">
+                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 {isExpanded && (

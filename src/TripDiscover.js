@@ -31,12 +31,13 @@ function getLocalDiscoverImages(location) {
 }
 
 export default function TripDiscover({ tripItems = [], handleEditClick, handleDeleteItem }) {
-  if (!tripItems.length) {
+  const sorted = Array.isArray(tripItems) ? tripItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : [];
+  if (!sorted.length) {
     return <p className="text-center text-gray-400 text-lg py-8">No discover items available.</p>;
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-      {tripItems.map((item) => {
+      {sorted.map((item) => {
         const images = getLocalDiscoverImages(item.location);
   const imgUrl = images[0] || '/logo512.png';
   console.log('Discover image URL:', imgUrl, 'for location:', item.location);

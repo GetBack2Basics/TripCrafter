@@ -44,15 +44,21 @@ function TripForm({ newItem, handleInputChange, onAddItem, onSaveEdit, onCancelE
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Type*</label>
-            <input
-              type="text"
+            <select
               name="type"
-              value={formData.type || ''}
+              value={formData.type || 'roofed'}
               onChange={handleFormChange}
-              placeholder="e.g. Accommodation, Activity"
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
               required
-            />
+            >
+              <option value="roofed">Accommodation (roofed)</option>
+              <option value="camp">Camp</option>
+              <option value="enroute">Enroute / Travel</option>
+              <option value="note">Note</option>
+              <option value="ferry">Ferry</option>
+              <option value="car">Car / Drive</option>
+              <option value="plane">Plane / Flight</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Title*</label>

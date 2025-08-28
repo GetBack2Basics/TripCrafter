@@ -9,7 +9,9 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [expandedIndex, setExpandedIndex] = useState(null);
 
-  if (tripItems.length === 0 && !loadingInitialData) {
+  const sortedItems = (Array.isArray(tripItems) ? tripItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : []);
+
+  if (sortedItems.length === 0 && !loadingInitialData) {
     return (
       <p className="text-center text-gray-400 text-lg py-8">No trip items yet for this trip. Add one above!</p>
     );
@@ -63,7 +65,7 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
 
   return (
     <div className="space-y-6">
-      {tripItems.map((item, index) => {
+  {sortedItems.map((item, index) => {
         const isExpanded = expandedIndex === index;
         return (
           <div
@@ -156,12 +158,12 @@ function TripList({ tripItems = [], editingItem, handleEditClick, handleDeleteIt
               )}
               {handleMoveUp && (
                 <button onClick={() => handleMoveUp(item.id)} className="p-2 rounded hover:bg-gray-100 text-gray-500" title="Move Up">
-                  <i className="fa fa-arrow-up" />
+                  ▲
                 </button>
               )}
               {handleMoveDown && (
                 <button onClick={() => handleMoveDown(item.id)} className="p-2 rounded hover:bg-gray-100 text-gray-500" title="Move Down">
-                  <i className="fa fa-arrow-down" />
+                  ▼
                 </button>
               )}
             </div>

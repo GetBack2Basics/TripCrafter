@@ -64,228 +64,112 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
         fullscreenControl: true
       });
       setMap(newMap);
-      // Listen for zoom changes
-      newMap.addListener('zoom_changed', () => {
-        setCurrentZoom(newMap.getZoom());
-      });
+      newMap.addListener('zoom_changed', () => setCurrentZoom(newMap.getZoom()));
     }
   }, [ref, map]);
 
-  // Process locations with debouncing and loop prevention
+  const sortedTripItems = Array.isArray(tripItems) ? tripItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : [];
+
   const processLocations = useCallback(async () => {
-    if (!map || !tripItems.length || isProcessing) {
-      console.log('Skipping processLocations:', { map: !!map, tripItemsLength: tripItems.length, isProcessing });
-      return;
-    }
+    if (!map || !sortedTripItems.length || isProcessing) return;
     setIsProcessing(true);
-    console.log('Processing locations:', tripItems.map(item => item.location));
 
     try {
       const geocoder = new window.google.maps.Geocoder();
       const directionsService = new window.google.maps.DirectionsService();
-      const directionsRenderer = new window.google.maps.DirectionsRenderer({
-        suppressMarkers: true,
-        polylineOptions: {
-          strokeColor: '#4F46E5',
-          strokeWeight: 4,
-          strokeOpacity: 0.8
-        }
-      });
+      const directionsRenderer = new window.google.maps.DirectionsRenderer({ suppressMarkers: true, polylineOptions: { strokeColor: '#4F46E5', strokeWeight: 4, strokeOpacity: 0.8 } });
       directionsRenderer.setMap(map);
 
-      // Clear existing elements
       const bounds = new window.google.maps.LatLngBounds();
       const markers = [];
       const validLocations = [];
 
-      // Group by location for accommodation pin sizing
       const accomNights = {};
-      tripItems.forEach(item => {
+      sortedTripItems.forEach(item => {
         if (item.type === 'roofed' || item.type === 'camp') {
           accomNights[item.location] = (accomNights[item.location] || 0) + (item.nights || 1);
         }
       });
 
-      // Determine which pins to show based on zoom
-      const showEnroute = currentZoom >= 9; // threshold for enroute pins
+      const showEnroute = currentZoom >= 9;
 
-      for (let i = 0; i < tripItems.length; i++) {
-        const item = tripItems[i];
-        // Only show enroute if zoomed in, always show accommodation
+      for (let i = 0; i < sortedTripItems.length; i++) {
+        const item = sortedTripItems[i];
         if (item.type === 'enroute' && !showEnroute) continue;
         if (item.type === 'note') continue;
         try {
           const results = await new Promise((resolve, reject) => {
-            geocoder.geocode({ address: item.location }, (results, status) => {
-              if (status === 'OK') resolve(results);
-              else reject(new Error(`Geocoding failed for ${item.location}: ${status}`));
-            });
+            geocoder.geocode({ address: item.location }, (results, status) => status === 'OK' ? resolve(results) : reject(new Error(`Geocoding failed for ${item.location}: ${status}`)));
           });
           if (results && results[0]) {
             const position = results[0].geometry.location;
-            // Pin size logic
             let scale = 12;
             let fillColor = '#4F46E5';
             let strokeColor = 'white';
             if (item.type === 'roofed' || item.type === 'camp') {
-              scale = 12 + 4 * (accomNights[item.location] - 1); // bigger for more nights
-              fillColor = '#2563eb'; // blue for accommodation
-              strokeColor = '#1e293b';
+              scale = 12 + 4 * (accomNights[item.location] - 1);
+              fillColor = '#2563eb'; strokeColor = '#1e293b';
             } else if (item.type === 'enroute') {
-              scale = 8;
-              fillColor = '#f59e42'; // orange for enroute
-              strokeColor = '#fbbf24';
+              scale = 8; fillColor = '#f59e42'; strokeColor = '#fbbf24';
             }
-            if (activeIndex === i) {
-              fillColor = '#f59e42';
-              strokeColor = '#f59e42';
-            }
-            const marker = new window.google.maps.Marker({
-              position: position,
-              map: map,
-              title: `${i + 1}. ${item.location}`,
-              label: {
-                text: (i + 1).toString(),
-                color: 'white',
-                fontWeight: 'bold'
-              },
-              icon: {
-                path: window.google.maps.SymbolPath.CIRCLE,
-                scale,
-                fillColor,
-                fillOpacity: 1,
-                strokeColor,
-                strokeWeight: 2
-              },
-              zIndex: activeIndex === i ? 999 : 1
-            });
-            // Add info window
-            const infoWindow = new window.google.maps.InfoWindow({
-              content: `
-                <div style="font-family: sans-serif;">
-                  <h3 style="margin: 0 0 8px 0; color: #4F46E5;">${item.location}</h3>
-                  <p style="margin: 0; color: #666;"><strong>Date:</strong> ${item.date}</p>
-                  <p style="margin: 0; color: #666;"><strong>Stay:</strong> ${item.accommodation || ''}</p>
-                  ${(item.type === 'roofed' || item.type === 'camp') ? `<p style='margin:0;color:#2563eb;'><strong>Nights:</strong> ${accomNights[item.location]}</p>` : ''}
-                </div>
-              `
-            });
-            marker.addListener('click', () => {
-              infoWindow.open(map, marker);
-              setActiveIndex && setActiveIndex(i);
-            });
-            markers.push(marker);
-            bounds.extend(position);
-            validLocations.push(item.location);
-            // Add small delay between geocoding requests
-            await new Promise(resolve => setTimeout(resolve, 100));
+            if (activeIndex === i) { fillColor = '#f59e42'; strokeColor = '#f59e42'; }
+            const marker = new window.google.maps.Marker({ position, map, title: `${i + 1}. ${item.location}`, label: { text: (i + 1).toString(), color: 'white', fontWeight: 'bold' }, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale, fillColor, fillOpacity: 1, strokeColor, strokeWeight: 2 }, zIndex: activeIndex === i ? 999 : 1 });
+            const infoWindow = new window.google.maps.InfoWindow({ content: `<div style="font-family: sans-serif;"><h3 style="margin: 0 0 8px 0; color: #4F46E5;">${item.location}</h3><p style="margin: 0; color: #666;"><strong>Date:</strong> ${item.date}</p><p style="margin: 0; color: #666;"><strong>Stay:</strong> ${item.accommodation || ''}</p>${(item.type === 'roofed' || item.type === 'camp') ? `<p style='margin:0;color:#2563eb;'><strong>Nights:</strong> ${accomNights[item.location]}</p>` : ''}</div>` });
+            marker.addListener('click', () => { infoWindow.open(map, marker); setActiveIndex && setActiveIndex(i); });
+            markers.push(marker); bounds.extend(position); validLocations.push(item.location);
+            await new Promise(r => setTimeout(r, 100));
           }
-        } catch (error) {
-          console.error(`✗ Failed to geocode: ${item.location}`, error);
+        } catch (e) {
+          console.error(`✗ Failed to geocode: ${item.location}`, e);
         }
       }
 
-      // Fit map to bounds
       if (markers.length > 0) {
         map.fitBounds(bounds);
-        
-        // Add padding if single location
-        if (markers.length === 1) {
-          map.setZoom(12);
-        }
+        if (markers.length === 1) map.setZoom(12);
       }
 
-      // Try to add driving directions if multiple valid locations
       if (validLocations.length > 1) {
         try {
-          const waypoints = validLocations.slice(1, -1).map(location => ({
-            location: location,
-            stopover: true
-          }));
-
-          const request = {
-            origin: validLocations[0],
-            destination: validLocations[validLocations.length - 1],
-            waypoints: waypoints,
-            travelMode: window.google.maps.TravelMode.DRIVING,
-            unitSystem: window.google.maps.UnitSystem.METRIC
-          };
-
-          const result = await new Promise((resolve, reject) => {
-            directionsService.route(request, (result, status) => {
-              if (status === 'OK') resolve(result);
-              else reject(new Error(`Directions failed: ${status}`));
-            });
-          });
-
+          const waypoints = validLocations.slice(1, -1).map(location => ({ location, stopover: true }));
+          const request = { origin: validLocations[0], destination: validLocations[validLocations.length - 1], waypoints, travelMode: window.google.maps.TravelMode.DRIVING, unitSystem: window.google.maps.UnitSystem.METRIC };
+          const result = await new Promise((resolve, reject) => directionsService.route(request, (res, status) => status === 'OK' ? resolve(res) : reject(new Error(`Directions failed: ${status}`))));
           directionsRenderer.setDirections(result);
-          console.log('✓ Driving route added successfully');
-          
-          // Calculate and update travel times for each leg
           if (result.routes[0] && result.routes[0].legs && onUpdateTravelTime) {
             const legs = result.routes[0].legs;
-            console.log('Calculating travel times for', legs.length, 'legs');
-            
             for (let i = 0; i < legs.length; i++) {
               const leg = legs[i];
-              const duration = leg.duration.text; // e.g., "2 hours 30 mins"
-              const distance = leg.distance.text; // e.g., "150 km"
-              
-              // The leg connects validLocations[i] to validLocations[i+1]
-              // Find the corresponding trip item for the destination
+              const duration = leg.duration.text;
+              const distance = leg.distance.text;
               const destinationLocation = validLocations[i + 1];
-              const tripItem = tripItems.find(item => item.location === destinationLocation);
-              
-              if (tripItem) {
-                console.log(`Updating travel time for ${tripItem.location}: ${duration} (${distance})`);
-                onUpdateTravelTime(tripItem.id, duration, distance);
-              }
+              const tripItem = sortedTripItems.find(item => item.location === destinationLocation);
+              if (tripItem) onUpdateTravelTime(tripItem.id, duration, distance);
             }
           }
-          
-        } catch (error) {
-          console.log('ℹ Directions not available, showing markers only:', error.message);
+        } catch (e) {
+          console.log('ℹ Directions not available, showing markers only:', e.message);
         }
       }
-
     } catch (error) {
       console.error('Error processing locations:', error);
     } finally {
       setIsProcessing(false);
     }
-  }, [map, tripItems, isProcessing, onUpdateTravelTime, activeIndex, setActiveIndex, currentZoom]);
+  }, [map, sortedTripItems, isProcessing, onUpdateTravelTime, activeIndex, currentZoom, setActiveIndex]);
 
-  // Process locations when map and data are ready
   useEffect(() => {
-    if (map && tripItems.length > 0) {
-      // Check if we already processed this exact data to prevent infinite loops
-      const currentDataKey = JSON.stringify(tripItems.map(item => ({
-        id: item.id,
-        location: item.location
-      })));
-      
-      if (lastProcessedData === currentDataKey) {
-        console.log('Skipping - already processed this data');
-        return;
-      }
-      
-      // Debounce to prevent multiple rapid calls
-      const timer = setTimeout(() => {
-        setLastProcessedData(currentDataKey);
-        processLocations();
-      }, 1000); // Increased delay to prevent spam
-      
-      return () => clearTimeout(timer);
-    }
-  }, [map, tripItems, processLocations, lastProcessedData]);
+    if (!map || !sortedTripItems.length) return;
+    const currentDataKey = JSON.stringify(sortedTripItems.map(item => ({ id: item.id, location: item.location })));
+    if (lastProcessedData === currentDataKey) return;
+    const timer = setTimeout(() => { setLastProcessedData(currentDataKey); processLocations(); }, 1000);
+    return () => clearTimeout(timer);
+  }, [map, sortedTripItems, processLocations, lastProcessedData]);
 
   return (
     <div className="relative">
       <div ref={ref} style={{ width: '100%', height: '500px' }} />
       {isProcessing && (
-        <div className="absolute top-2 right-2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
-          Processing locations...
-        </div>
+        <div className="absolute top-2 right-2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm">Processing locations...</div>
       )}
     </div>
   );
@@ -294,10 +178,13 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
 // Main TripMap component
 function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
   const [activeIndex, setActiveIndex] = useState(null);
+  // Track per-item image indexes in a single state object to avoid hooks-in-loops
+  const [imageIndexes, setImageIndexes] = useState({});
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
-  // Filter out "note" type items from mapping
+  // Filter out "note" type items from mapping and sort by date for consistent ordering
   const mappableItems = tripItems.filter(item => item.type !== 'note');
+  const sortedMappableItems = Array.isArray(mappableItems) ? mappableItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : [];
 
   if (loadingInitialData) {
     return (
@@ -377,29 +264,27 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
           render={render}
           libraries={['geometry']}
         >
-          <Map tripItems={mappableItems} onUpdateTravelTime={onUpdateTravelTime} activeIndex={activeIndex} setActiveIndex={setActiveIndex} />
+          <Map tripItems={sortedMappableItems} onUpdateTravelTime={onUpdateTravelTime} activeIndex={activeIndex} setActiveIndex={setActiveIndex} />
         </Wrapper>
       </div>
 
       {/* Scrollable mini-timeline */}
       <div className="mt-4">
         <h4 className="text-lg font-semibold text-indigo-700 mb-2">Trip Timeline</h4>
-  <div className="flex flex-wrap gap-3 pb-2">
-    {tripItems.map((item, index) => {
+           <div className="flex flex-wrap gap-3 pb-2">
+          {sortedMappableItems.map((item, index) => {
       const isActive = activeIndex === index;
-      // Per-item image index state
-      const [imageIndexes, setImageIndexes] = React.useState({});
       const imgIdx = imageIndexes[item.id] || 0;
       const images = Array.isArray(item.discoverImages) ? item.discoverImages : [getLocalDiscoverImage(item.location)];
       const showPrev = images.length > 1;
       const showNext = images.length > 1;
       const handlePrev = (e) => {
         e.stopPropagation();
-        setImageIndexes(idxes => ({ ...idxes, [item.id]: (imgIdx - 1 + images.length) % images.length }));
+        setImageIndexes(idxes => ({ ...idxes, [item.id]: ((idxes[item.id] || 0) - 1 + images.length) % images.length }));
       };
       const handleNext = (e) => {
         e.stopPropagation();
-        setImageIndexes(idxes => ({ ...idxes, [item.id]: (imgIdx + 1) % images.length }));
+        setImageIndexes(idxes => ({ ...idxes, [item.id]: ((idxes[item.id] || 0) + 1) % images.length }));
       };
       return (
         <button
@@ -407,7 +292,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
           className={`flex flex-col items-center w-[90px] px-2 py-2 rounded-lg border transition-all duration-150 focus:outline-none ${
             isActive ? 'border-orange-400 bg-orange-50 shadow' : 'border-gray-200 bg-gray-50'
           }`}
-          onClick={() => setActiveIndex(index)}
+                   onClick={() => setActiveIndex(index)}
           style={{ cursor: 'pointer' }}
         >
           <span className="mb-1 relative block w-10 h-10 rounded-full overflow-hidden bg-gray-100" style={{marginBottom: 4}}>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { collection, query, addDoc, updateDoc, deleteDoc, onSnapshot, doc, where } from 'firebase/firestore';
+import { collection, query, addDoc, updateDoc, deleteDoc, onSnapshot, doc, where, writeBatch } from 'firebase/firestore';
 import defaultTasmaniaTripDataRaw from '../Trip-Default_Tasmania2025';
 import TripList from '../TripList';
 import TripMap from '../TripMap';
@@ -141,7 +141,7 @@ export default function TripDashboard() {
   const adults = profile.adults || 2;
   const children = profile.children || 0;
   const tripSettings = profile || {};
-    return {
+  return {
       id: item.id || Math.random().toString(36).substr(2, 9),
       date: item.date || '',
       location: item.location || '',
@@ -157,9 +157,26 @@ export default function TripDashboard() {
   // activityLink: use location-based searches for activity suggestions for all types except 'note'
   activityLink: (item.type && item.type !== 'note') ? (item.activityLink || generateActivityLink(item.type || 'enroute', item.location, item.date, adults, children, tripSettings)) : '',
       discoverImages: discoverImagesForLocation(item.location),
+      // fractional ordering position (optional). Keep numeric when present.
+      position: (typeof item.position === 'number') ? item.position : (item.position ? parseFloat(item.position) : undefined)
     };
   }
-  const [tripItems, setTripItems] = useState(defaultTasmaniaTripDataRaw.map(normalizeTripItem));
+  // Ensure trip items are always stored in date order (handles empty dates safely)
+  function sortTripItems(items) {
+    if (!Array.isArray(items)) return [];
+    return items.slice().sort((a, b) => {
+      const ad = a && a.date ? String(a.date) : '';
+      const bd = b && b.date ? String(b.date) : '';
+      const dateCmp = ad.localeCompare(bd);
+      if (dateCmp !== 0) return dateCmp;
+      // Same date: sort by numeric position when available, otherwise fallback to id to make sort stable
+      const ap = (typeof a.position === 'number') ? a.position : 0;
+      const bp = (typeof b.position === 'number') ? b.position : 0;
+      if (ap !== bp) return ap - bp;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+  }
+  const [tripItems, setTripItems] = useState(sortTripItems(defaultTasmaniaTripDataRaw.map(normalizeTripItem)));
   const [mergeRequests, setMergeRequests] = useState([]);
   const [toasts, setToasts] = useState([]);
   const addToast = (message, kind = 'info') => {
@@ -170,10 +187,302 @@ export default function TripDashboard() {
   const [newItem, setNewItem] = useState({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
   const [editingItem, setEditingItem] = useState(null);
 
+  // Helper: compute last date among trip items (ISO string) or today's date if none
+  const getLastItemDateIso = () => {
+    if (!Array.isArray(tripItems) || tripItems.length === 0) {
+      const d = new Date();
+      return d.toISOString().slice(0, 10);
+    }
+    // Filter out empty dates and pick max
+    const validDates = tripItems.map(t => t.date).filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d.getTime()));
+    if (validDates.length === 0) {
+      const d = new Date();
+      return d.toISOString().slice(0, 10);
+    }
+    const max = new Date(Math.max(...validDates.map(d => d.getTime())));
+    return max.toISOString().slice(0, 10);
+  };
+
+  // Open the Add Item form with a sensible default date (last day of current trip)
+  const openAddForm = () => {
+    const defaultDate = getLastItemDateIso();
+    setEditingItem(null);
+    setNewItem({ date: defaultDate, location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
+    setShowAddForm(true);
+  };
+
+  // Reorder handler: only allow moving items within the same date group.
+  // Expects indices from the sorted view (as TripList/TripTable render sorted lists).
+  const handleReorder = (fromIndex, toIndex) => {
+    if (typeof fromIndex !== 'number' || typeof toIndex !== 'number') return;
+    const sorted = sortTripItems(tripItems);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= sorted.length || toIndex >= sorted.length) return;
+    const fromItem = sorted[fromIndex];
+    const toItem = sorted[toIndex];
+    if (!fromItem || !toItem) return;
+    if ((fromItem.date || '') !== (toItem.date || '')) {
+      addToast('Items can only be reordered within the same date', 'warning');
+      return;
+    }
+    // Reorder within the sorted array
+    const next = sorted.slice();
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+
+    // Compute fractional position for the moved item based on neighbors
+    const withinDate = (fromItem.date || '');
+    const itemsSameDate = next.filter(i => (i.date || '') === withinDate);
+    // find index of moved within the date-group
+    const idxInDate = itemsSameDate.findIndex(i => i.id === moved.id);
+    const prev = itemsSameDate[idxInDate - 1];
+    const nextNeighbor = itemsSameDate[idxInDate + 1];
+
+    const BASE_GAP = 1000;
+    const MIN_GAP = 1e-6;
+    const computeMid = (p, n) => {
+      if (typeof p !== 'number' && typeof n !== 'number') return BASE_GAP;
+      if (typeof p !== 'number') return n - BASE_GAP;
+      if (typeof n !== 'number') return p + BASE_GAP;
+      const gap = n - p;
+      if (gap <= MIN_GAP) return null; // signal reindex needed
+      return p + gap / 2;
+    };
+
+    const newPos = computeMid(prev && prev.position, nextNeighbor && nextNeighbor.position);
+
+    if (newPos === null) {
+      // need to reindex whole date group then compute positions again
+      const reindex = async () => {
+        // assign sequential positions spaced by BASE_GAP
+        const byDate = next.filter(i => (i.date || '') === withinDate);
+        byDate.sort((a, b) => (a.position || 0) - (b.position || 0));
+        const batch = currentTripId ? writeBatch(db) : null;
+        const newNext = next.slice();
+        for (let i = 0; i < byDate.length; i++) {
+          const it = byDate[i];
+          const p = (i + 1) * BASE_GAP;
+          if (it.position !== p) {
+            // update local copy
+            const locIdx = newNext.findIndex(x => x.id === it.id);
+            if (locIdx !== -1) newNext[locIdx] = { ...newNext[locIdx], position: p };
+            if (currentTripId) {
+              const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
+              batch.update(itemDocRef, { position: p });
+            }
+          }
+        }
+        // commit batch if any
+        if (currentTripId) {
+          try {
+            await batch.commit();
+          } catch (e) {
+            console.error('Failed reindex batch', e);
+            addToast('Failed to reindex item order remotely', 'warning');
+          }
+        }
+        setTripItems(sortTripItems(newNext));
+        addToast('Reindexed items and applied reorder', 'success');
+      };
+      reindex();
+      return;
+    }
+
+    // Apply new position to moved item locally and persist
+    const updatedNext = next.map(i => i.id === moved.id ? { ...i, position: newPos } : i);
+    setTripItems(sortTripItems(updatedNext));
+
+    if (currentTripId) {
+      (async () => {
+        try {
+          const movedDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, moved.id);
+          await updateDoc(movedDocRef, { position: newPos });
+        } catch (err) {
+          console.error('Failed to persist reordering', err);
+          addToast('Could not persist reorder remotely — saved locally only', 'warning');
+        }
+      })();
+    } else {
+      addToast('Reordered items', 'success');
+    }
+  };
+
+  // Move item up/down within the same date group by item id
+  const handleMoveUp = (id) => {
+    if (!id) return;
+    const sorted = sortTripItems(tripItems);
+    const idx = sorted.findIndex(i => i.id === id);
+    if (idx <= 0) { addToast('Cannot move up', 'muted'); return; }
+    // find previous index with same date
+    const date = sorted[idx].date || '';
+    let prev = idx - 1;
+    while (prev >= 0 && (sorted[prev].date || '') === date) {
+      // Found previous in same date
+      break;
+    }
+    if (prev < 0 || (sorted[prev].date || '') !== date) { addToast('Cannot move up within date', 'muted'); return; }
+    const next = sorted.slice();
+    const [item] = next.splice(idx, 1);
+    next.splice(prev, 0, item);
+
+  // compute new fractional position within the same date group
+    const itemsSameDate = next.filter(i => (i.date || '') === date);
+    const idxInDate = itemsSameDate.findIndex(i => i.id === id);
+    const prevNeighbor = itemsSameDate[idxInDate - 1];
+    const nextNeighbor = itemsSameDate[idxInDate + 1];
+    const BASE_GAP = 1000;
+    const MIN_GAP = 1e-6;
+    const computeMid = (p, n) => {
+      if (typeof p !== 'number' && typeof n !== 'number') return BASE_GAP;
+      if (typeof p !== 'number') return n - BASE_GAP;
+      if (typeof n !== 'number') return p + BASE_GAP;
+      const gap = n - p;
+      if (gap <= MIN_GAP) return null;
+      return p + gap / 2;
+    };
+    const newPos = computeMid(prevNeighbor && prevNeighbor.position, nextNeighbor && nextNeighbor.position);
+    if (newPos === null) {
+      // reuse the same reindex approach as handleReorder
+      const withinDate = date;
+      const reindex = async () => {
+        const byDate = next.filter(i => (i.date || '') === withinDate);
+        byDate.sort((a, b) => (a.position || 0) - (b.position || 0));
+        const batch = currentTripId ? writeBatch(db) : null;
+        const newNext = next.slice();
+        for (let i = 0; i < byDate.length; i++) {
+          const it = byDate[i];
+          const p = (i + 1) * BASE_GAP;
+          if (it.position !== p) {
+            const locIdx = newNext.findIndex(x => x.id === it.id);
+            if (locIdx !== -1) newNext[locIdx] = { ...newNext[locIdx], position: p };
+            if (currentTripId) {
+              const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
+              batch.update(itemDocRef, { position: p });
+            }
+          }
+        }
+        if (currentTripId) {
+          try { await batch.commit(); } catch (e) { console.error('Failed reindex batch', e); addToast('Failed to reindex item order remotely', 'warning'); }
+        }
+        setTripItems(sortTripItems(newNext));
+        addToast('Reindexed items and moved up', 'success');
+      };
+      reindex();
+      return;
+    }
+
+    const updated = next.map(x => x.id === id ? { ...x, position: newPos } : x);
+    setTripItems(sortTripItems(updated));
+    if (currentTripId) {
+      (async () => {
+        try {
+          const itemRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, id);
+          await updateDoc(itemRef, { position: newPos });
+          addToast('Moved up', 'success');
+        } catch (e) {
+          console.error('Failed to persist move up', e);
+          addToast('Could not persist move up remotely', 'warning');
+        }
+      })();
+    } else {
+      addToast('Moved up', 'success');
+    }
+  };
+
+  const handleMoveDown = (id) => {
+    if (!id) return;
+    const sorted = sortTripItems(tripItems);
+    const idx = sorted.findIndex(i => i.id === id);
+    if (idx === -1 || idx >= sorted.length - 1) { addToast('Cannot move down', 'muted'); return; }
+    const date = sorted[idx].date || '';
+    let nextIdx = idx + 1;
+    if ((sorted[nextIdx].date || '') !== date) { addToast('Cannot move down within date', 'muted'); return; }
+    const next = sorted.slice();
+    const [item] = next.splice(idx, 1);
+    next.splice(nextIdx, 0, item);
+
+  // compute new fractional position within the same date group
+    const itemsSameDate = next.filter(i => (i.date || '') === date);
+    const idxInDate = itemsSameDate.findIndex(i => i.id === id);
+    const prevNeighbor = itemsSameDate[idxInDate - 1];
+    const nextNeighbor = itemsSameDate[idxInDate + 1];
+    const BASE_GAP = 1000;
+    const MIN_GAP = 1e-6;
+    const computeMid = (p, n) => {
+      if (typeof p !== 'number' && typeof n !== 'number') return BASE_GAP;
+      if (typeof p !== 'number') return n - BASE_GAP;
+      if (typeof n !== 'number') return p + BASE_GAP;
+      const gap = n - p;
+      if (gap <= MIN_GAP) return null;
+      return p + gap / 2;
+    };
+    const newPos = computeMid(prevNeighbor && prevNeighbor.position, nextNeighbor && nextNeighbor.position);
+    if (newPos === null) {
+      const withinDate = date;
+      const reindex = async () => {
+        const byDate = next.filter(i => (i.date || '') === withinDate);
+        byDate.sort((a, b) => (a.position || 0) - (b.position || 0));
+        const batch = currentTripId ? writeBatch(db) : null;
+        const newNext = next.slice();
+        for (let i = 0; i < byDate.length; i++) {
+          const it = byDate[i];
+          const p = (i + 1) * BASE_GAP;
+          if (it.position !== p) {
+            const locIdx = newNext.findIndex(x => x.id === it.id);
+            if (locIdx !== -1) newNext[locIdx] = { ...newNext[locIdx], position: p };
+            if (currentTripId) {
+              const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
+              batch.update(itemDocRef, { position: p });
+            }
+          }
+        }
+        if (currentTripId) {
+          try { await batch.commit(); } catch (e) { console.error('Failed reindex batch', e); addToast('Failed to reindex item order remotely', 'warning'); }
+        }
+        setTripItems(sortTripItems(newNext));
+        addToast('Reindexed items and moved down', 'success');
+      };
+      reindex();
+      return;
+    }
+
+    const updated = next.map(x => x.id === id ? { ...x, position: newPos } : x);
+    setTripItems(sortTripItems(updated));
+    if (currentTripId) {
+      (async () => {
+        try {
+          const itemRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, id);
+          await updateDoc(itemRef, { position: newPos });
+          addToast('Moved down', 'success');
+        } catch (e) {
+          console.error('Failed to persist move down', e);
+          addToast('Could not persist move down remotely', 'warning');
+        }
+      })();
+    } else {
+      addToast('Moved down', 'success');
+    }
+  };
+
   // Demo trip editing logic (add, edit, delete)
   const handleAddItem = () => {
     // Persist the new item to Firestore if a trip is selected, otherwise keep local demo behavior
     const itemToAdd = { ...newItem };
+    // Assign a fractional position for ordering: base gap of 1000
+    try {
+      const BASE_GAP = 1000;
+      const sorted = sortTripItems(tripItems || []);
+      const dateKey = (itemToAdd.date || '');
+      const sameDate = sorted.filter(i => (i.date || '') === dateKey);
+      let maxPos = 0;
+      for (const it of sameDate) {
+        if (typeof it.position === 'number' && !isNaN(it.position)) {
+          maxPos = Math.max(maxPos, it.position);
+        }
+      }
+      itemToAdd.position = (maxPos > 0) ? (maxPos + BASE_GAP) : BASE_GAP;
+    } catch (e) {
+      // defensive: if anything goes wrong, just leave position undefined
+    }
     const resetLocal = () => {
       setShowAddForm(false);
       setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
@@ -189,13 +498,13 @@ export default function TripDashboard() {
           console.error('Failed to add itinerary item', err);
           // fall back to local
           const itemWithId = { ...itemToAdd, id: Math.random().toString(36).substr(2, 9) };
-          setTripItems(prev => [...prev, itemWithId]);
+          setTripItems(prev => sortTripItems([...prev, itemWithId]));
           resetLocal();
         }
       })();
     } else {
-      const itemWithId = { ...itemToAdd, id: Math.random().toString(36).substr(2, 9) };
-      setTripItems(prev => [...prev, itemWithId]);
+  const itemWithId = { ...itemToAdd, id: Math.random().toString(36).substr(2, 9) };
+  setTripItems(prev => sortTripItems([...prev, itemWithId]));
       resetLocal();
     }
   };
@@ -220,12 +529,12 @@ export default function TripDashboard() {
         } catch (err) {
           console.error('Failed to update itinerary item', err);
           // fallback to local update
-          setTripItems(prev => prev.map(item => item.id === editingItem.id ? newItem : item));
+          setTripItems(prev => sortTripItems(prev.map(item => item.id === editingItem.id ? newItem : item)));
           resetLocal();
         }
       })();
     } else {
-      setTripItems(prev => prev.map(item => item.id === (editingItem && editingItem.id) ? newItem : item));
+  setTripItems(prev => sortTripItems(prev.map(item => item.id === (editingItem && editingItem.id) ? newItem : item)));
       resetLocal();
     }
   };
@@ -239,11 +548,11 @@ export default function TripDashboard() {
         } catch (err) {
           console.error('Failed to delete itinerary item', err);
           // fallback local removal
-          setTripItems(prev => prev.filter(item => item.id !== id));
+          setTripItems(prev => sortTripItems(prev.filter(item => item.id !== id)));
         }
       })();
     } else {
-      setTripItems(prev => prev.filter(item => item.id !== id));
+  setTripItems(prev => sortTripItems(prev.filter(item => item.id !== id)));
     }
   };
 
@@ -264,7 +573,7 @@ export default function TripDashboard() {
       // If incoming is roofed/camp and there's already an existing booking for that date, queue a merge request instead of immediate write
       if ((incoming.type === 'roofed' || incoming.type === 'camp') && existing) {
         // mark existing item locally as pending merge for UI
-        setTripItems(prev => prev.map(t => t.id === existing.id ? { ...t, _pendingMerge: true } : t));
+  setTripItems(prev => sortTripItems(prev.map(t => t.id === existing.id ? { ...t, _pendingMerge: true } : t)));
         setMergeRequests(prev => [...prev, { incoming, existing, action }]);
         // skip further processing for now; user will resolve merge requests
         continue;
@@ -316,19 +625,19 @@ export default function TripDashboard() {
         if (existing) {
           if (action === 'replace') {
             // remove existing and add new
-            setTripItems(prev => prev.filter(t => t.id !== existing.id));
+            setTripItems(prev => sortTripItems(prev.filter(t => t.id !== existing.id)));
             const newItem = { ...incoming, id: incoming.id || Math.random().toString(36).substr(2, 9) };
-            setTripItems(prev => [...prev, newItem]);
+            setTripItems(prev => sortTripItems([...prev, newItem]));
             summary.replaced += 1;
           } else {
             // import => merge (incoming overrides)
-            setTripItems(prev => prev.map(t => t.id === existing.id ? { ...t, ...incoming } : t));
+            setTripItems(prev => sortTripItems(prev.map(t => t.id === existing.id ? { ...t, ...incoming } : t)));
             summary.updated += 1;
           }
         } else {
           // create new local item with id
           const newItem = { ...incoming, id: incoming.id || Math.random().toString(36).substr(2, 9) };
-          setTripItems(prev => [...prev, newItem]);
+          setTripItems(prev => sortTripItems([...prev, newItem]));
           summary.created += 1;
         }
       }
@@ -336,13 +645,13 @@ export default function TripDashboard() {
       // Enforce single roofed/camp per day locally: if incoming is roofed/camp, demote others
       if (incoming.type === 'roofed' || incoming.type === 'camp') {
         // Update local state immediately
-        setTripItems(prev => prev.map(t => {
+        setTripItems(prev => sortTripItems(prev.map(t => {
           if (t.id === incoming.id) return t;
           if (t.date === incoming.date && t.type === incoming.type) {
             return { ...t, status: 'Unconfirmed' };
           }
           return t;
-        }));
+        })));
         // Also try to update remote docs to demote their status where possible
         if (currentTripId) {
           const others = tripItems.filter(t => t.date === incoming.date && t.type === incoming.type && t.id && t.id !== incoming.id);
@@ -369,7 +678,7 @@ export default function TripDashboard() {
     const { incoming, existing } = req;
     if (resolution === 'skip') {
       // clear pending flag
-      setTripItems(prev => prev.map(t => t.id === existing.id ? { ...t, _pendingMerge: false } : t));
+  setTripItems(prev => sortTripItems(prev.map(t => t.id === existing.id ? { ...t, _pendingMerge: false } : t)));
       addToast('Skipped incoming booking', 'muted');
       return;
     }
@@ -387,11 +696,7 @@ export default function TripDashboard() {
           addToast('Remote replace failed — check network', 'warning');
         }
       }
-      setTripItems(prev => {
-        const filtered = prev.filter(t => t.id !== existing.id);
-        const added = [...filtered, incoming];
-        return added.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-      });
+  setTripItems(prev => sortTripItems(prev.filter(t => t.id !== existing.id).concat([incoming])));
       addToast('Replaced existing booking with incoming', 'success');
       return;
     }
@@ -407,7 +712,7 @@ export default function TripDashboard() {
           addToast('Remote merge failed — check network', 'warning');
         }
       }
-      setTripItems(prev => prev.map(t => t.id === existing.id ? { ...merged, _pendingMerge: false } : t).sort((a, b) => (a.date || '').localeCompare(b.date || '')));
+  setTripItems(prev => sortTripItems(prev.map(t => t.id === existing.id ? { ...merged, _pendingMerge: false } : t)));
       addToast('Merged incoming booking', 'success');
       return;
     }
@@ -484,10 +789,61 @@ export default function TripDashboard() {
     if (!currentTripId) return;
     const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
     const unsubscribe = onSnapshot(itineraryRef, (snapshot) => {
-      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setTripItems(items.map(normalizeTripItem));
-      const found = userTrips.find(t => t.id === currentTripId);
-      setCurrentTripName(found ? found.name || null : null);
+      (async () => {
+        try {
+          const rawItems = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          // Normalize items first
+          const norm = rawItems.map(normalizeTripItem);
+          // Group by date and find groups that need seeding (missing numeric position on any item)
+          const groups = {};
+          for (const it of norm) {
+            const k = it.date || '';
+            groups[k] = groups[k] || [];
+            groups[k].push(it);
+          }
+          const BASE_GAP = 1000;
+          const toSeed = [];
+          for (const k of Object.keys(groups)) {
+            const group = groups[k];
+            // If any item in group lacks a numeric position, we'll seed the whole group
+            const needs = group.some(g => typeof g.position !== 'number');
+            if (needs) toSeed.push({ date: k, items: group });
+          }
+
+          const updatedLocal = norm.slice();
+          if (toSeed.length > 0 && currentTripId) {
+            // Batch update positions for groups that need seeding
+            const batch = writeBatch(db);
+            for (const g of toSeed) {
+              // Sort existing by id stable order then assign positions
+              g.items.sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')));
+              for (let i = 0; i < g.items.length; i++) {
+                const it = g.items[i];
+                const p = (i + 1) * BASE_GAP;
+                // Update local copy
+                const locIdx = updatedLocal.findIndex(x => x.id === it.id);
+                if (locIdx !== -1) updatedLocal[locIdx] = { ...updatedLocal[locIdx], position: p };
+                // Prepare remote update
+                const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, it.id);
+                batch.update(itemDocRef, { position: p });
+              }
+            }
+            try {
+              await batch.commit();
+              addToast('Seeded ordering positions for trip', 'info');
+            } catch (e) {
+              console.error('Failed to seed positions', e);
+              addToast('Could not seed ordering positions remotely', 'warning');
+            }
+          }
+
+          setTripItems(sortTripItems(updatedLocal));
+          const found = userTrips.find(t => t.id === currentTripId);
+          setCurrentTripName(found ? found.name || null : null);
+        } catch (err) {
+          console.error('Itinerary snapshot processing failed', err);
+        }
+      })();
     }, (err) => {
       console.error('Itinerary snapshot error', err);
     });
@@ -531,9 +887,9 @@ export default function TripDashboard() {
     if (!data || typeof data !== 'object') return;
     const p = data.profile || {};
     const items = Array.isArray(data.items) ? data.items.map(normalizeTripItem) : [];
-    // Update local state
-    setTripProfile(p);
-    setTripItems(items);
+  // Update local state
+  setTripProfile(p);
+  setTripItems(sortTripItems(items));
     addToast('Loaded trip JSON into local demo', 'success');
 
     // Persist to Firestore if user has selected a trip
@@ -586,7 +942,7 @@ export default function TripDashboard() {
         userAvatar={userAvatar}
         activeView={activeView}
         setActiveView={setActiveView}
-        onAddStop={() => setShowAddForm(true)}
+        onAddStop={() => openAddForm()}
         onAIImport={() => setShowAIImportModal(true)}
         onHelpClick={() => setShowHelp(true)}
         onProfileLogin={handleProfileLogin}
@@ -614,8 +970,8 @@ export default function TripDashboard() {
       </div>
       {/* Main Content Area */}
       <div className="flex-1">
-  {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
-  {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />}
+  {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
+  {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
   {activeView === 'map' && <TripMap tripItems={tripItems} />}
   {/* Discover view temporarily hidden while Unsplash account is in review */}
       </div>
