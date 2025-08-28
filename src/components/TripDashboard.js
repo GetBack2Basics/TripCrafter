@@ -179,6 +179,25 @@ export default function TripDashboard() {
   const [tripItems, setTripItems] = useState(sortTripItems(defaultTasmaniaTripDataRaw.map(normalizeTripItem)));
   const [mergeRequests, setMergeRequests] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [debugLogs, setDebugLogs] = useState([]);
+  const pushDebug = (msg) => {
+    const ts = new Date().toISOString();
+    const entry = { ts, msg };
+    setDebugLogs(d => [entry, ...d].slice(0, 200));
+    try {
+      // maintain a global copy so the DebugPanel can read it without prop drilling
+      // eslint-disable-next-line no-undef
+      if (typeof window !== 'undefined') {
+        // eslint-disable-next-line no-undef
+        window.__TRIPCRAFT_DEBUG_LOGS__ = [entry].concat(window.__TRIPCRAFT_DEBUG_LOGS__ || []).slice(0, 200);
+      }
+    } catch (e) {
+      // ignore
+    }
+    // also mirror to console for dev
+    // eslint-disable-next-line no-console
+    console.debug('[debugPanel]', ts, msg);
+  };
   const addToast = (message, kind = 'info') => {
     const id = Date.now() + Math.random();
     setToasts(t => [...t, { id, message, kind }]);
@@ -279,6 +298,7 @@ export default function TripDashboard() {
             await batch.commit();
           } catch (e) {
             console.error('Failed reindex batch', e);
+            pushDebug(`Failed reindex batch: ${e && e.message ? e.message : String(e)}`);
             addToast('Failed to reindex item order remotely', 'warning');
           }
         }
@@ -300,6 +320,7 @@ export default function TripDashboard() {
           await updateDoc(movedDocRef, { position: newPos });
         } catch (err) {
           console.error('Failed to persist reordering', err);
+          pushDebug(`Failed to persist reordering: ${err && err.message ? err.message : String(err)}`);
           addToast('Could not persist reorder remotely — saved locally only', 'warning');
         }
       })();
@@ -365,7 +386,7 @@ export default function TripDashboard() {
           }
         }
         if (currentTripId) {
-          try { await batch.commit(); } catch (e) { console.error('Failed reindex batch', e); addToast('Failed to reindex item order remotely', 'warning'); }
+          try { await batch.commit(); } catch (e) { console.error('Failed reindex batch', e); pushDebug(`Failed reindex batch: ${e && e.message ? e.message : String(e)}`); addToast('Failed to reindex item order remotely', 'warning'); }
         }
         setTripItems(sortTripItems(newNext));
         addToast('Reindexed items and moved up', 'success');
@@ -384,6 +405,7 @@ export default function TripDashboard() {
           addToast('Moved up', 'success');
         } catch (e) {
           console.error('Failed to persist move up', e);
+          pushDebug(`Failed to persist move up: ${e && e.message ? e.message : String(e)}`);
           addToast('Could not persist move up remotely', 'warning');
         }
       })();
@@ -461,6 +483,7 @@ export default function TripDashboard() {
           addToast('Moved down', 'success');
         } catch (e) {
           console.error('Failed to persist move down', e);
+          pushDebug(`Failed to persist move down: ${e && e.message ? e.message : String(e)}`);
           addToast('Could not persist move down remotely', 'warning');
         }
       })();
@@ -1017,7 +1040,7 @@ export default function TripDashboard() {
         }
       }} />
       <TripHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
-      {/* Add/Edit Trip Item Modal */}
+  {/* Add/Edit Trip Item Modal */}
       {showAddForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-0 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
@@ -1046,6 +1069,51 @@ export default function TripDashboard() {
               isEditing={!!editingItem}
             />
           </div>
+        </div>
+      )}
+      {/* Temporary Debug Panel (visible in dev) */}
+      <div className="fixed right-4 bottom-4 z-50">
+        <DebugPanel />
+      </div>
+    </div>
+  );
+}
+
+function DebugPanel() {
+  // Use window.__TRIPCRAFT_DEBUG_PANEL__ to access state from TripDashboard during dev
+  // When rendered within TripDashboard we will rely on closure captured pushDebug via props; as a simple approach
+  // render a small placeholder that reads from the global debugLogs populated by TripDashboard via console.debug.
+  const [open, setOpen] = React.useState(false);
+  const [logs, setLogs] = React.useState([]);
+  React.useEffect(() => {
+    const handle = () => {
+      // Try reading from a global injected by TripDashboard; fallback to console-only
+      // eslint-disable-next-line no-undef
+      const g = (typeof window !== 'undefined' && window.__TRIPCRAFT_DEBUG_LOGS__) ? window.__TRIPCRAFT_DEBUG_LOGS__ : [];
+      setLogs(g.slice(0, 50));
+    };
+    handle();
+    const iv = setInterval(handle, 1500);
+    return () => clearInterval(iv);
+  }, []);
+  return (
+    <div className={`bg-white border rounded shadow p-2 text-xs w-80 ${open ? 'max-h-72 overflow-y-auto' : ''}`}>
+      <div className="flex items-center justify-between">
+        <div className="font-semibold">Debug</div>
+        <div className="flex gap-2">
+          <button className="px-2 py-1 bg-gray-100 rounded" onClick={() => { setOpen(o => !o); }}> {open ? 'Hide' : 'Show'} </button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-2">
+          {logs.length === 0 ? <div className="text-gray-400">No debug logs</div> : (
+            logs.map((l, idx) => (
+              <div key={idx} className="mb-1 border-b pb-1">
+                <div className="text-gray-500">{l.ts || ''}</div>
+                <div>{String(l.msg || l).slice(0, 200)}</div>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
