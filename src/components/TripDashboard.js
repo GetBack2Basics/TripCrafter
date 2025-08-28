@@ -180,6 +180,9 @@ export default function TripDashboard() {
   const [mergeRequests, setMergeRequests] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [debugLogs, setDebugLogs] = useState([]);
+  const [pendingOps, setPendingOps] = useState([]);
+  const [lastSyncedItems, setLastSyncedItems] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
   const pushDebug = (msg) => {
     const ts = new Date().toISOString();
     const entry = { ts, msg };
@@ -203,6 +206,8 @@ export default function TripDashboard() {
     setToasts(t => [...t, { id, message, kind }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4500);
   };
+
+  const hasPending = () => Array.isArray(pendingOps) && pendingOps.length > 0;
   const [newItem, setNewItem] = useState({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
   const [editingItem, setEditingItem] = useState(null);
 
@@ -313,20 +318,9 @@ export default function TripDashboard() {
     const updatedNext = next.map(i => i.id === moved.id ? { ...i, position: newPos } : i);
     setTripItems(sortTripItems(updatedNext));
 
-    if (currentTripId) {
-      (async () => {
-        try {
-          const movedDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, moved.id);
-          await updateDoc(movedDocRef, { position: newPos });
-        } catch (err) {
-          console.error('Failed to persist reordering', err);
-          pushDebug(`Failed to persist reordering: ${err && err.message ? err.message : String(err)}`);
-          addToast('Could not persist reorder remotely — saved locally only', 'warning');
-        }
-      })();
-    } else {
-      addToast('Reordered items', 'success');
-    }
+  // Stage the position update and queue a pending op (will be flushed on Save)
+  setPendingOps(prev => [...prev, { op: 'update', id: moved.id, payload: { position: newPos } }]);
+  addToast('Reorder staged (save to persist)', 'info');
   };
 
   // Move item up/down within the same date group by item id
@@ -397,21 +391,9 @@ export default function TripDashboard() {
 
     const updated = next.map(x => x.id === id ? { ...x, position: newPos } : x);
     setTripItems(sortTripItems(updated));
-    if (currentTripId) {
-      (async () => {
-        try {
-          const itemRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, id);
-          await updateDoc(itemRef, { position: newPos });
-          addToast('Moved up', 'success');
-        } catch (e) {
-          console.error('Failed to persist move up', e);
-          pushDebug(`Failed to persist move up: ${e && e.message ? e.message : String(e)}`);
-          addToast('Could not persist move up remotely', 'warning');
-        }
-      })();
-    } else {
-      addToast('Moved up', 'success');
-    }
+  // Stage move up as pending update
+  setPendingOps(prev => [...prev, { op: 'update', id, payload: { position: newPos } }]);
+  addToast('Move staged (save to persist)', 'info');
   };
 
   const handleMoveDown = (id) => {
@@ -475,21 +457,8 @@ export default function TripDashboard() {
 
     const updated = next.map(x => x.id === id ? { ...x, position: newPos } : x);
     setTripItems(sortTripItems(updated));
-    if (currentTripId) {
-      (async () => {
-        try {
-          const itemRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, id);
-          await updateDoc(itemRef, { position: newPos });
-          addToast('Moved down', 'success');
-        } catch (e) {
-          console.error('Failed to persist move down', e);
-          pushDebug(`Failed to persist move down: ${e && e.message ? e.message : String(e)}`);
-          addToast('Could not persist move down remotely', 'warning');
-        }
-      })();
-    } else {
-      addToast('Moved down', 'success');
-    }
+  setPendingOps(prev => [...prev, { op: 'update', id, payload: { position: newPos } }]);
+  addToast('Move staged (save to persist)', 'info');
   };
 
   // Demo trip editing logic (add, edit, delete)
@@ -516,29 +485,12 @@ export default function TripDashboard() {
       setShowAddForm(false);
       setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
     };
-    if (currentTripId) {
-      (async () => {
-        try {
-          const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
-          // ensure we don't send an `id` field to addDoc (Firestore will create the doc id)
-          const payload = { ...itemToAdd };
-          delete payload.id;
-          await addDoc(itineraryRef, payload);
-          // onSnapshot will update local state; just reset UI
-          resetLocal();
-        } catch (err) {
-          console.error('Failed to add itinerary item', err);
-          // fall back to local
-          const itemWithId = { ...itemToAdd, id: Math.random().toString(36).substr(2, 9) };
-          setTripItems(prev => sortTripItems([...prev, itemWithId]));
-          resetLocal();
-        }
-      })();
-    } else {
-  const itemWithId = { ...itemToAdd, id: Math.random().toString(36).substr(2, 9) };
-  setTripItems(prev => sortTripItems([...prev, itemWithId]));
-      resetLocal();
-    }
+  // Staging: add to local state and queue a pending create op.
+  const tempId = `temp_${Math.random().toString(36).slice(2,9)}`;
+  const staged = { ...itemToAdd, id: tempId };
+  setTripItems(prev => sortTripItems([...prev, staged]));
+  setPendingOps(prev => [...prev, { op: 'create', tempId, payload: { ...itemToAdd } }]);
+  resetLocal();
   };
   const handleEditClick = (item) => {
     setEditingItem(item);
@@ -551,51 +503,18 @@ export default function TripDashboard() {
       setEditingItem(null);
       setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
     };
-    if (currentTripId && editingItem && editingItem.id) {
-      (async () => {
-        try {
-          const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, editingItem.id);
-          await updateDoc(itemDocRef, { ...newItem });
-          // onSnapshot will update local state
-          resetLocal();
-        } catch (err) {
-          console.error('Failed to update itinerary item', err);
-          // fallback to local update
-          setTripItems(prev => sortTripItems(prev.map(item => item.id === editingItem.id ? newItem : item)));
-          resetLocal();
-        }
-      })();
-    } else {
-  setTripItems(prev => sortTripItems(prev.map(item => item.id === (editingItem && editingItem.id) ? newItem : item)));
-      resetLocal();
+    // Stage the edit locally and queue a pending update
+    setTripItems(prev => sortTripItems(prev.map(item => item.id === (editingItem && editingItem.id) ? { ...item, ...newItem } : item)));
+    if (editingItem && editingItem.id) {
+      setPendingOps(prev => [...prev, { op: 'update', id: editingItem.id, payload: { ...newItem } }]);
     }
+    resetLocal();
   };
   const handleDeleteItem = (id) => {
-    // Optimistic local removal so UI is responsive.
-    setTripItems(prev => sortTripItems(prev.filter(item => item.id !== id)));
-
-    // If a trip is selected, attempt remote delete only for signed-in users.
-    if (currentTripId) {
-      if (!userId) {
-        // Not signed in: inform the user that remote deletion requires sign-in.
-        addToast('Sign in to persist deletions to the cloud. Item removed locally only.', 'warning');
-        return;
-      }
-      (async () => {
-        try {
-          const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, id);
-          await deleteDoc(itemDocRef);
-          addToast('Deleted item', 'success');
-          // onSnapshot will confirm remote state
-        } catch (err) {
-          console.error('Failed to delete itinerary item remotely', err);
-          addToast('Could not delete item remotely — it may be a permissions issue', 'warning');
-          // onSnapshot will refresh local state from remote; no further action here
-        }
-      })();
-    } else {
-      addToast('Deleted item (local demo)', 'success');
-    }
+  // Stage local deletion and queue a pending delete op
+  setTripItems(prev => sortTripItems(prev.filter(item => item.id !== id)));
+  setPendingOps(prev => [...prev, { op: 'delete', id }]);
+  addToast('Change staged (save to persist to Firestore)', 'info');
   };
 
   // Omni import consumer: expects payload = [{ entry, action }]
@@ -917,6 +836,63 @@ export default function TripDashboard() {
     setShowTripCreateModal(true);
   };
 
+  const discardPendingChanges = () => {
+    // Reload last synced items (if present) otherwise refetch by clearing currentTripId briefly
+    if (lastSyncedItems && lastSyncedItems.length > 0) {
+      setTripItems(sortTripItems(lastSyncedItems));
+    }
+    setPendingOps([]);
+    addToast('Discarded staged changes', 'muted');
+  };
+
+  const savePendingChanges = async () => {
+    if (!currentTripId) { addToast('No trip selected to save to', 'warning'); return; }
+    if (!userId) { addToast('Sign in to save changes to Firestore', 'warning'); return; }
+    if (!hasPending()) { addToast('No staged changes', 'muted'); return; }
+    setIsSaving(true);
+    try {
+      const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
+      const creates = pendingOps.filter(p => p.op === 'create');
+      const updates = pendingOps.filter(p => p.op === 'update');
+      const deletes = pendingOps.filter(p => p.op === 'delete');
+
+      // First perform creates (addDoc) and map tempIds -> realIds
+      const tempToReal = {};
+      for (const c of creates) {
+        const payload = { ...c.payload }; delete payload.id;
+        const docRef = await addDoc(itineraryRef, payload);
+        tempToReal[c.tempId] = docRef.id;
+      }
+
+      // Batch updates and deletes
+      const batch = writeBatch(db);
+      for (const u of updates) {
+        const targetId = u.id && u.id.startsWith('temp_') ? (tempToReal[u.id] || null) : u.id;
+        if (!targetId) continue;
+        const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, targetId);
+        batch.set(itemDocRef, u.payload, { merge: true });
+      }
+      for (const d of deletes) {
+        const targetId = d.id && d.id.startsWith('temp_') ? (tempToReal[d.id] || null) : d.id;
+        if (!targetId) continue;
+        const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, targetId);
+        batch.delete(itemDocRef);
+      }
+      await batch.commit();
+
+      addToast('Saved staged changes to Firestore', 'success');
+      setPendingOps([]);
+      // trigger reload: we'll let onSnapshot update local items, but keep a snapshot backup
+      setLastSyncedItems(tripItems.slice());
+    } catch (e) {
+      console.error('Failed to save staged changes', e);
+      pushDebug(`Failed to save staged changes: ${e && e.message ? e.message : String(e)}`);
+      addToast('Failed to save staged changes remotely', 'warning');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleTripSelect = (trip) => {
     if (trip && trip.id) setCurrentTripId(trip.id);
   };
@@ -1005,6 +981,11 @@ export default function TripDashboard() {
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
           <h2 className="text-2xl font-bold text-indigo-700 tracking-tight">Trip Itinerary</h2>
+          <div className="mt-2 flex items-center gap-2">
+            <button onClick={() => savePendingChanges()} disabled={!hasPending() || isSaving} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm disabled:opacity-50">{isSaving ? 'Saving...' : 'Save changes'}</button>
+            <button onClick={() => discardPendingChanges()} disabled={!hasPending() || isSaving} className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm disabled:opacity-50">Discard staged</button>
+            {hasPending() && <div className="text-xs text-gray-500 ml-2">Staged changes: {pendingOps.length}</div>}
+          </div>
           <div className="flex items-center gap-3 mt-1">
             <div className="text-gray-500 text-sm">Plan, organize, and visualize your trip</div>
             {userId ? (
