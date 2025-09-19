@@ -73,7 +73,7 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                     `${dragOverIndex === idx ? 'bg-indigo-50' : ''} ${draggedIndex === idx ? 'opacity-50' : ''}`
                   }
                 >
-                  <td className="px-3 py-3 text-sm text-gray-600 align-middle">{idx + 1}</td>
+                  <td className="px-3 py-3 text-sm text-gray-600 align-middle">{typeof item.displayIndex === 'number' ? item.displayIndex : (idx + 1)}</td>
                   <td className="px-2 py-3 cursor-grab text-gray-400 align-middle">
                     <GripVertical className="w-5 h-5" />
                   </td>

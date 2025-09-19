@@ -95,7 +95,8 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
 
       for (let i = 0; i < sortedTripItems.length; i++) {
         const item = sortedTripItems[i];
-        if (item.type === 'enroute' && !showEnroute) continue;
+        // Always include enroute items in routing calculations so we can compute travelTime/distance,
+        // but suppress visible markers for enroute items when zoom is low.
         if (item.type === 'note') continue;
         try {
           const results = await new Promise((resolve, reject) => {
@@ -113,7 +114,10 @@ function Map({ tripItems, onUpdateTravelTime, activeIndex, setActiveIndex }) {
               scale = 8; fillColor = '#f59e42'; strokeColor = '#fbbf24';
             }
             if (activeIndex === i) { fillColor = '#f59e42'; strokeColor = '#f59e42'; }
-            const marker = new window.google.maps.Marker({ position, map, title: `${i + 1}. ${item.location}`, label: { text: (i + 1).toString(), color: 'white', fontWeight: 'bold' }, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale, fillColor, fillOpacity: 1, strokeColor, strokeWeight: 2 }, zIndex: activeIndex === i ? 999 : 1 });
+            const labelIndex = (typeof item.displayIndex === 'number') ? item.displayIndex : (i + 1);
+            const createMarker = !(item.type === 'enroute' && !showEnroute);
+            const markerOpts = { position, title: `${labelIndex}. ${item.location}`, label: { text: String(labelIndex), color: 'white', fontWeight: 'bold' }, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale, fillColor, fillOpacity: 1, strokeColor, strokeWeight: 2 }, zIndex: activeIndex === i ? 999 : 1 };
+            const marker = createMarker ? new window.google.maps.Marker({ ...markerOpts, map }) : new window.google.maps.Marker({ ...markerOpts, visible: false });
             const infoWindow = new window.google.maps.InfoWindow({ content: `<div style="font-family: sans-serif;"><h3 style="margin: 0 0 8px 0; color: #4F46E5;">${item.location}</h3><p style="margin: 0; color: #666;"><strong>Date:</strong> ${item.date}</p><p style="margin: 0; color: #666;"><strong>Stay:</strong> ${item.accommodation || ''}</p>${(item.type === 'roofed' || item.type === 'camp') ? `<p style='margin:0;color:#2563eb;'><strong>Nights:</strong> ${accomNights[item.location]}</p>` : ''}</div>` });
             marker.addListener('click', () => { infoWindow.open(map, marker); setActiveIndex && setActiveIndex(i); });
             markers.push(marker); bounds.extend(position); validLocations.push(item.location);
@@ -200,23 +204,10 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
     );
   }
 
-  if (!apiKey) {
-    return (
-      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4">
-        <p className="font-bold">Google Maps API Key Required</p>
-        <p>Please set your Google Maps API key in the environment variable: REACT_APP_GOOGLE_MAPS_API_KEY</p>
-        <p className="text-sm mt-2">
-          To get an API key:
-        </p>
-        <ol className="text-sm mt-2 ml-4 list-decimal">
-          <li>Visit Google Cloud Console</li>
-          <li>Enable Maps JavaScript API and Directions API</li>
-          <li>Create an API key</li>
-          <li>Add it to Netlify environment variables</li>
-        </ol>
-      </div>
-    );
-  }
+  const noApiKey = !apiKey;
+  // When no API key is present, show a prominent banner but continue to render the timeline so
+  // numbers and any persisted travel times are visible for verification. Map features (geocoding
+  // and directions) will be inactive without an API key.
 
   if (mappableItems.length === 0) {
     return (

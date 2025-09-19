@@ -221,6 +221,26 @@ export default function TripDashboard() {
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4500);
   };
 
+  // Restore any local draft saved by demo/offline savePendingChanges()
+  useEffect(() => {
+    try {
+      const draftKey = 'tripDraft:local';
+      const raw = (typeof window !== 'undefined' && window.localStorage) ? window.localStorage.getItem(draftKey) : null;
+      if (raw) {
+        const draft = JSON.parse(raw || '{}');
+        if (draft && Array.isArray(draft.tripItems) && draft.tripItems.length > 0) {
+          // Normalize before applying
+          const items = draft.tripItems.map(normalizeTripItem);
+          setTripItems(sortTripItems(items));
+          setPendingOps(Array.isArray(draft.pendingOps) ? draft.pendingOps.slice() : []);
+          addToast('Restored local draft changes', 'info');
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   const hasPending = () => Array.isArray(pendingOps) && pendingOps.length > 0;
   const [newItem, setNewItem] = useState({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
   const [editingItem, setEditingItem] = useState(null);
@@ -905,9 +925,96 @@ export default function TripDashboard() {
     });
   };
 
+  // Compute travelTime/distance for the trip using Google Directions API (browser-side) and persist results.
+  const computeAndPersistTravelTimes = async (tripId, items) => {
+    if (!tripId || !Array.isArray(items) || items.length < 2) return;
+    if (typeof window === 'undefined' || !window.google || !window.google.maps || !window.google.maps.DirectionsService) {
+      pushDebug('Google Maps API not available in this context; skipping travel time computation');
+      return;
+    }
+    try {
+      const validLocations = items.filter(it => it.type !== 'note').map(i => i.location).filter(Boolean);
+      if (validLocations.length < 2) return;
+      const directionsService = new window.google.maps.DirectionsService();
+      const waypoints = validLocations.slice(1, -1).map(location => ({ location, stopover: true }));
+      const request = {
+        origin: validLocations[0],
+        destination: validLocations[validLocations.length - 1],
+        waypoints,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+        unitSystem: window.google.maps.UnitSystem.METRIC
+      };
+      const result = await new Promise((resolve, reject) => directionsService.route(request, (res, status) => status === 'OK' ? resolve(res) : reject(new Error(`Directions failed: ${status}`))));
+      if (!result || !result.routes || !result.routes[0] || !result.routes[0].legs) return;
+      const legs = result.routes[0].legs;
+      // Map legs to destination locations: legs[i] corresponds to destination validLocations[i+1]
+      const updates = [];
+      for (let i = 0; i < legs.length; i++) {
+        const leg = legs[i];
+        const destLocation = validLocations[i + 1];
+        const tripItem = items.find(it => (it.location || '') === (destLocation || ''));
+        if (!tripItem) continue;
+        const duration = leg.duration && leg.duration.text ? leg.duration.text : '';
+        const distance = leg.distance && leg.distance.text ? leg.distance.text : '';
+        updates.push({ id: tripItem.id, duration, distance });
+      }
+      if (updates.length === 0) return;
+      // Persist to Firestore (batch)
+      if (tripId && userId) {
+        const batch2 = writeBatch(db);
+        for (const u of updates) {
+          const targetId = u.id;
+          if (!targetId) continue;
+          const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${tripId}/itineraryItems`, targetId);
+          batch2.set(itemDocRef, stripUndefined({ travelTime: u.duration, distance: u.distance }), { merge: true });
+        }
+        try {
+          await batch2.commit();
+          pushDebug('Persisted travel time updates for trip ' + tripId);
+          addToast('Updated estimated travel times', 'success');
+        } catch (e) {
+          console.error('Failed to persist travel time updates', e);
+          pushDebug('Failed to persist travel time updates: ' + e.message);
+          addToast('Could not persist travel time updates remotely', 'warning');
+        }
+      } else {
+        // Demo mode: update local state and localStorage
+        const updatedLocal = (tripItems || []).map(it => {
+          const found = updates.find(u => u.id === it.id);
+          return found ? { ...it, travelTime: found.duration, distance: found.distance } : it;
+        });
+        setTripItems(sortTripItems(updatedLocal));
+        try { localStorage.setItem('tripDraft:local', JSON.stringify({ tripItems: updatedLocal, pendingOps: [] })); } catch (e) {}
+        addToast('Updated estimated travel times (local)', 'success');
+      }
+    } catch (err) {
+      console.error('computeAndPersistTravelTimes failed', err);
+      pushDebug('computeAndPersistTravelTimes failed: ' + (err && err.message ? err.message : String(err)));
+    }
+  };
+
   const savePendingChanges = async () => {
-    if (!currentTripId) { addToast('No trip selected to save to', 'warning'); return; }
-    if (!userId) { addToast('Sign in to save changes to Firestore', 'warning'); return; }
+    if (!currentTripId || !userId) {
+      // Offline/demo save: persist staged changes to localStorage so the Save button is usable
+      try {
+        const draftKey = currentTripId ? `tripDraft:${currentTripId}` : 'tripDraft:local';
+        const draft = { tripItems: (tripItems || []).slice(), pendingOps: (pendingOps || []).slice(), savedAt: Date.now() };
+        try { localStorage.setItem(draftKey, JSON.stringify(draft)); } catch (e) { /* some environments may block localStorage */ }
+  setLastSyncedItems(tripItems.slice());
+  setPendingOps([]);
+  addToast('Saved staged changes locally (not persisted to Firestore). Sign in to sync remotely.', 'success');
+      try {
+        // For newly created items we have temp_ ids locally; remap them to real ids returned by addDoc
+        const itemsForCompute = tripItems.map(it => ({ ...it, id: (it.id && it.id.startsWith('temp_') ? (tempToReal[it.id] || it.id) : it.id) }));
+        computeAndPersistTravelTimes(currentTripId, itemsForCompute);
+      } catch (e) { /* ignore */ }
+      } catch (e) {
+        console.error('Failed to save staged changes locally', e);
+        addToast('Failed to save staged changes locally', 'warning');
+      }
+      setIsSaving(false);
+      return;
+    }
     if (!hasPending()) { addToast('No staged changes', 'muted'); return; }
     setIsSaving(true);
     try {
@@ -994,10 +1101,11 @@ export default function TripDashboard() {
           }
         }
 
-      addToast('Saved staged changes to Firestore', 'success');
-      setPendingOps([]);
-      // trigger reload: we'll let onSnapshot update local items, but keep a snapshot backup
-      setLastSyncedItems(tripItems.slice());
+  addToast('Saved staged changes to Firestore', 'success');
+  setPendingOps([]);
+  // trigger reload: we'll let onSnapshot update local items, but keep a snapshot backup
+  setLastSyncedItems(tripItems.slice());
+  try { computeAndPersistTravelTimes(currentTripId, tripItems); } catch (e) { /* ignore */ }
     } catch (e) {
       console.error('Failed to save staged changes', e);
       pushDebug(`Failed to save staged changes: ${e && e.message ? e.message : String(e)}`);
