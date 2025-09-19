@@ -21,7 +21,7 @@ It has been created entirely using LLM's with some tech stacks the author had ne
 
 
 🖼️ **Discover Pane**: At the top of your dashboard, see up to 3 locations from your itinerary, each cycling through up to 3 images every 10 seconds. Use the arrows to scroll through more locations, or let the images cycle automatically. The app loads images directly from Unsplash at runtime.
-🗺️ **Interactive Map View**: Visualize your trip route on Google Maps with turn-by-turn directions between locations and automatic travel time calculations.
+🗺️ **Interactive Map View**: Visualize your trip route on OpenStreetMap with turn-by-turn directions between locations and automatic travel time calculations using free routing services.
 
 🏝️ **Sample Trip**: The app comes pre-populated with an example Tasmania trip itinerary to get you started!
 
@@ -43,16 +43,17 @@ It has been created entirely using LLM's with some tech stacks the author had ne
 - Firebase Authentication: Used for anonymous user authentication to enable data persistence
 
 **AI & Processing:**
-- OpenAI GPT-4: Advanced AI parsing for trip data extraction (optional)
+- Hugging Face API: Free AI parsing for trip data extraction (primary)
+- OpenAI GPT-3.5: Advanced AI parsing fallback (optional, paid)
 - PDF.js: Client-side PDF text extraction
 - Custom Pattern Matching: Intelligent fallback parsing without API requirements
 
 
 **Maps & Location:**
-- Google Maps API: Integrated for displaying interactive maps and routing between trip locations
-- Directions API: Automatic travel time calculations and route optimization
-- Geocoding API: Address lookup and location validation (optional)
-- **Discover Images:** Loaded dynamically from Unsplash (source.unsplash.com) at runtime for the Discover pane.
+- OpenStreetMap: Free worldwide mapping tiles
+- Leaflet: Open-source JavaScript library for interactive maps
+- Nominatim: Free geocoding service for address-to-coordinates conversion
+- OSRM (Open Source Routing Machine): Free routing and directions service
 
 **Deployment:**
 - Netlify: Continuous deployment and hosting
