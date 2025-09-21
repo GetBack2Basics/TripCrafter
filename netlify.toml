@@ -1,0 +1,8 @@
+[build]
+  command = "npm run build"
+  publish = "build"
+
+# Optional: ensure Netlify uses the correct base directory and environment
+# Uncomment and adjust if you use a different base directory
+#[context.production.environment]
+#  NODE_ENV = "production"
