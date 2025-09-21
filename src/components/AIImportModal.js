@@ -50,9 +50,9 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
         return;
       }
       source = inputValue.trim();
-    } else if (importType === 'pdf') {
+    } else if (importType === 'document') {
       if (!selectedFile) {
-        onError('Please select a PDF file');
+        onError('Please select a document file');
         return;
       }
       source = selectedFile;
@@ -92,19 +92,21 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
           setReviewData(withStatus);
       } else {
         // On error or missing key, show the generated prompt for manual LLM use and show JSON page immediately
-        let prompt = '';
-        try {
-          const profile = {
-            adults: Number(initialProfile.adults) || 2,
-            children: Number(initialProfile.children) || 0,
-            interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
-            diet: initialProfile.diet || 'everything',
-            state: initialProfile.state,
-            country: initialProfile.country
-          };
-          prompt = await aiImportService.getPrompt(source, importType, profile);
-        } catch (e) {
-          prompt = 'No prompt available. Please check your API key or try manual import.';
+        let prompt = result.prompt || '';
+        if (!prompt) {
+          try {
+            const profile = {
+              adults: Number(initialProfile.adults) || 2,
+              children: Number(initialProfile.children) || 0,
+              interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
+              diet: initialProfile.diet || 'everything',
+              state: initialProfile.state,
+              country: initialProfile.country
+            };
+            prompt = await aiImportService.getPrompt(source, importType, profile);
+          } catch (e) {
+            prompt = 'No prompt available. Please check your API key or try manual import.';
+          }
         }
         setLlmPrompt(prompt);
         setShowPrompt(true);
@@ -621,16 +623,16 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                   </button>
                   <button
                     type="button"
-                    onClick={() => setImportType('pdf')}
+                    onClick={() => setImportType('document')}
                     className={`p-3 text-center rounded-lg border-2 transition duration-200 ${
-                      importType === 'pdf'
+                      importType === 'document'
                         ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
                         : 'border-gray-300 hover:border-gray-400'
                     }`}
                     disabled={isProcessing}
                   >
                     <div className="text-2xl mb-1">📄</div>
-                    <div className="text-sm font-medium">PDF File</div>
+                    <div className="text-sm font-medium">Document File</div>
                   </button>
                   <button
                     type="button"
@@ -669,20 +671,20 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                       </p>
                     </div>
                   )}
-                  {importType === 'pdf' && (
+                  {importType === 'document' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        PDF File
+                        Document File
                       </label>
                       <input
                         type="file"
-                        accept=".pdf"
+                        accept=".pdf,.doc,.docx,.txt,.rtf,.xlsx,.xls,.csv,.jpg,.jpeg,.png"
                         onChange={handleFileChange}
                         className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
                         disabled={isProcessing}
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Upload a PDF booking confirmation, itinerary, or travel document
+                        Upload any document containing booking information (PDF, Word, Text, Excel, images, etc.)
                       </p>
                     </div>
                   )}

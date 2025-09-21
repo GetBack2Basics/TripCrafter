@@ -38,7 +38,7 @@ export class AIImportService {
       let content = '';
       let detectedType = type;
 
-      if (type === 'auto') {
+      if (type === 'auto' || source instanceof File) {
         detectedType = this.detectSourceType(source);
       }
 
@@ -52,6 +52,12 @@ export class AIImportService {
         case 'text':
           content = source;
           break;
+        case 'rtf':
+        case 'docx':
+        case 'spreadsheet':
+        case 'image':
+          content = await this.extractFromDocument(source, detectedType);
+          break;
         default:
           throw new Error('Unsupported source type');
       }
@@ -61,6 +67,17 @@ export class AIImportService {
       }
 
   let parsedData = await llmService.parseBookingInformation(content, profile);
+
+      // Check if LLM returned a prompt instead of parsed data
+      if (parsedData && typeof parsedData === 'object' && parsedData.type === 'prompt') {
+        return {
+          success: false,
+          error: 'AI import failed: API not available or failed. Use the provided prompt with your LLM to get the JSON result.',
+          prompt: parsedData.prompt,
+          sourceType: detectedType,
+          contentLength: content.length
+        };
+      }
 
       // If LLM returned a single object, wrap it into an array for consistency
       if (!Array.isArray(parsedData) && parsedData && typeof parsedData === 'object') {
@@ -195,9 +212,47 @@ export class AIImportService {
     }
     
     if (source instanceof File) {
-      if (source.type === 'application/pdf') {
+      const mimeType = source.type;
+      const fileName = source.name.toLowerCase();
+      
+      // PDF files
+      if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {
         return 'pdf';
       }
+      
+      // Text-based documents
+      if (mimeType === 'text/plain' || fileName.endsWith('.txt')) {
+        return 'text';
+      }
+      
+      // Rich text format
+      if (mimeType === 'application/rtf' || fileName.endsWith('.rtf')) {
+        return 'rtf';
+      }
+      
+      // Microsoft Word documents
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+          mimeType === 'application/msword' ||
+          fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
+        return 'docx';
+      }
+      
+      // Excel files
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          mimeType === 'application/vnd.ms-excel' ||
+          fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
+        return 'spreadsheet';
+      }
+      
+      // Images (for OCR)
+      if (mimeType.startsWith('image/') || 
+          fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || 
+          fileName.endsWith('.png') || fileName.endsWith('.gif') || 
+          fileName.endsWith('.bmp')) {
+        return 'image';
+      }
+      
+      // Default to text for unknown types
       return 'text';
     }
 
@@ -308,8 +363,8 @@ export class AIImportService {
     // Dynamic import to avoid loading PDF.js unless needed
     const pdfjsLib = await import('pdfjs-dist');
     
-    // Configure worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    // Configure worker - use the worker from public directory
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
     
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -326,6 +381,37 @@ export class AIImportService {
       return fullText;
     } catch (error) {
       throw new Error(`Failed to extract text from PDF: ${error.message}`);
+    }
+  }
+
+  async extractFromDocument(file, type) {
+    try {
+      // For text-based files, try to read as text
+      if (type === 'text' || type === 'rtf') {
+        return await file.text();
+      }
+      
+      // For binary formats, indicate that manual conversion is needed
+      if (type === 'docx') {
+        throw new Error('DOCX files are not yet supported. Please convert to PDF, TXT, or paste the text content manually.');
+      }
+      
+      if (type === 'spreadsheet') {
+        throw new Error('Spreadsheet files are not yet supported. Please export as CSV or paste the data as text.');
+      }
+      
+      if (type === 'image') {
+        throw new Error('Image files are not yet supported. Please use OCR tools to extract text or paste the text content manually.');
+      }
+      
+      // Fallback: try to read as text
+      try {
+        return await file.text();
+      } catch (textError) {
+        throw new Error(`Unable to extract text from ${type} file. Please convert to a supported format (PDF, TXT) or paste the content manually.`);
+      }
+    } catch (error) {
+      throw new Error(`Failed to extract content from document: ${error.message}`);
     }
   }
 
