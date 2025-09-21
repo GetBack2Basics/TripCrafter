@@ -1,0 +1,19 @@
+{
+  "name": "tripcrafter",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom --watchAll=false",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-scripts": "5.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
