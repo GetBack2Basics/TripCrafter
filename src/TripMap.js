@@ -93,23 +93,30 @@ function createCustomIcon(number, type, isActive, scale = 1) {
     </div>
   `;
 
+  // Add an 'active' class when this marker is active so CSS can animate it
+  const className = `custom-marker${isActive ? ' active' : ''}`;
+
   return L.divIcon({
     html,
-    className: 'custom-marker',
+    className,
     iconSize: [size, size],
     iconAnchor: [size/2, size/2]
   });
 }
 
 // Main TripMap component with Leaflet
-function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
+function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdateTravelTimes = false, onSaveRouteTimes = null }) {
   const [markers, setMarkers] = useState([]);
   const [route, setRoute] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(7);
+  const [previewRoute, setPreviewRoute] = useState(null);
+  const [previewTimes, setPreviewTimes] = useState(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [accomNights, setAccomNights] = useState({});
   const [activeIndex, setActiveIndex] = useState(null);
   const [imageIndexes, setImageIndexes] = useState({});
+  const [mapInstance, setMapInstance] = useState(null);
 
   // Filter out "note" type items from mapping and sort by date for consistent ordering
   const mappableItems = tripItems.filter(item => item.type !== 'note');
@@ -184,23 +191,24 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
         console.log('Getting route for coordinates:', coordinates);
         const routeData = await getRoute(coordinates);
         console.log('Route data received:', routeData);
-        if (routeData) {
+          if (routeData) {
           const routeCoords = routeData.geometry.coordinates.map(coord => [coord[1], coord[0]]); // Convert to [lat, lng]
           console.log('Converted route coordinates:', routeCoords.slice(0, 5), '...'); // Log first 5 points
           setRoute(routeCoords);
 
           // Update travel times
-          if (onUpdateTravelTime && routeData.legs) {
-            routeData.legs.forEach((leg, idx) => {
-              const duration = `${Math.round(leg.duration / 60)} mins`;
-              const distance = `${(leg.distance / 1000).toFixed(1)} km`;
-              const destinationIndex = idx + 1;
-              if (destinationIndex < newMarkers.length) {
-                const itemId = newMarkers[destinationIndex].id;
-                onUpdateTravelTime(itemId, duration, distance, null);
-              }
-            });
-          }
+            // Only push travel time updates to parent if autoUpdateTravelTimes is true
+            if (autoUpdateTravelTimes && onUpdateTravelTime && routeData.legs) {
+              routeData.legs.forEach((leg, idx) => {
+                const duration = `${Math.round(leg.duration / 60)} mins`;
+                const distance = `${(leg.distance / 1000).toFixed(1)} km`;
+                const destinationIndex = idx + 1;
+                if (destinationIndex < newMarkers.length) {
+                  const itemId = newMarkers[destinationIndex].id;
+                  onUpdateTravelTime(itemId, duration, distance, null);
+                }
+              });
+            }
         } else {
           console.log('No route data received from OSRM');
         }
@@ -217,6 +225,92 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
   useEffect(() => {
     processLocations();
   }, [processLocations]);
+
+  // Update marker icons when activeIndex changes so the active marker gets the 'active' CSS class
+  useEffect(() => {
+    if (!markers || markers.length === 0) return;
+    setMarkers(prev => prev.map(m => ({
+      ...m,
+      icon: createCustomIcon((typeof m.item.displayIndex === 'number' ? m.item.displayIndex : (m.index + 1)), m.item.type, activeIndex === m.index, 1)
+    })));
+  }, [activeIndex]);
+
+  // When activeIndex changes, fly the map to the corresponding marker if we have the map instance
+  useEffect(() => {
+    if (activeIndex === null || activeIndex === undefined) return;
+    if (!mapInstance) return;
+    const marker = markers.find(mm => mm.index === activeIndex);
+    if (!marker || !marker.position) return;
+
+    try {
+      // Support marker.position as {lat,lng} or [lat,lng]
+      let lat, lng;
+      if (Array.isArray(marker.position)) {
+        lat = Number(marker.position[0]);
+        lng = Number(marker.position[1]);
+      } else {
+        lat = Number(marker.position.lat ?? marker.position[0]);
+        lng = Number(marker.position.lng ?? marker.position[1]);
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        console.warn('Invalid marker coords for flyTo:', marker.position);
+        return;
+      }
+      // Choose a zoom target that's slightly closer than current, but don't zoom out
+      const currentMapZoom = (typeof mapInstance.getZoom === 'function') ? mapInstance.getZoom() : currentZoom || 7;
+      const targetZoom = Math.max(currentMapZoom, 10);
+      if (typeof mapInstance.flyTo === 'function') {
+        mapInstance.flyTo([lat, lng], targetZoom, { animate: true, duration: 0.8 });
+      } else if (typeof mapInstance.setView === 'function') {
+        mapInstance.setView([lat, lng], targetZoom);
+      } else {
+        console.warn('No flyTo or setView available on map instance');
+      }
+    } catch (err) {
+      console.warn('flyTo on activeIndex failed:', err);
+    }
+  }, [activeIndex, mapInstance, markers, currentZoom]);
+
+  // Expose debug helpers on window so the DebugPanel can trigger map actions for testing
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // fly to a marker by index (or set active index)
+    window.__TRIPCRAFT_DEBUG_FLYTO__ = (index = 0) => {
+      try {
+        const i = Number(index) || 0;
+        const marker = markers.find(m => m.index === i) || markers[i];
+        if (!marker) { console.warn('DebugFly: marker not found for index', i); return; }
+        if (!mapInstance) { console.warn('DebugFly: map instance not available'); return; }
+        // set active index in UI
+        setActiveIndex(i);
+        // robust coordinate parsing
+        let lat, lng;
+        if (Array.isArray(marker.position)) {
+          lat = Number(marker.position[0]);
+          lng = Number(marker.position[1]);
+        } else {
+          lat = Number(marker.position.lat ?? marker.position[0]);
+          lng = Number(marker.position.lng ?? marker.position[1]);
+        }
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) { console.warn('DebugFly: invalid coords', marker.position); return; }
+        const currentMapZoom = (typeof mapInstance.getZoom === 'function') ? mapInstance.getZoom() : currentZoom || 7;
+        const targetZoom = Math.max(currentMapZoom, 10);
+        if (typeof mapInstance.flyTo === 'function') mapInstance.flyTo([lat, lng], targetZoom, { animate: true, duration: 0.8 });
+        else if (typeof mapInstance.setView === 'function') mapInstance.setView([lat, lng], targetZoom);
+      } catch (err) {
+        console.warn('DebugFly failed', err);
+      }
+    };
+
+    window.__TRIPCRAFT_DEBUG_LOG_MARKERS__ = () => {
+      try { console.debug('DebugMarkers:', markers); } catch (e) { console.warn('Debug log markers failed', e); }
+    };
+
+    return () => {
+      try { delete window.__TRIPCRAFT_DEBUG_FLYTO__; } catch (e) {}
+      try { delete window.__TRIPCRAFT_DEBUG_LOG_MARKERS__; } catch (e) {}
+    };
+  }, [mapInstance, markers, currentZoom]);
 
   const center = markers.length > 0
     ? markers[0].position
@@ -258,12 +352,116 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
 
       <div className="border rounded-lg overflow-hidden shadow-lg">
         <div className="relative">
+          <div className="p-3 flex items-center gap-3">
+            <button
+              type="button"
+              className={`px-3 py-1 rounded-md text-sm ${(!markers || markers.length < 2 || isProcessing) ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-indigo-600 text-white'}`}
+              onClick={async () => {
+                // Compute preview times using current markers
+                if (!markers || markers.length < 2 || isProcessing) return;
+                setIsProcessing(true);
+                setIsPreviewing(false);
+                setPreviewRoute(null);
+                setPreviewTimes(null);
+                try {
+                  // Normalize coords: markers may have position as {lat,lng} or [lat, lng]
+                  const coords = markers.map(m => {
+                    const p = m.position;
+                    if (Array.isArray(p)) return { lat: Number(p[0]), lng: Number(p[1]) };
+                    return { lat: Number(p.lat ?? p[0]), lng: Number(p.lng ?? p[1]) };
+                  });
+                  const data = await getRoute(coords);
+                  if (data) {
+                    const routeCoords = data.geometry.coordinates.map(c => [c[1], c[0]]);
+                    setPreviewRoute(routeCoords);
+                    // Build per-destination preview times (legs)
+                    const pt = {};
+                    if (data.legs) {
+                      data.legs.forEach((leg, idx) => {
+                        const duration = `${Math.round(leg.duration / 60)} mins`;
+                        const distance = `${(leg.distance / 1000).toFixed(1)} km`;
+                        const destinationIndex = idx + 1;
+                        if (destinationIndex < markers.length) {
+                          const itemId = markers[destinationIndex].id;
+                          pt[itemId] = { duration, distance };
+                        }
+                      });
+                    }
+                    setPreviewTimes(pt);
+                    setIsPreviewing(true);
+                  } else {
+                    console.warn('Preview route computation returned no data');
+                  }
+                } catch (err) {
+                  console.error('Preview computation failed', err);
+                } finally {
+                  setIsProcessing(false);
+                }
+              }}
+              disabled={!markers || markers.length < 2 || isProcessing}
+              title={!markers || markers.length < 2 ? 'Need at least two mapped points to compute a route' : isProcessing ? 'Computing preview...' : 'Compute preview route and times'}
+            >
+              Compute Preview
+            </button>
+
+            {isPreviewing && (
+              <>
+                <button
+                  type="button"
+                  className="px-3 py-1 bg-green-600 text-white rounded-md text-sm"
+                  onClick={() => {
+                    if (!previewTimes) return;
+                    const batch = Object.entries(previewTimes).map(([itemId, vals]) => ({ id: itemId, duration: vals.duration, distance: vals.distance }));
+                    // If parent provided onSaveRouteTimes, call it once with the batch
+                    if (onSaveRouteTimes) {
+                      try {
+                        onSaveRouteTimes(batch);
+                      } catch (err) {
+                        console.error('onSaveRouteTimes failed:', err);
+                        // fallback to per-item updates
+                        if (onUpdateTravelTime) {
+                          batch.forEach(b => onUpdateTravelTime(b.id, b.duration, b.distance, null));
+                        }
+                      }
+                    } else if (onUpdateTravelTime) {
+                      // fallback: call per-item updates
+                      batch.forEach(b => onUpdateTravelTime(b.id, b.duration, b.distance, null));
+                    }
+                    // apply preview route as the active route
+                    if (previewRoute) setRoute(previewRoute);
+                    setPreviewRoute(null);
+                    setPreviewTimes(null);
+                    setIsPreviewing(false);
+                  }}
+                >
+                  Save Route Times
+                </button>
+
+                <button
+                  type="button"
+                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md text-sm"
+                  onClick={() => {
+                    // Discard preview
+                    setPreviewRoute(null);
+                    setPreviewTimes(null);
+                    setIsPreviewing(false);
+                  }}
+                >
+                  Discard Preview
+                </button>
+              </>
+            )}
+          </div>
           <MapContainer
             center={center}
             zoom={currentZoom}
-            style={{ height: '500px', width: '100%' }}
-            whenReady={() => setCurrentZoom(7)}
+            style={{ height: '500px', width: '100%', cursor: 'grab' }}
+            whenCreated={(map) => { setCurrentZoom(7); setMapInstance(map); }}
             onZoomEnd={(e) => setCurrentZoom(e.target.getZoom())}
+            dragging={true}
+            doubleClickZoom={true}
+            touchZoom={true}
+            scrollWheelZoom={true}
           >
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -306,6 +504,15 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime }) {
                 color="#4F46E5"
                 weight={4}
                 opacity={0.8}
+              />
+            )}
+            {isPreviewing && previewRoute && (
+              <Polyline
+                positions={previewRoute}
+                color="#10B981" // teal/green
+                weight={3}
+                opacity={0.9}
+                dashArray="8,6"
               />
             )}
             {route && console.log('Rendering route with positions:', route.slice(0, 3), '...')}

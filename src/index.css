@@ -27,3 +27,28 @@ code {
 body {
   font-family: 'Inter', sans-serif;
 }
+
+/* Improve map UX: show hand/grab cursor and grabbing while dragging */
+.leaflet-container {
+  cursor: grab;
+}
+.leaflet-container:active {
+  cursor: grabbing;
+}
+
+/* Custom marker styling and active animation */
+.custom-marker {
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.custom-marker.active {
+  transform: scale(1.45) !important;
+  z-index: 9999 !important;
+  box-shadow: 0 6px 18px rgba(245, 158, 66, 0.35);
+  animation: pulse 1.2s ease-out infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 66, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(245, 158, 66, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 66, 0); }
+}

@@ -1341,6 +1341,8 @@ function DebugPanel() {
         <div className="font-semibold">Debug</div>
         <div className="flex gap-2">
           <button className="px-2 py-1 bg-gray-100 rounded" onClick={() => { setOpen(o => !o); }}> {open ? 'Hide' : 'Show'} </button>
+          <button className="px-2 py-1 bg-gray-100 rounded" onClick={() => { try { if (window.__TRIPCRAFT_DEBUG_FLYTO__) window.__TRIPCRAFT_DEBUG_FLYTO__(0); else console.warn('Debug fly helper not available'); } catch (e) { console.warn(e); } }}>Fly→0</button>
+          <button className="px-2 py-1 bg-gray-100 rounded" onClick={() => { try { if (window.__TRIPCRAFT_DEBUG_LOG_MARKERS__) window.__TRIPCRAFT_DEBUG_LOG_MARKERS__(); else console.warn('Debug markers helper not available'); } catch (e) { console.warn(e); } }}>LogMarkers</button>
         </div>
       </div>
       {open && (
