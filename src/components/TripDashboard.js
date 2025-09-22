@@ -553,6 +553,49 @@ export default function TripDashboard() {
 
   // Omni import consumer: expects payload = [{ entry, action }]
   const handleImportResult = async (payload) => {
+    // Support two payload shapes:
+    // - Array: [{ entry, action }, ...] (existing behavior)
+    // - Object for createNewTrip: { createNewTrip: true, name, isPublic, items: [{ entry, action }] }
+    if (!payload) return;
+    if (payload && payload.createNewTrip) {
+      // Create a new trip and import items into it
+      const { name, isPublic, items } = payload;
+      try {
+        if (userId) {
+          const tripsRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`);
+          const tripDoc = { ownerId: userId, name: name || `AI Trip ${new Date().toISOString().slice(0,10)}`, profile: initialProfile || tripProfile, public: !!isPublic, createdAt: Date.now() };
+          const newTripRef = await addDoc(tripsRef, tripDoc);
+          // add items into itineraryItems subcollection
+          const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${newTripRef.id}/itineraryItems`);
+          for (const it of items || []) {
+            try {
+              const payloadItem = stripUndefined({ ...normalizeTripItem(it.entry) }); delete payloadItem.id; await addDoc(itineraryRef, payloadItem);
+            } catch (e) {
+              console.error('Failed to add item to new trip', e);
+            }
+          }
+          // Select the new trip
+          setUserTrips(prev => [...prev, { id: newTripRef.id, ownerId: userId, name: tripDoc.name }]);
+          setCurrentTripId(newTripRef.id);
+          addToast('Created new trip and imported AI suggestions', 'success');
+        } else {
+          // Not logged in: create a local public-facing trip object and add items locally
+          const newTripId = `public_${Date.now()}`;
+          const localTrip = { id: newTripId, ownerId: null, name: name || `AI Trip ${new Date().toISOString().slice(0,10)}`, profile: initialProfile || tripProfile, public: !!isPublic };
+          setUserTrips(prev => [...prev, localTrip]);
+          setCurrentTripId(newTripId);
+          // Add items locally into tripItems state
+          const newItems = (items || []).map(it => normalizeTripItem(it.entry));
+          setTripItems(sortTripItems(newItems));
+          addToast('Created public trip (demo) and imported AI suggestions', 'info');
+        }
+      } catch (e) {
+        console.error('Failed to create new trip from AI import', e);
+        addToast('Failed to create new trip', 'warning');
+      }
+      setShowAIImportModal(false);
+      return;
+    }
     if (!Array.isArray(payload)) return;
     const summary = { created: 0, updated: 0, replaced: 0, errors: 0 };
     // process each item sequentially

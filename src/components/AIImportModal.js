@@ -562,6 +562,25 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
             </div>
             <div className="flex gap-2">
               <button onClick={() => { setReviewData(null); handleClose(); }} className="px-4 py-2 rounded bg-red-100 text-red-700">Discard</button>
+              <button
+                disabled={!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0}
+                onClick={() => {
+                  // Create a new trip with the selected entries. Prompt for name and privacy.
+                  const selected = reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status));
+                  if (!selected || selected.length === 0) return;
+                  const name = window.prompt('Create new trip — enter a name for this trip', `AI Trip ${new Date().toISOString().slice(0,10)}`);
+                  if (!name) return;
+                  const isPublic = window.confirm('Make this trip public (visible to others)? OK = public, Cancel = private');
+                  // Build payload expected by TripDashboard: { createNewTrip: true, name, isPublic, items: [{ entry, action }] }
+                  const items = selected.map(e => ({ entry: e, action: e._status === 'replaced' ? 'replace' : 'import' }));
+                  onImportSuccess({ createNewTrip: true, name, isPublic, items });
+                  setReviewData(null);
+                  handleClose();
+                }}
+                className={`px-4 py-2 rounded ${!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-emerald-600 text-white'}`}
+              >
+                Create New Trip
+              </button>
               <button disabled={!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0} onClick={handleImportSelected} className={`px-4 py-2 rounded ${!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-indigo-600 text-white'}`}>Import Selected</button>
             </div>
           </div>
