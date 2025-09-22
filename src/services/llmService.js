@@ -123,71 +123,75 @@ OUTPUT FORMAT EXAMPLE (JSON ONLY):
       })
       .join(', ');
 
-  return `Create a detailed travel itinerary as a JSON array that can be imported directly into TripCrafter.
+  // Build a compact summary of the form data for context
+  const summaryLines = [];
+  if (destinations) summaryLines.push(`Destinations: ${destinations}`);
+  if (travelDates) summaryLines.push(`Travel dates: ${travelDates}`);
+  if (travelers) summaryLines.push(`Travelers: ${travelers}`);
+  if (mustSeePlaces) summaryLines.push(`Must-see: ${mustSeePlaces}`);
+  if (thingsToAvoid) summaryLines.push(`Avoid: ${thingsToAvoid}`);
 
-TRAVELER PROFILE:
-- Destinations: ${destinations || 'Not specified'}
-- Travel dates/flexibility: ${travelDates || 'Not specified'}
-- Travelers: ${travelers || 'Not specified'}
-- Budget level: ${budget || 'Not specified'}
-- Already booked: ${alreadyBooked === 'yes' ? `Yes - ${alreadyBookedDetails || 'Details not provided'}` : 'No'}
+  const summary = summaryLines.length ? `FORM SUMMARY:\n${summaryLines.join('\n')}` : '';
 
-TRAVEL STYLE PREFERENCES:
-- Trip pace: ${paceDescriptions[tripPace] || 'Moderate pace'}
-- Independence level: ${independenceDescriptions[independence] || 'Balanced mix'}
-- Sightseeing vs downtime: ${sightseeingVsDowntime <= 2 ? 'Prefer more downtime' : sightseeingVsDowntime >= 4 ? 'Prefer more sightseeing' : 'Balanced mix'}
-- Morning style: ${morningDescriptions[morningStyle] || 'Normal schedule'}
+  // Use the exact TASK instructions provided by the user for Craft Trip LLM instructions
+  return `${summary}
 
-INTERESTS & PRIORITIES:
-- History & culture: ${ratingDescriptions[historyCulture] || 'Moderately important'}
-- Nature & outdoors: ${ratingDescriptions[natureOutdoors] || 'Moderately important'}
-- Food & drink: ${ratingDescriptions[foodDrink] || 'Moderately important'}
-- Shopping: ${ratingDescriptions[shopping] || 'Moderately important'}
-- Nightlife & entertainment: ${ratingDescriptions[nightlifeEntertainment] || 'Moderately important'}
-- Relaxation: ${ratingDescriptions[relaxation] || 'Moderately important'}
-${otherInterests ? `- ${otherInterests}: ${ratingDescriptions[otherInterestsRating] || 'Moderately important'}` : ''}
+TASK:
+You are an expert travel planner. Always follow a two-step workflow when asked for an itinerary.
 
-MUST-SEE PLACES: ${mustSeePlaces || 'None specified'}
-THINGS TO AVOID: ${thingsToAvoid || 'None specified'}
+Step 1 – Preview Table (default output)
 
-LOGISTICS & COMFORT:
-- Travel comfort: ${travelComfort <= 2 ? 'Avoid long travel days' : travelComfort >= 4 ? 'Comfortable with full-day travel' : 'Moderate travel days acceptable'}
-- Preferred transport: ${transportPrefs || 'Not specified'}
-- Accommodation style: ${accommodationStyle || 'Not specified'}
-- Base preference: ${basePreference || 'Not specified'}
+Present the itinerary first as a table for user review.
 
-SPECIAL CONSIDERATIONS:
-- Dietary needs: ${dietaryNeeds || 'None specified'}
-- Accessibility needs: ${accessibilityNeeds || 'None specified'}
-- Safety concerns: ${safetyConcerns || 'None specified'}
-- Traveling with: ${travelingWith || 'Not specified'}
+Each row = one activity, travel, or accommodation entry.
 
-EXTRAS:
-- Free time flexibility: ${freeTimeFlexibility <= 2 ? 'Want everything scheduled' : freeTimeFlexibility >= 4 ? 'Want lots of free time' : 'Moderate flexibility'}
-- Hidden gems vs attractions: ${hiddenGemsVsAttractions <= 2 ? 'Prefer famous sites' : hiddenGemsVsAttractions >= 4 ? 'Prefer hidden/local spots' : 'Mix of both'}
-- Shopping time: ${ratingDescriptions[shoppingTime] || 'Moderately important'}
-- Events/festivals: ${ratingDescriptions[eventsFestivals] || 'Moderately important'}
+Each row must include:
 
-ADDITIONAL NOTES: ${finalNotes || 'None provided'}
+date (YYYY-MM-DD)
 
-INSTRUCTIONS:
-Create a detailed day-by-day itinerary as a JSON array. Each object represents a single activity segment or accommodation night with the following fields:
-- date: YYYY-MM-DD format (use activity date; include time windows in the "activities" field when provided)
-- location: City/neighbourhood and specific activity location when applicable (e.g. "Paris - Montmartre")
-- title: Accommodation or activity title
-- status: "Unconfirmed"
-- type: "roofed" for accommodation nights, "camp" for campsites, "enroute" for travel segments and scheduled activities, "note" for optional suggestions/tips
-- activities: Short description; include time windows in HH:MM-HH:MM format (e.g. "06:00-09:00 hot air balloon") and separate multiple segments with commas
-- notes: Additional details such as booking references, dietary/accessibility notes, pacing guidance, transport links, or recommendations
+time window (HH:MM-HH:MM, approximate if needed)
 
-Rules:
-- Each distinct activity at a different location must be its own entry, even if on the same date. Keep items in chronological order (morning -> lunch -> afternoon -> evening).
-- Output one accommodation entry per night (one date per night).
-- Ensure itinerary covers full travel dates, aligns activities to traveler interests and pace, and avoids impossible travel between distant locations on the same time window.
-- Output ONLY the JSON array, with no surrounding text or markdown.
+location (city + neighborhood if relevant)
 
-EXAMPLE OUTPUT (JSON ONLY):
-[{"date":"2025-07-15","location":"Paris - 1st Arrondissement","title":"Central Hotel (night)","status":"Unconfirmed","type":"roofed","activities":"Check-in 15:00-16:00","notes":"Accessible room requested"},{"date":"2025-07-16","location":"Paris - Montmartre","title":"Hot Air Balloon Ride","status":"Unconfirmed","type":"enroute","activities":"06:00-09:00 hot air balloon","notes":"Vegetarian breakfast available"},{"date":"2025-07-16","location":"Paris - Le Marais","title":"Brunch at Café Bleu","status":"Unconfirmed","type":"enroute","activities":"10:00-12:00 brunch","notes":"Vegetarian menu options"},{"date":"2025-07-16","location":"Paris - Louvre Museum","title":"Louvre Visit","status":"Unconfirmed","type":"enroute","activities":"14:00-17:00 museum visit","notes":"Prebook tickets recommended"}]`;
+title (activity, transport, or accommodation)
+
+notes (dietary, accessibility, transport, tips, etc.)
+
+List in chronological order from trip start to end.
+
+Include one accommodation entry per night.
+
+Align activities with traveler preferences (pace, interests, must-see/avoid, dietary, style).
+
+Step 2 – JSON Export (only when user says “give me json”)
+
+Convert the exact preview table into a JSON array.
+
+Each row becomes one JSON object with the following fields:
+
+{
+  "date": "YYYY-MM-DD",
+  "time_window": "HH:MM-HH:MM",
+  "location": "City - Area/Place",
+  "title": "Activity or Accommodation Name",
+  "status": "Unconfirmed",
+  "type": "roofed|camp|enroute|note",
+  "activities": "Short description of what happens",
+  "notes": "Extra guidance, dietary, accessibility, transport, or booking info"
+}
+
+
+"type" rules:
+
+"roofed" = accommodation nights
+
+"camp" = campsite nights
+
+"enroute" = travel segments or scheduled activities
+
+"note" = optional suggestions/tips
+
+JSON output must contain only the array, no markdown, no explanations.`;
   }
 
   async parseBookingInformation(text = '', profile = {}) {

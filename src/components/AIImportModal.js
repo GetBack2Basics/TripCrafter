@@ -585,13 +585,6 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
             <h2 className="text-2xl font-bold text-indigo-600">
               🤖 AI Import
             </h2>
-            <button
-              onClick={handleClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
-              disabled={isProcessing}
-            >
-              ×
-            </button>
           </div>
 
           <p className="text-gray-600 mb-6">
