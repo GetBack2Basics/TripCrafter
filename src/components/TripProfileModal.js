@@ -5,6 +5,10 @@ export default function TripProfileModal({ isOpen, profile = {}, tripItems = [],
   const [children, setChildren] = useState(profile.children || 0);
   const [interests, setInterests] = useState(profile.interests || []);
   const [diet, setDiet] = useState(profile.diet || 'everything');
+  const [hotelType, setHotelType] = useState(profile.hotelType || 'any');
+  const [budgetRange, setBudgetRange] = useState(profile.budgetRange || 'any');
+  const [roomType, setRoomType] = useState(profile.roomType || 'any');
+  const [showHotelHelp, setShowHotelHelp] = useState(false);
 
   // allow adding custom options
   const [interestOptions, setInterestOptions] = useState(['hiking','biking','history','relax','bars','wildlife','beaches','wine','coastal walks','food & markets']);
@@ -21,6 +25,9 @@ export default function TripProfileModal({ isOpen, profile = {}, tripItems = [],
       setChildren(profile.children || 0);
       setInterests(profile.interests || []);
       setDiet(profile.diet || 'everything');
+      setHotelType(profile.hotelType || 'any');
+      setBudgetRange(profile.budgetRange || 'any');
+      setRoomType(profile.roomType || 'any');
     }
   }, [isOpen, profile]);
 
@@ -132,12 +139,44 @@ export default function TripProfileModal({ isOpen, profile = {}, tripItems = [],
               <button onClick={addDiet} className="px-3 py-2 bg-gray-200 rounded">Add</button>
             </div>
           </div>
+          <div className="col-span-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm">Hotel preferences</label>
+              <button title="How are these used?" className="text-xs text-indigo-600" onClick={() => setShowHotelHelp(s => !s)}>{showHotelHelp ? 'Hide help' : 'How used?'}</button>
+            </div>
+            {showHotelHelp && (
+              <div className="mt-2 mb-2 text-xs text-gray-600 bg-gray-50 border p-2 rounded">
+                These preferences are added to the hotel search query to help target results. For example, setting "Boutique" and "Mid-range" will bias the search toward boutique hotels in the selected neighbourhood at mid-range prices. Number of adults/children and check-in date are also included to help search results show appropriate room options.
+              </div>
+            )}
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <select value={hotelType} onChange={e => setHotelType(e.target.value)} className="p-2 border rounded">
+                <option value="any">Any type</option>
+                <option value="boutique">Boutique</option>
+                <option value="family">Family</option>
+                <option value="luxury">Luxury</option>
+                <option value="budget">Budget</option>
+              </select>
+              <select value={budgetRange} onChange={e => setBudgetRange(e.target.value)} className="p-2 border rounded">
+                <option value="any">Any budget</option>
+                <option value="budget">Budget</option>
+                <option value="mid">Mid-range</option>
+                <option value="luxury">Luxury</option>
+              </select>
+              <select value={roomType} onChange={e => setRoomType(e.target.value)} className="p-2 border rounded">
+                <option value="any">Any room</option>
+                <option value="double">Double</option>
+                <option value="twin">Twin</option>
+                <option value="family">Family room</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div className="flex justify-between items-center gap-2">
           <div>
             <button onClick={async () => {
               const exportObj = {
-                profile: { adults, children, interests, diet },
+                profile: { adults, children, interests, diet, hotelType, budgetRange, roomType },
                 items: tripItems || []
               };
               const contents = JSON.stringify(exportObj, null, 2);

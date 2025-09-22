@@ -40,7 +40,7 @@ export default function TripDashboard() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedTripForShare, setSelectedTripForShare] = useState(null);
-  const [tripProfile, setTripProfile] = useState({ adults: 2, children: 0, interests: [], diet: 'everything' });
+  const [tripProfile, setTripProfile] = useState({ adults: 2, children: 0, interests: [], diet: 'everything', hotelType: 'any', budgetRange: 'any', roomType: 'any' });
   // Use normalized default trip data for demo (not-logged-in) users
   // Helper to create a slug for image filenames
   function locationSlug(location) {
@@ -81,13 +81,20 @@ export default function TripDashboard() {
         const checkoutYear = checkout.getFullYear();
         const checkoutMonth = checkout.getMonth() + 1;
         const checkoutDay = checkout.getDate();
-        const baseUrl = 'https://www.booking.com/searchresults.html';
-  const searchLocation = `${cityName}, ${state}, ${country}`;
+        // Build a more complete Booking.com search URL that includes locale and rooms
+        const baseUrl = 'https://www.booking.com/searchresults.en-gb.html';
+        const searchLocation = `${cityName}, ${state || ''} ${country || ''}`.replace(/\s+/g, ' ').trim();
         const params = new URLSearchParams({
           ss: searchLocation,
+          lang: 'en-gb',
+          efdco: '1',
+          sb: '1',
+          src: 'index',
+          src_elem: 'sb',
           checkin: `${checkinYear}-${String(checkinMonth).padStart(2, '0')}-${String(checkinDay).padStart(2, '0')}`,
           checkout: `${checkoutYear}-${String(checkoutMonth).padStart(2, '0')}-${String(checkoutDay).padStart(2, '0')}`,
           group_adults: String(adults),
+          no_rooms: '1',
           group_children: String(children || 0)
         });
         return `${baseUrl}?${params.toString()}`;
@@ -121,15 +128,20 @@ export default function TripDashboard() {
       const checkoutYear = checkout.getFullYear();
       const checkoutMonth = checkout.getMonth() + 1;
       const checkoutDay = checkout.getDate();
-      const baseUrl = 'https://www.booking.com/searchresults.html';
-      const params = new URLSearchParams({
-        ss: title,
-        checkin: `${checkinYear}-${String(checkinMonth).padStart(2, '0')}-${String(checkinDay).padStart(2, '0')}`,
-        checkout: `${checkoutYear}-${String(checkoutMonth).padStart(2, '0')}-${String(checkoutDay).padStart(2, '0')}`,
-        group_adults: String(adults),
-        group_children: String(children || 0)
-      });
-      return `${baseUrl}?${params.toString()}`;
+      // Prefer a Booking.com search URL that includes locale and rooms; title used as search term
+      // Use a Google hotel search (avoids Booking.com partner requirements)
+      // Prefer location first (city/area) when present, else fall back to title
+      // Incorporate profile preferences into the search to improve relevance
+      const profilePrefs = tripSettings || {};
+      const pt = profilePrefs.hotelType && profilePrefs.hotelType !== 'any' ? `${profilePrefs.hotelType}` : '';
+      const bd = profilePrefs.budgetRange && profilePrefs.budgetRange !== 'any' ? `${profilePrefs.budgetRange}` : '';
+      const rm = profilePrefs.roomType && profilePrefs.roomType !== 'any' ? `${profilePrefs.roomType}` : '';
+      const people = `for ${String(adults || 2)} adults${children ? `, ${String(children)} child${children > 1 ? 'ren' : ''}` : ''}`;
+      const locationPart = (location && String(location).trim()) ? `hotels in ${String(location).trim()}` : `hotels ${title}`;
+      const extras = [pt, bd, rm].filter(Boolean).join(' ');
+      const searchTerm = [locationPart, extras, people, `checkin ${checkinYear}-${String(checkinMonth).padStart(2, '0')}-${String(checkinDay).padStart(2, '0')}`].filter(Boolean).join(' ');
+      const q = encodeURIComponent(searchTerm);
+      return `https://www.google.com/search?q=${q}`;
     }
 
     // For camp or enroute, fall back to a Google search for the title
@@ -154,9 +166,9 @@ export default function TripDashboard() {
       travelTime: item.travelTime || '',
       activities: item.activities || '',
   type: item.type || 'roofed',
-  // titleLink: only for roofed or camp items (links to booking/search for accommodation)
-  // titleLink: build from the title when available (search by title for stays/enroute)
-  titleLink: (item.type === 'roofed' || item.type === 'camp') ? (item.titleLink || generateTitleLink(item.title || '', item.type, item.location, item.date, adults, children, tripSettings)) : (item.type === 'enroute' ? (item.titleLink || generateTitleLink(item.title || '', item.type, item.location, item.date, adults, children, tripSettings)) : ''),
+  // titleLink: for roofed/camp/enroute items build the search link preferring location over title
+  // Override any stored titleLink to ensure the link uses current location/title/date data
+  titleLink: (item.type === 'roofed' || item.type === 'camp' || item.type === 'enroute') ? generateTitleLink(item.title || '', item.type, item.location, item.date, adults, children, tripSettings) : '',
   // activityLink: use location-based searches for activity suggestions for all types except 'note'
   activityLink: (item.type && item.type !== 'note') ? (item.activityLink || generateActivityLink(item.type || 'enroute', item.location, item.date, adults, children, tripSettings)) : '',
       discoverImages: discoverImagesForLocation(item.location),
@@ -198,6 +210,8 @@ export default function TripDashboard() {
   const [lastSyncedItems, setLastSyncedItems] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+  const [editingTripName, setEditingTripName] = useState(false);
+  const [editTripNameValue, setEditTripNameValue] = useState('');
   const pushDebug = (msg) => {
     const ts = new Date().toISOString();
     const entry = { ts, msg };
@@ -647,40 +661,36 @@ export default function TripDashboard() {
         continue;
       }
 
-      if (currentTripId) {
-        // Firestore path
+      // If we have a selected remote trip and a signed-in user, persist to Firestore.
+      if (currentTripId && userId) {
+        const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
         try {
-          const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
-          if (existing) {
-            const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, existing.id);
-            if (action === 'replace') {
-              // delete existing doc then add new one
+          // Prepare payload without id so Firestore generates a document id when adding
+          const payload = stripUndefined({ ...incoming });
+          delete payload.id;
+          if (incoming.id) {
+            // Try to update an existing document with the provided id; if it doesn't exist, fall back to addDoc
+            const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, incoming.id);
+            try {
+              await updateDoc(itemDocRef, payload);
+              summary.updated += 1;
+            } catch (updateErr) {
+              // update failed (possibly doc doesn't exist) — create a new doc instead
               try {
-                await deleteDoc(itemDocRef);
-                const payload = stripUndefined({ ...incoming }); delete payload.id; await addDoc(itineraryRef, payload);
-                summary.replaced += 1;
-              } catch (e) {
-                console.error('Replace (delete+add) failed', e);
-                summary.errors += 1;
-              }
-            } else {
-              // merge: prefer incoming values when present
-              const merged = { ...existing, ...incoming };
-              try {
-                await updateDoc(itemDocRef, { ...merged });
-                summary.updated += 1;
-              } catch (e) {
-                console.error('Update failed', e);
+                await addDoc(itineraryRef, payload);
+                summary.created += 1;
+              } catch (addErr) {
+                console.error('Add failed', addErr);
                 summary.errors += 1;
               }
             }
           } else {
-            // add new document
+            // No id provided: always add as a new document
             try {
-              const payload = stripUndefined({ ...incoming }); delete payload.id; await addDoc(itineraryRef, payload);
+              await addDoc(itineraryRef, payload);
               summary.created += 1;
-            } catch (e) {
-              console.error('Add failed', e);
+            } catch (addErr) {
+              console.error('Add failed', addErr);
               summary.errors += 1;
             }
           }
@@ -1332,7 +1342,40 @@ export default function TripDashboard() {
       {/* Summary/Header Area + Tabbed View Switcher */}
       <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-indigo-700 tracking-tight">Trip Itinerary</h2>
+          <div className="flex items-center gap-3">
+            {!editingTripName ? (
+              <>
+                <h2 className="text-2xl font-bold text-indigo-700 tracking-tight">{currentTripName || 'Trip Itinerary'}</h2>
+                <button title="Edit trip" className="text-indigo-500 hover:text-indigo-700" onClick={() => { setShowProfileModal(true); setShowTripSelectModal(true); }} aria-label="Edit trip">✎</button>
+              </>
+            ) : (
+              <form onSubmit={async (e) => { e.preventDefault(); try {
+                const newName = editTripNameValue && editTripNameValue.trim() ? editTripNameValue.trim() : (currentTripName || 'Trip');
+                setEditingTripName(false);
+                setCurrentTripName(newName);
+                // Persist change remotely for authenticated users, or locally for public trips
+                if (userId && currentTripId && !String(currentTripId).startsWith('public_')) {
+                  try {
+                    await updateDoc(doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`, currentTripId), { name: newName });
+                    setUserTrips(prev => prev.map(t => t.id === currentTripId ? { ...t, name: newName } : t));
+                    addToast('Trip name updated', 'success');
+                  } catch (err) {
+                    console.error('Failed to update trip name remotely', err);
+                    addToast('Could not update trip name remotely', 'warning');
+                  }
+                } else {
+                  // local public trip: update userTrips and persist to localStorage
+                  setUserTrips(prev => prev.map(t => t.id === currentTripId ? { ...t, name: newName } : t));
+                  try { localStorage.setItem(`tripMeta:${currentTripId}`, JSON.stringify({ name: newName })); } catch (e) {}
+                  addToast('Updated local public trip name', 'success');
+                }
+              } catch (e) { console.error(e); } }} className="flex items-center gap-2">
+                <input value={editTripNameValue} onChange={e => setEditTripNameValue(e.target.value)} placeholder="Trip name" className="border px-2 py-1 rounded" />
+                <button type="submit" className="px-2 py-1 bg-indigo-600 text-white rounded">Save</button>
+                <button type="button" className="px-2 py-1 border rounded" onClick={() => { setEditingTripName(false); setEditTripNameValue(''); }}>Cancel</button>
+              </form>
+            )}
+          </div>
           <div className="mt-2 flex items-center gap-2">
             <button onClick={() => savePendingChanges()} disabled={!hasPending() || isSaving} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm disabled:opacity-50">{isSaving ? 'Saving...' : 'Save changes'}</button>
             <button onClick={() => discardPendingChanges()} disabled={!hasPending() || isSaving} className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm disabled:opacity-50">Discard staged</button>
@@ -1363,19 +1406,52 @@ export default function TripDashboard() {
   <AIImportModal isOpen={showAIImportModal} onClose={() => setShowAIImportModal(false)} onImportSuccess={handleImportResult} onError={msg => alert(msg)} initialProfile={tripProfile} />
   <MergeRequestModal requests={mergeRequests} onResolve={handleResolveMergeRequest} onClose={() => setMergeRequests([])} />
   <TripProfileModal isOpen={showProfileModal} profile={tripProfile} tripItems={tripItems} userTrips={userTrips} userId={userId} currentTripId={currentTripId} onLoad={handleImportProfileLoad} onClose={() => setShowProfileModal(false)} onCreate={() => setShowTripCreateModal(true)} onSelect={(trip) => { handleTripSelect(trip); setShowProfileModal(false); }} onDelete={(trip) => handleStageDeleteTrip(trip)} onShare={(trip) => handleOpenShareModal(trip)} onSave={(p) => {
-        setTripProfile(p);
-        // Persist profile to Firestore trip document when a trip is selected
+    // update in-memory profile first
+    setTripProfile(p);
+        // Persist profile: for authenticated users, write to Firestore; for guests, persist locally
         if (currentTripId) {
-          (async () => {
+          if (userId) {
+            (async () => {
+              try {
+                const tripDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`, currentTripId);
+                await updateDoc(tripDocRef, { profile: p });
+                addToast('Saved trip profile to trip settings', 'success');
+              } catch (e) {
+                console.error('Failed to persist trip profile', e);
+                addToast('Could not save profile remotely — saved locally only', 'warning');
+              }
+            })();
+          } else {
             try {
-              const tripDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`, currentTripId);
-              await updateDoc(tripDocRef, { profile: p });
-              addToast('Saved trip profile to trip settings', 'success');
+              // If currentTripId is a local public trip, ensure it's present in userTrips and persist profile locally
+              const isLocalPublic = String(currentTripId).startsWith('public_');
+              if (isLocalPublic) {
+                const found = userTrips.find(t => t.id === currentTripId);
+                if (!found) {
+                  const localTrip = { id: currentTripId, ownerId: null, name: 'Public trip', public: true, createdAt: Date.now(), profile: p };
+                  setUserTrips(prev => [...prev, localTrip]);
+                } else {
+                  // update profile on the local userTrips array
+                  setUserTrips(prev => prev.map(t => t.id === currentTripId ? { ...t, profile: p } : t));
+                }
+              }
+              // Persist profile draft to localStorage keyed by trip id
+              try { localStorage.setItem(`tripProfile:${currentTripId}`, JSON.stringify(p)); } catch (e) { /* ignore */ }
+              setTripProfile(p);
+              addToast('Saved trip profile locally (public)', 'success');
             } catch (e) {
-              console.error('Failed to persist trip profile', e);
-              addToast('Could not save profile remotely — saved locally only', 'warning');
+              console.error('Failed to persist profile locally', e);
+              addToast('Could not save profile locally', 'warning');
             }
-          })();
+          }
+        }
+        // After persisting the profile, regenerate title/activity links for all items so they reflect the new profile
+        try {
+          const regenerated = (Array.isArray(tripItems) ? tripItems : []).map(it => normalizeTripItem({ ...it, profile: p }));
+          setTripItems(sortTripItems(regenerated));
+        } catch (err) {
+          console.error('Failed to regenerate trip links after profile save', err);
+          pushDebug(`Failed to regenerate trip links: ${err && err.message ? err.message : String(err)}`);
         }
       }} />
       <TripHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />

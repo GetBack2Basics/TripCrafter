@@ -14,12 +14,23 @@ export default function TripCreateModal({ isOpen, onClose, userId, onTripCreated
     setError('');
     setLoading(true);
     try {
+      // If user is not logged in, create a local public trip object (avoid remote Firestore writes)
+      if (!userId) {
+        const newTripId = `public_${Date.now()}`;
+        const localTrip = { id: newTripId, name, startDate, endDate, ownerId: null, public: true, createdAt: Date.now() };
+        setLoading(false);
+        if (onTripCreated) onTripCreated(localTrip);
+        onClose();
+        return;
+      }
+
       const tripsRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`);
       const docRef = await addDoc(tripsRef, {
         name,
         startDate,
         endDate,
         ownerId: userId,
+        public: false,
         createdAt: new Date(),
       });
       setLoading(false);
