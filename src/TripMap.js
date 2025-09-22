@@ -40,17 +40,46 @@ function getTypeIcon(type, item) {
 
 // Geocode using Nominatim (OpenStreetMap)
 async function geocodeLocation(location) {
-  try {
-    console.log('Geocoding location:', location);
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`);
-    const data = await response.json();
-    console.log('Geocoding response for', location, ':', data);
-    if (data && data.length > 0) {
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  if (!location || typeof location !== 'string') return null;
+  const tried = new Set();
+  const clean = (s) => s.replace(/[\u2013\u2014\u2012]/g, ' ').replace(/\s+/g, ' ').trim();
+  const stripPostcode = (s) => s.replace(/,?\s*[A-Za-z]{2,3}\s*\d{3,4},?\s*Australia/i, '').replace(/,?\s*TAS\s*\d{3,4},?\s*Australia/i, '').trim();
+
+  const candidates = [];
+  const original = clean(location);
+  candidates.push(original);
+  // replace hyphens with space
+  candidates.push(clean(original.replace(/[-–—]/g, ' ')));
+  // remove postcode/state/country parts
+  candidates.push(clean(stripPostcode(original)));
+  // try first segment before comma
+  const firstSeg = original.split(',')[0];
+  if (firstSeg && firstSeg.length > 2) candidates.push(clean(firstSeg));
+  // try first two segments
+  const firstTwo = original.split(',').slice(0,2).join(',');
+  if (firstTwo && firstTwo.length > 2) candidates.push(clean(firstTwo));
+
+  for (const q of candidates) {
+    if (!q) continue;
+    if (tried.has(q)) continue;
+    tried.add(q);
+    try {
+      console.debug('Geocoding attempt:', q);
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
+      const data = await response.json();
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          console.debug('Geocoding success for', q, { lat, lng, display_name: data[0].display_name });
+          return { lat, lng };
+        }
+      }
+    } catch (err) {
+      console.warn('Geocoding attempt failed for', q, err);
     }
-  } catch (error) {
-    console.error('Geocoding failed:', error);
   }
+  console.debug('Geocoding: no results for any candidate for', location);
   return null;
 }
 
@@ -102,6 +131,51 @@ function createCustomIcon(number, type, isActive, scale = 1) {
     iconSize: [size, size],
     iconAnchor: [size/2, size/2]
   });
+}
+
+// Small on-screen debug overlay component
+function DebugOverlay() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    // populate periodically from window helpers
+    const id = setInterval(() => {
+      try {
+        if (typeof window !== 'undefined' && window.__TRIPCRAFT_DEBUG_LOG_MARKERS__) {
+          const res = window.__TRIPCRAFT_DEBUG_LOG_MARKERS__();
+          if (res && res.markers) setItems(res.markers);
+        }
+      } catch (e) {}
+    }, 800);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 1200, pointerEvents: 'auto' }}>
+      <div>
+        <button onClick={() => setOpen(s => !s)} style={{ padding: '6px 8px', background: '#111827', color: 'white', borderRadius: 6, fontSize: 12 }}>
+          {open ? 'Hide Map Debug' : 'Show Map Debug'}
+        </button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 8, width: 320, maxHeight: 320, overflow: 'auto', background: 'rgba(255,255,255,0.95)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', padding: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Map markers</div>
+          {items.length === 0 && <div style={{ fontSize: 12, color: '#666' }}>No markers</div>}
+          {items.map((m, i) => (
+            <div key={`${m.id}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <div style={{ flex: 1, fontSize: 12 }}>
+                <div><strong>{m.id}</strong></div>
+                <div style={{ color: '#666' }}>{Array.isArray(m.position) ? `${m.position[0].toFixed ? m.position[0].toFixed(4) : m.position[0]}, ${m.position[1].toFixed ? m.position[1].toFixed(4) : m.position[1]}` : String(m.position)}</div>
+              </div>
+              <div>
+                <button onClick={() => { try { if (window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__) window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__(m.id); } catch (e) { console.warn(e); } }} style={{ padding: '4px 8px', fontSize: 12 }}>Fly</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Main TripMap component with Leaflet
@@ -198,11 +272,12 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
   const flyRequestsVersion = React.useRef(0);
   const geocodeCacheRef = React.useRef({});
   const coordsByIndexRef = React.useRef({});
+  const coordsByIdRef = React.useRef({});
   const ZOOM_INCLUDE_ENROUTE = 10; // zoom threshold to include 'enroute' points on the map
 
-  // Filter out "note" type items from mapping and sort by date for consistent ordering
-  const mappableItems = tripItems.filter(item => item.type !== 'note');
-  const sortedTripItems = Array.isArray(mappableItems) ? mappableItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : [];
+  // Do not filter any item types: include all tripItems for mapping and sort by date for consistent ordering
+  const mappableItems = Array.isArray(tripItems) ? tripItems : [];
+  const sortedTripItems = mappableItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || ''));
 
   if (loadingInitialData) {
     return (
@@ -216,11 +291,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
     return (
       <div className="text-center text-gray-500 py-8">
         <p className="text-xl mb-4">No mappable locations to display</p>
-        {tripItems.length > 0 ? (
-          <p>Your trip items are notes only. Add locations with type 'Roofed', 'Camp', or 'Enroute' to see them on the map!</p>
-        ) : (
-          <p>Add some trip items with locations to see them on the map!</p>
-        )}
+        <p>Add some trip items with locations to see them on the map!</p>
       </div>
     );
   }
@@ -246,7 +317,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
 
       for (let i = 0; i < sortedTripItems.length; i++) {
         const item = sortedTripItems[i];
-        if (item.type === 'note') continue; // never include notes anywhere
+        // Include all item types (do not skip notes)
 
         // Try cached geocode first
         let coords = geocodeCacheRef.current[item.location];
@@ -255,12 +326,13 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
           if (coords) geocodeCacheRef.current[item.location] = coords;
         }
 
-        if (!coords) continue;
+  if (!coords) continue;
 
-        coordsByIndex[i] = coords;
+  coordsByIndex[i] = coords;
+  if (item && item.id) coordsByIdRef.current[item.id] = coords;
 
-        // Decide inclusion on map: always include roofed/camp; include enroute only at higher zoom
-        const includeInMap = (item.type === 'roofed' || item.type === 'camp') || (item.type === 'enroute' && currentZoom >= ZOOM_INCLUDE_ENROUTE);
+  // Include all item types on the map (no type-based filtering)
+  const includeInMap = true;
         if (includeInMap) {
           coordinates.push(coords);
           const markerPos = [Number(coords.lat), Number(coords.lng)];
@@ -344,30 +416,77 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
 
   // Attempt to fly to a marker by index. This centralizes behavior and provides a fallback
   // using the debug helper when the map instance is not available or flyTo fails.
-  const attemptFly = useCallback(async (index) => {
+  const attemptFly = useCallback(async (identifier) => {
     try {
-      const i = Number(index);
-      if (!Number.isFinite(i)) return { ok: false, error: 'invalid-index' };
-      let marker = markers.find(m => m.index === i) || markers[i];
-      // If marker not found (hidden due to zoom filters), try coordsByIndexRef or geocode cache
+      console.debug('attemptFly called with', identifier);
+      // identifier may be an item id (string) or an index (number)
+      let targetIndex = null;
+      let id = null;
+
+      if (typeof identifier === 'string') {
+        id = identifier;
+        targetIndex = sortedTripItems.findIndex(it => it && it.id === id);
+        if (targetIndex === -1) targetIndex = null;
+      } else {
+        const i = Number(identifier);
+        if (!Number.isFinite(i)) return { ok: false, error: 'invalid-index' };
+        targetIndex = i;
+        id = sortedTripItems[i]?.id;
+      }
+
+      // Find a marker by id first, then by index
+      let marker = null;
+      if (id) marker = markers.find(m => m.id === id);
+      if (!marker && typeof targetIndex === 'number') {
+        marker = markers.find(m => m.index === targetIndex) || markers[targetIndex];
+      }
+      console.debug('attemptFly: initial marker lookup ->', { markerFound: !!marker, marker });
+
+      // If marker not found (hidden due to zoom filters), try coordsByIdRef or coordsByIndexRef or geocode cache
       if (!marker) {
-        const cached = coordsByIndexRef.current && coordsByIndexRef.current[i];
+        let cached = null;
+        if (id && coordsByIdRef.current[id]) cached = coordsByIdRef.current[id];
+        else if (typeof targetIndex === 'number' && coordsByIndexRef.current[targetIndex]) cached = coordsByIndexRef.current[targetIndex];
+
         if (cached) {
-          marker = { id: sortedTripItems[i]?.id, position: [Number(cached.lat), Number(cached.lng)], item: sortedTripItems[i], index: i, icon: createCustomIcon(i+1, sortedTripItems[i]?.type, false, 0.9) };
-        } else if (sortedTripItems[i]) {
-          // try on-demand geocode fallback
-          const coords = await geocodeLocation(sortedTripItems[i].location);
+          const item = (typeof targetIndex === 'number') ? sortedTripItems[targetIndex] : (id ? sortedTripItems.find(it => it.id === id) : null);
+          marker = { id: item?.id, position: [Number(cached.lat), Number(cached.lng)], item, index: targetIndex != null ? targetIndex : (item ? sortedTripItems.findIndex(it => it.id === item.id) : null), icon: createCustomIcon((targetIndex != null ? (targetIndex + 1) : 1), item?.type, false, 0.9) };
+        } else if (typeof targetIndex === 'number' && sortedTripItems[targetIndex]) {
+          // try on-demand geocode fallback using the item's location
+          const coords = await geocodeLocation(sortedTripItems[targetIndex].location);
           if (coords) {
-            marker = { id: sortedTripItems[i].id, position: [Number(coords.lat), Number(coords.lng)], item: sortedTripItems[i], index: i, icon: createCustomIcon(i+1, sortedTripItems[i]?.type, false, 0.9) };
+            const item = sortedTripItems[targetIndex];
+            marker = { id: item.id, position: [Number(coords.lat), Number(coords.lng)], item, index: targetIndex, icon: createCustomIcon(targetIndex+1, item?.type, false, 0.9) };
             // cache it for future
-            geocodeCacheRef.current[sortedTripItems[i].location] = coords;
-            coordsByIndexRef.current[i] = coords;
+            geocodeCacheRef.current[sortedTripItems[targetIndex].location] = coords;
+            coordsByIndexRef.current[targetIndex] = coords;
+            if (item && item.id) coordsByIdRef.current[item.id] = coords;
+          }
+        } else if (id) {
+          // find by id in sortedTripItems and geocode
+          const idx = sortedTripItems.findIndex(it => it && it.id === id);
+          if (idx !== -1) {
+            const coords = await geocodeLocation(sortedTripItems[idx].location);
+            if (coords) {
+              const item = sortedTripItems[idx];
+              marker = { id: item.id, position: [Number(coords.lat), Number(coords.lng)], item, index: idx, icon: createCustomIcon(idx+1, item?.type, false, 0.9) };
+              geocodeCacheRef.current[sortedTripItems[idx].location] = coords;
+              coordsByIndexRef.current[idx] = coords;
+              if (item && item.id) coordsByIdRef.current[item.id] = coords;
+              targetIndex = idx;
+            }
           }
         }
       }
-      if (!marker) return { ok: false, error: 'marker-not-found', index: i };
-      // set active in UI immediately
-      setActiveIndex(i);
+
+      if (!marker) {
+        console.debug('attemptFly: marker still not found after fallbacks', { id, targetIndex, coordsById: coordsByIdRef.current[id], coordsByIndex: coordsByIndexRef.current[targetIndex] });
+        return { ok: false, error: 'marker-not-found', id, index: targetIndex };
+      }
+
+      // Resolve the index if not already known
+      const resolvedIndex = (typeof marker.index === 'number' && Number.isFinite(marker.index)) ? marker.index : (typeof targetIndex === 'number' ? targetIndex : sortedTripItems.findIndex(it => it && it.id === marker.id));
+      if (resolvedIndex != null && resolvedIndex !== -1) setActiveIndex(resolvedIndex);
 
       // parse coords robustly (we store marker.position as [lat, lng])
       let lat, lng;
@@ -382,39 +501,23 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
       }
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         console.warn('attemptFly: invalid coords', marker.position);
-        // try the debug helper as a last resort
         if (typeof window !== 'undefined' && window.__TRIPCRAFT_DEBUG_FLYTO__) {
-          return window.__TRIPCRAFT_DEBUG_FLYTO__(i);
+          return window.__TRIPCRAFT_DEBUG_FLYTO__(identifier);
         }
         return { ok: false, error: 'invalid-coords' };
       }
 
-      const waitForMap = async (maxAttempts = 6) => {
-        for (let a = 0; a < maxAttempts; a++) {
-          if (mapInstance) return mapInstance;
-          if (mapRef.current) return mapRef.current;
-          // small backoff
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise(r => setTimeout(r, 120));
-        }
-        return null;
-      };
-
-      // Use request queue so MapController (which has useMap()) performs the actual fly
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { ok: false, error: 'invalid-coords' };
-
-      // Create promise and push to queue
       // Decide a requested zoom: if the item is 'enroute' and current zoom is low, request a closer zoom
       const desiredZoom = (marker && marker.item && marker.item.type === 'enroute' && currentZoom < ZOOM_INCLUDE_ENROUTE) ? Math.max(ZOOM_INCLUDE_ENROUTE, currentZoom + 2) : undefined;
+
       const p = new Promise((resolve, reject) => {
-        flyRequestsRef.current.push({ id: marker.id, index: i, lat, lng, zoom: desiredZoom, resolve, reject });
+        flyRequestsRef.current.push({ id: marker.id, index: resolvedIndex, lat, lng, zoom: desiredZoom, resolve, reject });
         flyRequestsVersion.current += 1;
       });
 
-      // Wait for MapController to pick up and resolve/reject the promise
       try {
         const result = await p;
-        return { ok: true, id: marker.id, index: i, lat, lng, ...(result || {}) };
+        return { ok: true, id: marker.id, index: resolvedIndex, lat, lng, ...(result || {}) };
       } catch (e) {
         return { ok: false, error: String(e) };
       }
@@ -422,7 +525,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
       console.warn('attemptFly unexpected error', err);
       return { ok: false, error: String(err) };
     }
-  }, [markers, mapInstance, currentZoom]);
+  }, [markers, mapInstance, currentZoom, sortedTripItems]);
 
   // Wire marker/timeline clicks to attemptFly (safe to call repeatedly)
   useEffect(() => {
@@ -492,13 +595,13 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
       <div className="mb-4">
         <h3 className="text-xl font-semibold text-indigo-700 mb-2">Trip Route Map</h3>
         <p className="text-gray-600 text-sm flex flex-wrap gap-1 items-center">
-          {mappableItems.length === 1
+          {sortedTripItems.length === 1
             ? <>
-                Showing location: <span>{getPlaceName(mappableItems[0].location)}</span>
+                Showing location: <span>{getPlaceName(sortedTripItems[0].location)}</span>
               </>
             : <>
-                Route through {mappableItems.length} locations: {
-                  mappableItems.map((item, idx) => {
+                Route through {sortedTripItems.length} locations: {
+                  sortedTripItems.map((item, idx) => {
                     let color = 'text-gray-700';
                     let font = '';
                     if (item.type === 'roofed') { color = 'text-indigo-700'; font = 'font-bold'; }
@@ -514,18 +617,16 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                         className={`${color} ${font} text-left px-1 py-0.5 rounded hover:bg-gray-100`}
                         title={`Fly to ${getPlaceName(item.location)}`}
                         aria-label={`Fly to ${getPlaceName(item.location)}`}
-                        onClick={async () => { try { await attemptFly(idx); } catch (e) { console.warn('Header fly failed', e); } }}
+                        onClick={async () => { try { await attemptFly(item.id); } catch (e) { console.warn('Header fly failed', e); } }}
                       >
-                        {displayIndex}. {getPlaceName(item.location)}{idx < mappableItems.length-1 && <span className="text-gray-400"> → </span>}
+                        {displayIndex}. {getPlaceName(item.location)}{idx < sortedTripItems.length-1 && <span className="text-gray-400"> 7 </span>}
                       </button>
                     );
                   })
                 }
               </>
           }
-          {tripItems.length > mappableItems.length &&
-            <span className="text-gray-400">({tripItems.length - mappableItems.length} note items excluded from map)</span>
-          }
+          {/* All items are shown on the map; no items are excluded */}
         </p>
         <p className="text-blue-600 text-xs mt-1">
           💡 Travel times will be automatically calculated and updated based on OpenStreetMap routing data
@@ -731,7 +832,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                   click: async () => {
                     // Try to fly to this marker; fallback to debug helper if necessary
                     try {
-                      await attemptFly(marker.index);
+                      await attemptFly(marker.id);
                     } catch (e) {
                       console.warn('Marker click attemptFly error', e);
                       setActiveIndex(marker.index);
@@ -779,6 +880,8 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
             )}
             {route && console.log('Rendering route with positions:', route.slice(0, 3), '...')}
             <MapController markers={markers} flyRequestsRef={flyRequestsRef} flyRequestsVersion={flyRequestsVersion} zoomThreshold={ZOOM_INCLUDE_ENROUTE} />
+              {/* Debug overlay: toggled panel listing items and markers for QA */}
+              <DebugOverlay />
             {/* On-map pan/zoom controls */}
             <div className="absolute top-3 right-3 z-50" style={{ pointerEvents: 'none' }}>
               <div className="bg-white bg-opacity-90 rounded-md shadow p-1" style={{ width: 44, pointerEvents: 'auto' }}>
@@ -870,7 +973,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                 }`}
                 onClick={async () => {
                   try {
-                    await attemptFly(index);
+                    await attemptFly(item.id);
                   } catch (e) {
                     console.warn('Timeline click attemptFly failed', e);
                     setActiveIndex(index);
@@ -879,7 +982,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                 onKeyDown={async (e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    try { await attemptFly(index); } catch (err) { setActiveIndex(index); }
+                    try { await attemptFly(item.id); } catch (err) { setActiveIndex(index); }
                   }
                 }}
                 style={{ cursor: 'pointer' }}
@@ -900,7 +1003,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                     className="absolute -top-2 -left-2 bg-indigo-600 text-white text-[10px] font-semibold rounded-full w-6 h-6 flex items-center justify-center"
                     title={`Fly to ${getPlaceName(item.location)}`}
                     aria-label={`Fly to ${getPlaceName(item.location)}`}
-                    onClick={(e) => { e.stopPropagation(); try { attemptFly(index); } catch (err) { console.warn('badge fly failed', err); } }}
+                    onClick={(e) => { e.stopPropagation(); try { attemptFly(item.id); } catch (err) { console.warn('badge fly failed', err); } }}
                   >
                     {displayIndex}
                   </button>

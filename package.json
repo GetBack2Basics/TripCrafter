@@ -17,10 +17,12 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
+    "prestart": "node ./scripts/write-version.js",
+    "prebuild": "node ./scripts/write-version.js",
     "start": "react-scripts start",
     "build": "react-scripts build",
-  "test": "react-scripts test",
-  "test:unit": "react-scripts test --watchAll=false --passWithNoTests",
+    "test": "react-scripts test",
+    "test:unit": "react-scripts test --watchAll=false --passWithNoTests",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
