@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { aiImportService } from '../services/aiImportService';
 import AIImportReview from './AIImportReview';
+import TripCraftForm from './TripCraftForm';
 
 function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfile = {} }) {
   const [reviewData, setReviewData] = useState(null);
@@ -11,6 +12,25 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
   const [llmPrompt, setLlmPrompt] = useState('');
   const [showPrompt, setShowPrompt] = useState(false);
   const [manualJson, setManualJson] = useState('');
+
+  // helper to copy text reliably and show toast
+  const copyToClipboard = async (text) => {
+    try {
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      addToast('Copied to clipboard', 'success');
+    } catch (e) {
+      addToast('Copy failed, please select and copy manually', 'warning');
+    }
+  };
 
   // The importer uses the trip profile provided by `initialProfile` (from TripProfileModal)
   // Build a canonical profile object when needed below instead of using local inputs.
@@ -91,7 +111,8 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
           });
           setReviewData(withStatus);
       } else {
-        // On error or missing key, show the generated prompt for manual LLM use and show JSON page immediately
+        // On error or missing key, show the generated prompt for manual LLM use
+        // For craft type, also show the table text if available
         let prompt = result.prompt || '';
         if (!prompt) {
           try {
@@ -109,6 +130,10 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
           }
         }
         setLlmPrompt(prompt);
+        // For craft responses, also set the table text
+        if (result.tableText) {
+          setLlmPrompt(prev => prev + '\n\n' + result.tableText);
+        }
         setShowPrompt(true);
         onError(result.error || 'AI import failed. Use manual JSON import below.');
         // Do NOT close the modal, let user see the JSON page immediately
@@ -576,22 +601,74 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
           {/* Show prompt for manual LLM use if needed */}
           {showPrompt && (
             <div className="mb-6 p-4 bg-yellow-50 border border-yellow-300 rounded">
-              <div className="font-semibold mb-2 text-yellow-800">AI Import failed. You can copy the prompt below and paste it into Gemini, ChatGPT, or another LLM. Then paste the JSON result below to import manually.</div>
-              <textarea
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 text-xs mb-2"
-                value={llmPrompt}
-                readOnly
-                rows={8}
-                onFocus={e => e.target.select()}
-              />
+              {/* copy helper: button uses component-scoped copyToClipboard */}
+              {importType === 'craft' ? (
+                <div>
+                  <div className="font-semibold mb-2 text-yellow-800">AI Itinerary Generated!</div>
+                  <p className="text-sm text-yellow-700 mb-4">
+                    Here's your personalized itinerary. If you're happy with it, click "Create TripCrafter JSON" below to import it into your trip.
+                    You can also modify the JSON manually if needed.
+                  </p>
+                  <div className="bg-white p-3 border rounded mb-4 max-h-96 overflow-y-auto">
+                    <div className="flex justify-end mb-2">
+                      <button
+                        onClick={() => {
+                          copyToClipboard(llmPrompt).then(() => addToast('LLM instructions copied to clipboard', 'success'));
+                        }}
+                        className="text-xs px-2 py-1 border rounded bg-white hover:bg-gray-50"
+                      >
+                        Copy instructions
+                      </button>
+                    </div>
+                    <pre className="text-xs whitespace-pre-wrap">{llmPrompt}</pre>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        // Extract JSON from the prompt and auto-import
+                        const jsonMatch = llmPrompt.match(/```json\s*(\[[\s\S]*?\])\s*```/);
+                        if (jsonMatch) {
+                          setManualJson(jsonMatch[1]);
+                          setTimeout(() => {
+                            document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                          }, 100);
+                        } else {
+                          onError('Could not find JSON in the response. Please copy it manually.');
+                        }
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm"
+                    >
+                      Create TripCrafter JSON
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="font-semibold mb-2 text-yellow-800">AI Import failed. You can copy the prompt below and paste it into Gemini, ChatGPT, or another LLM. Then paste the JSON result below to import manually.</div>
+                  <div className="flex items-start gap-2 mb-2">
+                    <textarea
+                      className="flex-1 p-2 border border-gray-300 rounded bg-gray-50 text-xs"
+                      value={llmPrompt}
+                      readOnly
+                      rows={8}
+                      onFocus={e => e.target.select()}
+                    />
+                    <div className="flex-shrink-0">
+                      <button onClick={() => copyToClipboard(llmPrompt)} className="text-xs px-2 py-1 border rounded bg-white hover:bg-gray-50">Copy</button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <form onSubmit={handleManualJsonSubmit} className="mt-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Paste LLM JSON result here:</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {importType === 'craft' ? 'Modify JSON (optional):' : 'Paste LLM JSON result here:'}
+                </label>
                 <textarea
                   className="w-full p-2 border border-gray-300 rounded bg-white text-xs"
                   value={manualJson}
                   onChange={e => setManualJson(e.target.value)}
                   rows={6}
-                  placeholder="Paste the JSON output from Gemini, ChatGPT, etc."
+                  placeholder={importType === 'craft' ? "Paste or modify the JSON data..." : "Paste the JSON output from Gemini, ChatGPT, etc."}
                 />
                 <div className="flex justify-end mt-2">
                   <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">Import JSON</button>
@@ -607,7 +684,7 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Import Source
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setImportType('url')}
@@ -646,6 +723,19 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                   >
                     <div className="text-2xl mb-1">📝</div>
                     <div className="text-sm font-medium">Text/Email</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportType('craft')}
+                    className={`p-3 text-center rounded-lg border-2 transition duration-200 ${
+                      importType === 'craft'
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                    disabled={isProcessing}
+                  >
+                    <div className="text-2xl mb-1">🎨</div>
+                    <div className="text-sm font-medium">Craft Trip</div>
                   </button>
                 </div>
               </div>
@@ -706,49 +796,82 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                       </p>
                     </div>
                   )}
+                  {importType === 'craft' && (
+                    <TripCraftForm
+                      onSubmit={async (formData) => {
+                        setIsProcessing(true);
+                        try {
+                          const profile = {
+                            adults: Number(initialProfile.adults) || 2,
+                            children: Number(initialProfile.children) || 0,
+                            interests: Array.isArray(initialProfile.interests) ? initialProfile.interests : [],
+                            diet: initialProfile.diet || 'everything',
+                            state: initialProfile.state,
+                            country: initialProfile.country
+                          };
+                          const result = await aiImportService.importFromSource(JSON.stringify(formData), 'craft', profile);
+                          if (result.success) {
+                            const withStatus = result.data.map((d, idx) => ({ ...d, id: `craft-${Date.now()}-${idx}`, _status: 'pending' }));
+                            setReviewData(withStatus);
+                          } else {
+                            setLlmPrompt(result.prompt);
+                            setShowPrompt(true);
+                          }
+                        } catch (error) {
+                          setLlmPrompt('Error generating itinerary. Please try again.');
+                          setShowPrompt(true);
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }}
+                      onCancel={() => setImportType('url')}
+                    />
+                  )}
                 </div>
                 {/* Importer uses trip profile settings from Trip Profile modal */}
                 <div className="mb-4 p-3 border rounded bg-gray-50 text-sm text-gray-700">
                   Using trip profile settings (adults, children, interests, diet) from the Trip Profile modal.
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex space-x-3">
-                  <button
-                    type="submit"
-                    disabled={isProcessing}
-                    className={`
-                      flex-1 py-3 px-6 rounded-md font-semibold transition duration-200
-                      ${isProcessing
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                      }
-                    `}
-                  >
-                    {isProcessing ? (
-                      <div className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                        Processing...
-                      </div>
-                    ) : (
-                      '🚀 Import with AI'
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    disabled={isProcessing}
-                    className="px-6 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition duration-200"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                {/* Action Buttons - hide when craft form is active */}
+                {importType !== 'craft' && (
+                  <div className="flex space-x-3">
+                    <button
+                      type="submit"
+                      disabled={isProcessing}
+                      className={`
+                        flex-1 py-3 px-6 rounded-md font-semibold transition duration-200
+                        ${isProcessing
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }
+                      `}
+                    >
+                      {isProcessing ? (
+                        <div className="flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                          Processing...
+                        </div>
+                      ) : (
+                        '🚀 Import with AI'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClose}
+                      disabled={isProcessing}
+                      className="px-6 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition duration-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </form>
             </>
           )}
 
-          {/* Test Samples */}
-          {!isProcessing && !showPrompt && (
+          {/* Test Samples - hide when craft form is active */}
+          {!isProcessing && !showPrompt && importType !== 'craft' && (
             <div className="mt-6 pt-6 border-t border-gray-200">
               <p className="text-sm text-gray-600 mb-3">Try these sample bookings:</p>
               <div className="grid grid-cols-2 gap-2">

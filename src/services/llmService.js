@@ -15,51 +15,179 @@ INPUT TEXT:
 ${text}
 
 INSTRUCTIONS:
-1. Extract booking/accommodation information from the text
-2. Return ONLY a JSON array - no explanations, no markdown
-3. Each booking should be an object with these exact fields:
-   - date: YYYY-MM-DD format (check-in date)
-   - location: Full address or city name
-   - title: Hotel/campsite name
-   - status: "Booked" or "Unconfirmed"
-   - type: "roofed" (hotels), "camp" (campsites), or "enroute" (transport)
-   - activities: Description of planned activities
-   - notes: Booking numbers, guest details, special requests
- 4. For bookings that span multiple dates, OUTPUT ONE ENTRY PER DATE covered by the booking. Duplicate booking-level fields (location, title, status, type, activities, notes) for each date entry. If the text indicates a checkout morning for the end date, exclude the checkout date; if it clearly includes an overnight stay through the end date, include it.
+1. Extract booking/accommodation and activity information from the text.
+2. Return ONLY a JSON array - no explanations, no markdown.
+3. Each item must be an object with these exact fields:
+   - date: YYYY-MM-DD format (for calendar date). If an activity includes a specific time window, include time details in the "activities" field (see below) and keep "date" as the activity date.
+   - location: A specific place string (city, neighbourhood or activity location). When the item is an activity (type 'enroute' or 'note'), include the activity location (e.g. "Paris - Montmartre" or "Rotorua - Whakarewarewa").
+   - title: Accommodation or activity title (hotel name, "Hot Air Balloon Ride", "Train to Hobart", etc.).
+   - status: "Booked" or "Unconfirmed".
+   - type: "roofed" for accommodations, "camp" for campsites, "enroute" for travel segments and activities, "note" for suggestions/tips.
+   - activities: Description of planned activities. When possible include time windows in HH:MM-HH:MM format (e.g. "06:00-09:00 hot air balloon, 10:00-12:00 brunch"). Separate multiple segments with commas.
+   - notes: Additional details such as booking numbers, dietary notes, accessibility info, transport details, pacing constraints, etc.
+4. Each distinct activity at a different location must be its own entry, even if it occurs on the same date. Maintain chronological order (morning -> lunch -> afternoon -> evening).
+5. For multi-night accommodation bookings, OUTPUT ONE accommodation entry PER NIGHT (one date per night).
+6. Ensure the generated itinerary spans the travel dates, includes an entry for each night of accommodation, aligns activities with traveler interests, and considers pace and constraints.
+
 TRAVEL PROFILE:
 - Adults: ${profile.adults || 'Not specified'}
 - Children: ${profile.children || 'Not specified'}
 - Interests: ${Array.isArray(profile.interests) ? profile.interests.join(', ') : 'Not specified'}
 - Diet: ${profile.diet || 'Not specified'}
 
-OUTPUT FORMAT:
-Return a JSON array like this:
-[{"date":"2025-12-24","location":"Address","title":"Hotel Name","status":"Booked","type":"roofed","activities":"Description","notes":"Details"}]`;
+OUTPUT FORMAT EXAMPLE (JSON ONLY):
+[{"date":"2025-07-15","location":"Paris - 1st Arrondissement","title":"Central Hotel (night)","status":"Booked","type":"roofed","activities":"Check-in 15:00-16:00","notes":"Accessible room requested"},{"date":"2025-07-16","location":"Paris - Montmartre","title":"Hot Air Balloon Ride","status":"Unconfirmed","type":"enroute","activities":"06:00-09:00 hot air balloon","notes":"Vegetarian breakfast available"},{"date":"2025-07-16","location":"Paris - Le Marais","title":"Brunch at Café Bleu","status":"Unconfirmed","type":"enroute","activities":"10:00-12:00 brunch","notes":"Vegetarian menu options"},{"date":"2025-07-16","location":"Paris - Louvre Museum","title":"Louvre Visit","status":"Unconfirmed","type":"enroute","activities":"14:00-17:00 museum visit","notes":"Prebook tickets recommended"}]`;
   }
 
-  buildPromptWithExample(text, profile = {}) {
-    const example = [
-      {
-        "date": "2025-12-24",
-        "location": "Scamander Sanctuary Holiday Park, Winifred Dr, Scamander TAS 7215, Australia",
-        "title": "Scamander Sanctuary Holiday Park",
-        "status": "Booked",
-        "type": "camp",
-        "activities": "Christmas Eve stay, coastal walk",
-        "notes": "Booking #27366. 2 adults, 1 vehicle."
-      }
-    ];
+  buildCraftPrompt(formData) {
+    const {
+      destinations,
+      travelDates,
+      travelers,
+      budget,
+      alreadyBooked,
+      alreadyBookedDetails,
+      tripPace,
+      independence,
+      sightseeingVsDowntime,
+      historyCulture,
+      natureOutdoors,
+      foodDrink,
+      shopping,
+      nightlifeEntertainment,
+      relaxation,
+      otherInterests,
+      otherInterestsRating,
+      mustSeePlaces,
+      thingsToAvoid,
+      morningStyle,
+      travelComfort,
+      preferredTransport,
+      accommodationStyle,
+      basePreference,
+      dietaryNeeds,
+      accessibilityNeeds,
+      safetyConcerns,
+      travelingWith,
+      freeTimeFlexibility,
+      hiddenGemsVsAttractions,
+      shoppingTime,
+      eventsFestivals,
+      finalNotes
+    } = formData;
 
-    return `${this.buildPrompt(text, profile)}
+    // Convert ratings to descriptive text
+    const ratingDescriptions = {
+      1: "Not at all important",
+      2: "Somewhat important",
+      3: "Moderately important",
+      4: "Very important",
+      5: "Extremely important"
+    };
 
-EXAMPLES:
-1) Single-date booking
-Input: "Booked at Beach Hotel, Sydney for Dec 25, 2025. Booking #12345"
-Output: [{"date":"2025-12-25","location":"Sydney","title":"Beach Hotel","status":"Booked","type":"roofed","activities":"Hotel stay","notes":"Booking #12345"}]
-2) Multi-night booking (produce one entry per date)
-Input: "Booked at Beach Hotel, Sydney for Dec 25 to Dec 27th, 2025. Booking #12345"
-Output: [{"date":"2025-12-25","location":"Sydney","title":"Beach Hotel","status":"Booked","type":"roofed","activities":"Hotel stay","notes":"Booking #12345"},{"date":"2025-12-26","location":"Sydney","title":"Beach Hotel","status":"Booked","type":"roofed","activities":"Hotel stay","notes":"Booking #12345"},{"date":"2025-12-27","location":"Sydney","title":"Beach Hotel","status":"Booked","type":"roofed","activities":"Hotel stay","notes":"Booking #12345"}]
-REQUIRED: Return ONLY the JSON array, nothing else.`;
+    const paceDescriptions = {
+      1: "Very relaxed pace with lots of downtime",
+      2: "Relaxed pace",
+      3: "Moderate pace",
+      4: "Active pace",
+      5: "Very fast-paced with minimal downtime"
+    };
+
+    const independenceDescriptions = {
+      1: "Fully guided tours and organized activities",
+      2: "Mostly guided with some independent time",
+      3: "Balanced mix of guided and independent activities",
+      4: "Mostly independent with some guided elements",
+      5: "Fully independent exploration"
+    };
+
+    const morningDescriptions = {
+      1: "Sleep in until late morning",
+      2: "Wake up mid-morning",
+      3: "Normal schedule",
+      4: "Early riser",
+      5: "Very early morning starts"
+    };
+
+    const transportPrefs = Object.entries(preferredTransport)
+      .filter(([_, checked]) => checked)
+      .map(([key, _]) => {
+        const labels = {
+          rentalCar: 'Rental car',
+          trains: 'Trains',
+          flights: 'Flights',
+          guidedTransport: 'Guided transport',
+          walking: 'Walking'
+        };
+        return labels[key];
+      })
+      .join(', ');
+
+  return `Create a detailed travel itinerary as a JSON array that can be imported directly into TripCrafter.
+
+TRAVELER PROFILE:
+- Destinations: ${destinations || 'Not specified'}
+- Travel dates/flexibility: ${travelDates || 'Not specified'}
+- Travelers: ${travelers || 'Not specified'}
+- Budget level: ${budget || 'Not specified'}
+- Already booked: ${alreadyBooked === 'yes' ? `Yes - ${alreadyBookedDetails || 'Details not provided'}` : 'No'}
+
+TRAVEL STYLE PREFERENCES:
+- Trip pace: ${paceDescriptions[tripPace] || 'Moderate pace'}
+- Independence level: ${independenceDescriptions[independence] || 'Balanced mix'}
+- Sightseeing vs downtime: ${sightseeingVsDowntime <= 2 ? 'Prefer more downtime' : sightseeingVsDowntime >= 4 ? 'Prefer more sightseeing' : 'Balanced mix'}
+- Morning style: ${morningDescriptions[morningStyle] || 'Normal schedule'}
+
+INTERESTS & PRIORITIES:
+- History & culture: ${ratingDescriptions[historyCulture] || 'Moderately important'}
+- Nature & outdoors: ${ratingDescriptions[natureOutdoors] || 'Moderately important'}
+- Food & drink: ${ratingDescriptions[foodDrink] || 'Moderately important'}
+- Shopping: ${ratingDescriptions[shopping] || 'Moderately important'}
+- Nightlife & entertainment: ${ratingDescriptions[nightlifeEntertainment] || 'Moderately important'}
+- Relaxation: ${ratingDescriptions[relaxation] || 'Moderately important'}
+${otherInterests ? `- ${otherInterests}: ${ratingDescriptions[otherInterestsRating] || 'Moderately important'}` : ''}
+
+MUST-SEE PLACES: ${mustSeePlaces || 'None specified'}
+THINGS TO AVOID: ${thingsToAvoid || 'None specified'}
+
+LOGISTICS & COMFORT:
+- Travel comfort: ${travelComfort <= 2 ? 'Avoid long travel days' : travelComfort >= 4 ? 'Comfortable with full-day travel' : 'Moderate travel days acceptable'}
+- Preferred transport: ${transportPrefs || 'Not specified'}
+- Accommodation style: ${accommodationStyle || 'Not specified'}
+- Base preference: ${basePreference || 'Not specified'}
+
+SPECIAL CONSIDERATIONS:
+- Dietary needs: ${dietaryNeeds || 'None specified'}
+- Accessibility needs: ${accessibilityNeeds || 'None specified'}
+- Safety concerns: ${safetyConcerns || 'None specified'}
+- Traveling with: ${travelingWith || 'Not specified'}
+
+EXTRAS:
+- Free time flexibility: ${freeTimeFlexibility <= 2 ? 'Want everything scheduled' : freeTimeFlexibility >= 4 ? 'Want lots of free time' : 'Moderate flexibility'}
+- Hidden gems vs attractions: ${hiddenGemsVsAttractions <= 2 ? 'Prefer famous sites' : hiddenGemsVsAttractions >= 4 ? 'Prefer hidden/local spots' : 'Mix of both'}
+- Shopping time: ${ratingDescriptions[shoppingTime] || 'Moderately important'}
+- Events/festivals: ${ratingDescriptions[eventsFestivals] || 'Moderately important'}
+
+ADDITIONAL NOTES: ${finalNotes || 'None provided'}
+
+INSTRUCTIONS:
+Create a detailed day-by-day itinerary as a JSON array. Each object represents a single activity segment or accommodation night with the following fields:
+- date: YYYY-MM-DD format (use activity date; include time windows in the "activities" field when provided)
+- location: City/neighbourhood and specific activity location when applicable (e.g. "Paris - Montmartre")
+- title: Accommodation or activity title
+- status: "Unconfirmed"
+- type: "roofed" for accommodation nights, "camp" for campsites, "enroute" for travel segments and scheduled activities, "note" for optional suggestions/tips
+- activities: Short description; include time windows in HH:MM-HH:MM format (e.g. "06:00-09:00 hot air balloon") and separate multiple segments with commas
+- notes: Additional details such as booking references, dietary/accessibility notes, pacing guidance, transport links, or recommendations
+
+Rules:
+- Each distinct activity at a different location must be its own entry, even if on the same date. Keep items in chronological order (morning -> lunch -> afternoon -> evening).
+- Output one accommodation entry per night (one date per night).
+- Ensure itinerary covers full travel dates, aligns activities to traveler interests and pace, and avoids impossible travel between distant locations on the same time window.
+- Output ONLY the JSON array, with no surrounding text or markdown.
+
+EXAMPLE OUTPUT (JSON ONLY):
+[{"date":"2025-07-15","location":"Paris - 1st Arrondissement","title":"Central Hotel (night)","status":"Unconfirmed","type":"roofed","activities":"Check-in 15:00-16:00","notes":"Accessible room requested"},{"date":"2025-07-16","location":"Paris - Montmartre","title":"Hot Air Balloon Ride","status":"Unconfirmed","type":"enroute","activities":"06:00-09:00 hot air balloon","notes":"Vegetarian breakfast available"},{"date":"2025-07-16","location":"Paris - Le Marais","title":"Brunch at Café Bleu","status":"Unconfirmed","type":"enroute","activities":"10:00-12:00 brunch","notes":"Vegetarian menu options"},{"date":"2025-07-16","location":"Paris - Louvre Museum","title":"Louvre Visit","status":"Unconfirmed","type":"enroute","activities":"14:00-17:00 museum visit","notes":"Prebook tickets recommended"}]`;
   }
 
   async parseBookingInformation(text = '', profile = {}) {
@@ -196,22 +324,34 @@ REQUIRED: Return ONLY the JSON array, nothing else.`;
     return null;
   }
 
-  // Simple mock parser that returns one normalized item containing required fields.
-  mockParse(text = '', profile = {}) {
-    const firstLine = (text || '').split(/\r?\n/).find(l => l.trim().length > 0) || '';
-    const location = firstLine.slice(0, 120);
-
-    return [
-      {
-        date: '',
-        location: location || '',
-        title: '',
-        status: 'Unconfirmed',
-        type: 'roofed',
-        activities: '',
-        notes: ''
+  async parseCraftResponse(text = '') {
+    // Try to parse the entire response as JSON first
+    try {
+      const parsed = JSON.parse(text.trim());
+      if (Array.isArray(parsed)) {
+        return { success: true, data: parsed };
       }
-    ];
+    } catch (e) {
+      console.log('Direct JSON parse failed, trying extraction');
+    }
+
+    // Fallback: extract JSON array from the response
+    const jsonMatches = text.match(/\[[\s\S]*?\]/g);
+    if (jsonMatches) {
+      for (const match of jsonMatches) {
+        try {
+          const parsed = JSON.parse(match);
+          if (Array.isArray(parsed)) {
+            return { success: true, data: parsed };
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+
+    // If no JSON found, return the text as a prompt for manual use
+    return { type: 'manual', tableText: text };
   }
 }
 

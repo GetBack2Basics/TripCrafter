@@ -4,6 +4,16 @@ import { llmService } from './llmService.js';
 
 export class AIImportService {
   async getPrompt(source, type = 'auto', profile = {}) {
+    // Special handling for craft type
+    if (type === 'craft') {
+      try {
+        const formData = JSON.parse(source);
+        return llmService.buildCraftPrompt(formData);
+      } catch (e) {
+        return 'Error: Invalid craft form data';
+      }
+    }
+
     let content = '';
     let detectedType = type;
     if (type === 'auto') {
@@ -23,7 +33,7 @@ export class AIImportService {
         content = '';
     }
   // Provide a prompt with an explicit example to improve LLM output consistency
-  return llmService.buildPromptWithExample(content, profile);
+  return llmService.buildPrompt(content, profile);
   }
   constructor() {
     this.supportedTypes = {
@@ -37,6 +47,17 @@ export class AIImportService {
     try {
       let content = '';
       let detectedType = type;
+
+      // Special handling for craft type - source is JSON form data
+      if (type === 'craft') {
+        try {
+          const formData = JSON.parse(source);
+          const result = await this.processCraftData(formData, profile);
+          return result;
+        } catch (e) {
+          throw new Error('Invalid craft form data');
+        }
+      }
 
       if (type === 'auto' || source instanceof File) {
         detectedType = this.detectSourceType(source);
@@ -198,6 +219,129 @@ export class AIImportService {
         sourceType: type
       };
     }
+  }
+
+  async processCraftData(formData, profile = {}) {
+    try {
+      const prompt = llmService.buildCraftPrompt(formData);
+
+      // Try to call LLM API
+      if (this.huggingFaceApiKey) {
+        try {
+          const result = await this.callCraftLLM(prompt);
+          if (result && result.success) {
+            return {
+              success: true,
+              data: result.data,
+              sourceType: 'craft',
+              contentLength: prompt.length,
+              tableText: result.tableText
+            };
+          }
+        } catch (error) {
+          console.error('Craft LLM API failed:', error.message);
+        }
+      }
+
+      // If API failed, return prompt for manual use
+      return {
+        success: false,
+        error: 'AI craft failed: API not available or failed. Use the provided prompt with your LLM to get the itinerary.',
+        prompt: prompt,
+        sourceType: 'craft',
+        contentLength: prompt.length
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        sourceType: 'craft'
+      };
+    }
+  }
+
+  async callCraftLLM(prompt) {
+    const models = [
+      'microsoft/DialoGPT-medium',
+      'distilgpt2',
+      'google/flan-t5-base',
+      'microsoft/DialoGPT-small',
+      'gpt2'
+    ];
+
+    for (const modelName of models) {
+      try {
+        console.log(`Trying craft model: ${modelName}`);
+        const response = await fetch(`https://api-inference.huggingface.co/models/${modelName}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.huggingFaceApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            inputs: prompt,
+            parameters: {
+              max_new_tokens: 800,
+              temperature: 0.7,
+              do_sample: true,
+              return_full_text: false,
+              repetition_penalty: 1.2,
+              num_beams: 1,
+              early_stopping: true
+            },
+            options: {
+              wait_for_model: true,
+              use_cache: true
+            }
+          })
+        });
+
+        if (!response.ok) {
+          let errorText = '';
+          try {
+            errorText = await response.text();
+          } catch (e) {
+            errorText = `<unable to read response body: ${e.message}>`;
+          }
+          console.warn(`Craft model ${modelName} failed: HTTP ${response.status} - ${errorText.substring(0,200)}`);
+          continue;
+        }
+
+        const data = await response.json();
+        console.log(`Craft model ${modelName} raw response:`, data);
+        let generatedText = '';
+        if (Array.isArray(data) && data[0]?.generated_text) {
+          generatedText = data[0].generated_text;
+        } else if (data.generated_text) {
+          generatedText = data.generated_text;
+        } else if (typeof data === 'string') {
+          generatedText = data;
+        }
+
+        console.log(`Craft model ${modelName} generated text:`, generatedText.substring(0, 300) + '...');
+
+        if (!generatedText.trim()) {
+          console.warn(`Craft model ${modelName} returned empty response`);
+          continue;
+        }
+
+        const result = llmService.parseCraftResponse(generatedText);
+        if (result.success) {
+          console.log(`Craft model ${modelName} successfully parsed response`);
+          return result;
+        } else if (result.type === 'manual') {
+          // Return the table text for manual processing
+          return { success: false, tableText: result.tableText };
+        }
+
+      } catch (error) {
+        console.warn(`Craft model ${modelName} error:`, error.message);
+        continue;
+      }
+    }
+
+    throw new Error('All craft models failed to generate valid response');
   }
 
   detectSourceType(source) {
