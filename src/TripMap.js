@@ -134,21 +134,8 @@ function createCustomIcon(number, type, isActive, scale = 1) {
 }
 
 // Small on-screen debug overlay component
-function DebugOverlay() {
+function DebugOverlay({ markers = [], attemptFly }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState([]);
-  useEffect(() => {
-    // populate periodically from window helpers
-    const id = setInterval(() => {
-      try {
-        if (typeof window !== 'undefined' && window.__TRIPCRAFT_DEBUG_LOG_MARKERS__) {
-          const res = window.__TRIPCRAFT_DEBUG_LOG_MARKERS__();
-          if (res && res.markers) setItems(res.markers);
-        }
-      } catch (e) {}
-    }, 800);
-    return () => clearInterval(id);
-  }, []);
 
   return (
     <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 1200, pointerEvents: 'auto' }}>
@@ -160,15 +147,15 @@ function DebugOverlay() {
       {open && (
         <div style={{ marginTop: 8, width: 320, maxHeight: 320, overflow: 'auto', background: 'rgba(255,255,255,0.95)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', padding: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Map markers</div>
-          {items.length === 0 && <div style={{ fontSize: 12, color: '#666' }}>No markers</div>}
-          {items.map((m, i) => (
+          {(!markers || markers.length) === 0 && <div style={{ fontSize: 12, color: '#666' }}>No markers</div>}
+          {(markers || []).map((m, i) => (
             <div key={`${m.id}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <div style={{ flex: 1, fontSize: 12 }}>
                 <div><strong>{m.id}</strong></div>
                 <div style={{ color: '#666' }}>{Array.isArray(m.position) ? `${m.position[0].toFixed ? m.position[0].toFixed(4) : m.position[0]}, ${m.position[1].toFixed ? m.position[1].toFixed(4) : m.position[1]}` : String(m.position)}</div>
               </div>
               <div>
-                <button onClick={() => { try { if (window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__) window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__(m.id); } catch (e) { console.warn(e); } }} style={{ padding: '4px 8px', fontSize: 12 }}>Fly</button>
+                <button onClick={() => { try { if (attemptFly) attemptFly(m.id); } catch (e) { console.warn(e); } }} style={{ padding: '4px 8px', fontSize: 12 }}>Fly</button>
               </div>
             </div>
           ))}
@@ -501,9 +488,6 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
       }
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         console.warn('attemptFly: invalid coords', marker.position);
-        if (typeof window !== 'undefined' && window.__TRIPCRAFT_DEBUG_FLYTO__) {
-          return window.__TRIPCRAFT_DEBUG_FLYTO__(identifier);
-        }
         return { ok: false, error: 'invalid-coords' };
       }
 
@@ -532,38 +516,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
     // No-op effect; defined so attemptFly has stable identity for children
   }, [attemptFly]);
 
-  // Expose debug helpers on window so the DebugPanel can trigger map actions for testing
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    // Expose attemptFly so external debug tools can reuse the same logic/waiting for the map instance
-    window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__ = attemptFly;
-    // Provide a simple compatibility helper that calls attemptFly
-    window.__TRIPCRAFT_DEBUG_FLYTO__ = async (index = 0) => {
-      try {
-        if (typeof window !== 'undefined' && typeof window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__ === 'function') {
-          return await window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__(index);
-        }
-        return { ok: false, error: 'no-attempt-fly' };
-      } catch (err) {
-        console.warn('DebugFly wrapper failed', err);
-        return { ok: false, error: String(err) };
-      }
-    };
-
-    window.__TRIPCRAFT_DEBUG_LOG_MARKERS__ = () => {
-      try {
-        const out = markers.map(m => ({ id: m.id, index: m.index, position: Array.isArray(m.position) ? m.position : (m.position && typeof m.position === 'object' ? [m.position.lat ?? m.position[0], m.position.lng ?? m.position[1]] : null) }));
-        console.debug('DebugMarkers:', out);
-        return { ok: true, markers: out };
-      } catch (e) { console.warn('Debug log markers failed', e); return { ok: false, error: String(e) }; }
-    };
-
-    return () => {
-      try { delete window.__TRIPCRAFT_DEBUG_FLYTO__; } catch (e) {}
-      try { delete window.__TRIPCRAFT_DEBUG_ATTEMPT_FLY__; } catch (e) {}
-      try { delete window.__TRIPCRAFT_DEBUG_LOG_MARKERS__; } catch (e) {}
-    };
-  }, [mapInstance, markers, currentZoom]);
+  // Debug helpers are removed from window; DebugOverlay uses local props instead
 
   // Cleanup wheel handler if we attached it to the map container
   useEffect(() => {
@@ -619,7 +572,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                         aria-label={`Fly to ${getPlaceName(item.location)}`}
                         onClick={async () => { try { await attemptFly(item.id); } catch (e) { console.warn('Header fly failed', e); } }}
                       >
-                        {displayIndex}. {getPlaceName(item.location)}{idx < sortedTripItems.length-1 && <span className="text-gray-400"> 7 </span>}
+                        {displayIndex}. {getPlaceName(item.location)}{idx < sortedTripItems.length-1 && <span className="text-gray-400"> --&gt; </span>}
                       </button>
                     );
                   })
@@ -881,7 +834,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
             {route && console.log('Rendering route with positions:', route.slice(0, 3), '...')}
             <MapController markers={markers} flyRequestsRef={flyRequestsRef} flyRequestsVersion={flyRequestsVersion} zoomThreshold={ZOOM_INCLUDE_ENROUTE} />
               {/* Debug overlay: toggled panel listing items and markers for QA */}
-              <DebugOverlay />
+              <DebugOverlay markers={markers} attemptFly={attemptFly} />
             {/* On-map pan/zoom controls */}
             <div className="absolute top-3 right-3 z-50" style={{ pointerEvents: 'none' }}>
               <div className="bg-white bg-opacity-90 rounded-md shadow p-1" style={{ width: 44, pointerEvents: 'auto' }}>

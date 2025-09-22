@@ -1486,77 +1486,10 @@ export default function TripDashboard() {
           </div>
         </div>
       )}
-      {/* Temporary Debug Panel (visible in dev) */}
-      <div className="fixed right-4 bottom-4 z-50">
-        <DebugPanel activeView={activeView} setActiveView={setActiveView} />
-      </div>
+      {/* Temporary Debug Panel removed from UI (kept component for dev use) */}
     </div>
   );
 }
 
-function DebugPanel({ activeView, setActiveView }) {
-  // Use window.__TRIPCRAFT_DEBUG_PANEL__ to access state from TripDashboard during dev
-  // When rendered within TripDashboard we will rely on closure captured pushDebug via props; as a simple approach
-  // render a small placeholder that reads from the global debugLogs populated by TripDashboard via console.debug.
-  const [open, setOpen] = React.useState(false);
-  const [flyResult, setFlyResult] = React.useState(null);
-  const [markerResult, setMarkerResult] = React.useState(null);
-  const copyToClipboard = (txt) => {
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(txt);
-      } else if (typeof window !== 'undefined') {
-        const ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.left = '-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-      }
-    } catch (e) { console.warn('copy failed', e); }
-  };
-
-  return (
-    <div className={`bg-white border rounded shadow p-2 text-xs w-72 ${open ? 'max-h-80 overflow-y-auto' : ''}`}>
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">Debug</div>
-            <div className="flex gap-2">
-              <button className="px-2 py-1 bg-gray-100 rounded" onClick={() => setOpen(o => !o)}>{open ? 'Hide' : 'Show'}</button>
-              <button className="px-2 py-1 bg-gray-100 rounded" onClick={async () => {
-                try {
-                  // If helpers are missing, switch to the map view and poll for them (map may not be created yet)
-                  const ensureHelpersAndCall = async (attempts = 0) => {
-                    if (typeof window !== 'undefined' && window.__TRIPCRAFT_DEBUG_FLYTO__) {
-                      const res = await window.__TRIPCRAFT_DEBUG_FLYTO__(0);
-                      setFlyResult(res);
-                      if (typeof window.__TRIPCRAFT_DEBUG_LOG_MARKERS__ === 'function') setMarkerResult(window.__TRIPCRAFT_DEBUG_LOG_MARKERS__());
-                      return res;
-                    }
-                    if (attempts === 0) {
-                      try { setActiveView && setActiveView('map'); } catch (e) {}
-                    }
-                    if (attempts >= 3) {
-                      setFlyResult({ ok: false, error: 'debug-helpers-missing' });
-                      return { ok: false, error: 'debug-helpers-missing' };
-                    }
-                    // wait briefly and retry
-                    await new Promise(r => setTimeout(r, 350 * (attempts + 1)));
-                    return ensureHelpersAndCall(attempts + 1);
-                  };
-                  await ensureHelpersAndCall(0);
-                } catch (e) { setFlyResult({ ok: false, error: String(e) }); }
-              }}>Fly→0</button>
-            </div>
-          </div>
-      {open && (
-        <div className="mt-2">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">Result</div>
-            <div>
-              <button className="px-2 py-1 bg-gray-100 rounded mr-1" onClick={() => copyToClipboard(JSON.stringify({ flyResult, markerResult }, null, 2))}>Copy</button>
-            </div>
-          </div>
-          <div className="mt-2">
-            <pre className="bg-gray-100 rounded p-1 overflow-x-auto max-h-56">{JSON.stringify({ flyResult, markerResult }, null, 2)}</pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// DebugPanel removed
 
