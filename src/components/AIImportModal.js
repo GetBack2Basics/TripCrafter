@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { aiImportService } from '../services/aiImportService';
 import AIImportReview from './AIImportReview';
 import TripCraftForm from './TripCraftForm';
@@ -12,6 +12,21 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
   const [llmPrompt, setLlmPrompt] = useState('');
   const [showPrompt, setShowPrompt] = useState(false);
   const [manualJson, setManualJson] = useState('');
+  const [showCreateTripForm, setShowCreateTripForm] = useState(false);
+  const [newTripName, setNewTripName] = useState('');
+  const [newTripPublic, setNewTripPublic] = useState(false);
+  const newTripNameRef = useRef(null);
+
+  useEffect(() => {
+    if (showCreateTripForm && newTripNameRef.current) {
+      try {
+        newTripNameRef.current.focus();
+        newTripNameRef.current.select();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [showCreateTripForm]);
 
   // helper to copy text reliably and show toast
   const copyToClipboard = async (text) => {
@@ -560,27 +575,54 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
             <div>
               <button onClick={handleCancelReview} className="px-4 py-2 rounded bg-white border border-gray-300">Back</button>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => { setReviewData(null); handleClose(); }} className="px-4 py-2 rounded bg-red-100 text-red-700">Discard</button>
-              <button
-                disabled={!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0}
-                onClick={() => {
-                  // Create a new trip with the selected entries. Prompt for name and privacy.
-                  const selected = reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status));
-                  if (!selected || selected.length === 0) return;
-                  const name = window.prompt('Create new trip — enter a name for this trip', `AI Trip ${new Date().toISOString().slice(0,10)}`);
-                  if (!name) return;
-                  const isPublic = window.confirm('Make this trip public (visible to others)? OK = public, Cancel = private');
-                  // Build payload expected by TripDashboard: { createNewTrip: true, name, isPublic, items: [{ entry, action }] }
-                  const items = selected.map(e => ({ entry: e, action: e._status === 'replaced' ? 'replace' : 'import' }));
-                  onImportSuccess({ createNewTrip: true, name, isPublic, items });
-                  setReviewData(null);
-                  handleClose();
-                }}
-                className={`px-4 py-2 rounded ${!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-emerald-600 text-white'}`}
-              >
-                Create New Trip
-              </button>
+              <div className="flex gap-2 items-start">
+                <button onClick={() => { setReviewData(null); handleClose(); }} className="px-4 py-2 rounded bg-red-100 text-red-700">Discard</button>
+                {!showCreateTripForm ? (
+                  <button
+                    disabled={!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0}
+                    onClick={() => {
+                      const selected = reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status));
+                      if (!selected || selected.length === 0) return;
+                      // initialize inline form fields with sensible defaults
+                      setNewTripName(`AI Trip ${new Date().toISOString().slice(0,10)}`);
+                      setNewTripPublic(false);
+                      setShowCreateTripForm(true);
+                      // focus will be handled by effect
+                    }}
+                    className={`px-4 py-2 rounded ${!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-emerald-600 text-white'}`}
+                  >
+                    Create New Trip
+                  </button>
+                ) : (
+                  <div className="p-3 bg-white border rounded shadow-sm">
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Trip name</label>
+                      <input ref={newTripNameRef} autoFocus className="w-full p-2 border rounded mt-1" value={newTripName} onChange={e => setNewTripName(e.target.value)} />
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <label className="flex items-center text-sm gap-2">
+                        <input type="checkbox" checked={newTripPublic} onChange={e => setNewTripPublic(e.target.checked)} />
+                        <span className="text-sm">Make this trip public</span>
+                      </label>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => { setShowCreateTripForm(false); }} className="px-3 py-1 border rounded">Cancel</button>
+                      <button onClick={() => {
+                        const selected = reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status));
+                        if (!selected || selected.length === 0) return;
+                        if (!newTripName || !newTripName.trim()) {
+                          addToast('Please enter a name for the new trip', 'warning');
+                          return;
+                        }
+                        const items = selected.map(e => ({ entry: e, action: e._status === 'replaced' ? 'replace' : 'import' }));
+                        onImportSuccess({ createNewTrip: true, name: newTripName.trim(), isPublic: newTripPublic, items });
+                        setReviewData(null);
+                        setShowCreateTripForm(false);
+                        handleClose();
+                      }} className="px-3 py-1 rounded bg-emerald-600 text-white">Create</button>
+                    </div>
+                  </div>
+                )}
               <button disabled={!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0} onClick={handleImportSelected} className={`px-4 py-2 rounded ${!reviewData || reviewData.filter(e => ['approved', 'edited', 'replaced'].includes(e._status)).length === 0 ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-indigo-600 text-white'}`}>Import Selected</button>
             </div>
           </div>

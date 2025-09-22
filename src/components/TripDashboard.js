@@ -197,6 +197,7 @@ export default function TripDashboard() {
   const [pendingOps, setPendingOps] = useState([]);
   const [lastSyncedItems, setLastSyncedItems] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingTrip, setIsCreatingTrip] = useState(false);
   const pushDebug = (msg) => {
     const ts = new Date().toISOString();
     const entry = { ts, msg };
@@ -561,22 +562,47 @@ export default function TripDashboard() {
       // Create a new trip and import items into it
       const { name, isPublic, items } = payload;
       try {
+        setIsCreatingTrip(true);
         if (userId) {
           const tripsRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips`);
-          const tripDoc = { ownerId: userId, name: name || `AI Trip ${new Date().toISOString().slice(0,10)}`, profile: initialProfile || tripProfile, public: !!isPublic, createdAt: Date.now() };
+          // Use the current `tripProfile` state as the new trip profile (initialProfile is not available here)
+          const tripDoc = { ownerId: userId, name: name || `AI Trip ${new Date().toISOString().slice(0,10)}`, profile: tripProfile, public: !!isPublic, createdAt: Date.now() };
           const newTripRef = await addDoc(tripsRef, tripDoc);
+          // Prepare normalized items to add and to show locally
+          const newItems = (items || []).map(it => normalizeTripItem(it.entry));
           // add items into itineraryItems subcollection
           const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${newTripRef.id}/itineraryItems`);
-          for (const it of items || []) {
+          for (const it of newItems) {
             try {
-              const payloadItem = stripUndefined({ ...normalizeTripItem(it.entry) }); delete payloadItem.id; await addDoc(itineraryRef, payloadItem);
+              const payloadItem = stripUndefined({ ...it });
+              // Do not send an id field; let Firestore create doc ids
+              delete payloadItem.id;
+              await addDoc(itineraryRef, payloadItem);
             } catch (e) {
               console.error('Failed to add item to new trip', e);
+              addToast('Failed to add one or more items to the new trip', 'warning');
             }
           }
-          // Select the new trip
+
+          // Select the new trip. Read back the created docs to avoid snapshot race that can clear UI
           setUserTrips(prev => [...prev, { id: newTripRef.id, ownerId: userId, name: tripDoc.name }]);
           setCurrentTripId(newTripRef.id);
+
+          try {
+            const snap = await getDocs(itineraryRef);
+            const rawItems = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+            const norm = rawItems.map(normalizeTripItem);
+            setTripItems(sortTripItems(norm));
+            setLastSyncedItems(norm.slice());
+            setPendingOps([]);
+          } catch (e) {
+            console.error('Failed to read back created itinerary items', e);
+            // Fallback: use the normalized items we prepared earlier
+            setTripItems(sortTripItems(newItems));
+            setLastSyncedItems(newItems.slice());
+            setPendingOps([]);
+          }
+
           addToast('Created new trip and imported AI suggestions', 'success');
         } else {
           // Not logged in: create a local public-facing trip object and add items locally
@@ -586,7 +612,10 @@ export default function TripDashboard() {
           setCurrentTripId(newTripId);
           // Add items locally into tripItems state
           const newItems = (items || []).map(it => normalizeTripItem(it.entry));
+          // Replace demo trip items with the new imported items
           setTripItems(sortTripItems(newItems));
+          setPendingOps([]);
+          setLastSyncedItems([]);
           addToast('Created public trip (demo) and imported AI suggestions', 'info');
         }
       } catch (e) {
@@ -594,6 +623,7 @@ export default function TripDashboard() {
         addToast('Failed to create new trip', 'warning');
       }
       setShowAIImportModal(false);
+      setIsCreatingTrip(false);
       return;
     }
     if (!Array.isArray(payload)) return;
@@ -706,6 +736,19 @@ export default function TripDashboard() {
     }
     // Close modal after processing; TripDashboard controls the modal state
     setShowAIImportModal(false);
+    // If we wrote to Firestore, read back the itinerary items to ensure UI is up-to-date
+    if (currentTripId) {
+      try {
+        const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
+        const snap = await getDocs(itineraryRef);
+        const rawItems = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        const norm = rawItems.map(normalizeTripItem);
+        setTripItems(sortTripItems(norm));
+        setLastSyncedItems(norm.slice());
+      } catch (e) {
+        console.error('Failed to refresh itinerary items after import', e);
+      }
+    }
     // show toast summary
     addToast(`Import complete — created: ${summary.created}, updated: ${summary.updated}, replaced: ${summary.replaced}, errors: ${summary.errors}`, 'success');
   };
@@ -825,6 +868,12 @@ export default function TripDashboard() {
   // When currentTripId changes, load its itinerary items
   useEffect(() => {
     if (!currentTripId) return;
+    // If this is a guest/demo-created trip (local id starting with 'public_') and user is not authenticated,
+    // do not attach a Firestore onSnapshot which would overwrite the local items (no remote docs exist).
+    if (!userId && String(currentTripId).startsWith('public_')) {
+      // local/demo trip: keep existing local tripItems (already set when creating the demo trip)
+      return;
+    }
     const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
     const unsubscribe = onSnapshot(itineraryRef, (snapshot) => {
       (async () => {
@@ -1250,6 +1299,14 @@ export default function TripDashboard() {
 
   return (
     <div className="flex flex-col min-h-[60vh]">
+      {isCreatingTrip && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white p-4 rounded shadow flex items-center gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent" />
+            <div className="text-sm font-medium">Creating trip and importing items…</div>
+          </div>
+        </div>
+      )}
       <AppHeader
         userEmail={userEmail}
         userAvatar={userAvatar}

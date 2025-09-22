@@ -40,6 +40,11 @@ function TripCraftForm({ onSubmit, onCancel }) {
     accommodationStyle: '',
     basePreference: '',
 
+  // Accommodation / travel constraints
+  accommodationMix: '', // e.g. "Mostly 3-night stays with some 1-night stays"
+  travelTimePreferences: 'mostly_under_2h', // 'mostly_under_2h' | 'flexible_with_long_days' | 'custom'
+  travelTimeNotes: '',
+
     // Food & Special Considerations
     dietaryNeeds: '',
     accessibilityNeeds: '',
@@ -325,6 +330,37 @@ function TripCraftForm({ onSubmit, onCancel }) {
                   {option}
                 </label>
               ))}
+            </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Accommodation mix (nights per stay)</label>
+            <input
+              type="text"
+              value={formData.accommodationMix}
+              onChange={(e) => handleInputChange('accommodationMix', e.target.value)}
+              placeholder="e.g., Mostly 3-night stays with some 1-night stays"
+              className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <p className="text-xs text-gray-500 mt-1">Give an example mix so the planner prefers multi-night stays where possible.</p>
+          </div>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Typical travel-time preferences</label>
+            <div className="space-y-2">
+              <label className="flex items-center">
+                <input type="radio" name="travelTimePref" value="mostly_under_2h" checked={formData.travelTimePreferences === 'mostly_under_2h'} onChange={(e) => handleInputChange('travelTimePreferences', e.target.value)} className="mr-2" />
+                Mostly under 2 hours between sights (short travel), occasional long days allowed
+              </label>
+              <label className="flex items-center">
+                <input type="radio" name="travelTimePref" value="flexible_with_long_days" checked={formData.travelTimePreferences === 'flexible_with_long_days'} onChange={(e) => handleInputChange('travelTimePreferences', e.target.value)} className="mr-2" />
+                Flexible — comfortable with multiple long travel days (up to ~8 hours)
+              </label>
+              <label className="flex items-center">
+                <input type="radio" name="travelTimePref" value="custom" checked={formData.travelTimePreferences === 'custom'} onChange={(e) => handleInputChange('travelTimePreferences', e.target.value)} className="mr-2" />
+                Custom notes
+              </label>
+              {formData.travelTimePreferences === 'custom' && (
+                <textarea value={formData.travelTimeNotes} onChange={(e) => handleInputChange('travelTimeNotes', e.target.value)} rows={2} className="w-full mt-2 p-2 border rounded" placeholder="Describe your acceptable travel times, example mix, exceptions..." />
+              )}
             </div>
           </div>
           <div className="mt-4">

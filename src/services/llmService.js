@@ -65,6 +65,9 @@ OUTPUT FORMAT EXAMPLE (JSON ONLY):
       preferredTransport,
       accommodationStyle,
       basePreference,
+  accommodationMix,
+  travelTimePreferences,
+  travelTimeNotes,
       dietaryNeeds,
       accessibilityNeeds,
       safetyConcerns,
@@ -130,6 +133,11 @@ OUTPUT FORMAT EXAMPLE (JSON ONLY):
   if (travelers) summaryLines.push(`Travelers: ${travelers}`);
   if (mustSeePlaces) summaryLines.push(`Must-see: ${mustSeePlaces}`);
   if (thingsToAvoid) summaryLines.push(`Avoid: ${thingsToAvoid}`);
+  if (accommodationMix) summaryLines.push(`Accommodation mix: ${accommodationMix}`);
+  if (travelTimePreferences) {
+    const tt = travelTimePreferences === 'mostly_under_2h' ? 'Mostly under 2h between sights (short travel), occasional long days allowed' : travelTimePreferences === 'flexible_with_long_days' ? 'Flexible, comfortable with long travel days (up to ~8h)' : `Custom: ${travelTimeNotes || ''}`;
+    summaryLines.push(`Travel time preference: ${tt}`);
+  }
 
   const summary = summaryLines.length ? `FORM SUMMARY:\n${summaryLines.join('\n')}` : '';
 
