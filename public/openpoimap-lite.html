@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OpenPoiMap - Lite</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="/openpoimap-lite.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="topbar">
+      <div id="logo">OpenPoiMap <small>lite</small></div>
+      <div id="categoryBar">
+        <button data-cat="amenity">Amenity</button>
+        <button data-cat="hotels">Hotels</button>
+        <button data-cat="restaurants">Restaurants</button>
+        <button data-cat="tourism">Tourism</button>
+        <button id="clearAll">clear all</button>
+      </div>
+    </div>
+
+    <div id="mapWrap">
+      <div id="zoomControl" class="control">
+        <button id="zoomIn">+</button>
+        <div id="zoomSlider"><div id="zoomThumb"></div></div>
+        <button id="zoomOut">−</button>
+      </div>
+
+      <div id="map"></div>
+
+      <div id="rightPanel" class="control">
+        <div class="panelInner">
+          <div class="panelTitle">Base Layer</div>
+          <label><input type="radio" name="base" value="osm" checked /> Mapnik</label>
+          <label><input type="radio" name="base" value="topo" /> Topo</label>
+          <label><input type="radio" name="base" value="carto" /> Positron</label>
+
+          <hr />
+          <div class="panelTitle">Overlays</div>
+          <div class="overlayList">
+            <label><input type="checkbox" data-cat="atm" /> ATM</label>
+            <label><input type="checkbox" data-cat="bank" /> Bank</label>
+            <label><input type="checkbox" data-cat="bench" /> Bench</label>
+            <label><input type="checkbox" data-cat="bicycle_parking" /> Bicycle parking</label>
+            <label><input type="checkbox" data-cat="hospital" /> Hospital</label>
+            <label><input type="checkbox" data-cat="library" /> Library</label>
+            <label><input type="checkbox" data-cat="pharmacy" /> Pharmacy</label>
+            <label><input type="checkbox" data-cat="police" /> Police</label>
+          </div>
+
+          <hr />
+          <div class="panelTitle">Actions</div>
+          <button id="fetchPois">Fetch POIs (demo)</button>
+          <button id="resetView">Reset view</button>
+          <hr />
+          <div class="panelTitle">Route Planner</div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            <input id="locInput" type="text" placeholder="Address or place" style="flex:1;padding:6px;font-size:13px;" />
+            <button id="addLocation">Add</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <button id="computeRoute">Compute Route</button>
+            <button id="clearRoute">Clear Route</button>
+            <button id="mapAddToggle">Map add: off</button>
+            <button id="loadSample">Load Sample Trip</button>
+          </div>
+          <div id="routeList" style="max-height:160px;overflow:auto;font-size:13px;border:1px solid #eee;padding:6px;background:#fff"></div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+            <div id="routeProgress" style="display:none;align-items:center"><div class="oc-spinner" style="margin-right:8px"></div><div id="routeProgressText">Preparing...</div></div>
+            <div id="loaderStatus" style="flex:1;max-height:140px;overflow:auto;font-size:12px;background:#111;color:#eee;padding:6px;border-radius:4px;">Status logs will appear here.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="poiStatus" class="control">POIs: <span id="poiCount">0</span></div>
+      <a id="permalink" class="control" href="#">Permalink</a>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="/openpoimap-lite.js"></script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+[
+  {
+    "date": "2025-12-02",
+    "time_window": "15:00-16:00",
+    "location": "Le Marais, Paris",
+    "title": "Hotel 1 Check-in",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Check into your first hotel in the Le Marais neighborhood.",
+    "notes": "A central and trendy neighborhood with easy access to many of the city's sights."
+  },
+  {
+    "date": "2025-12-02",
+    "time_window": "16:00-18:00",
+    "location": "Le Marais, Paris",
+    "title": "Neighborhood Walk",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Take a walk to get your bearings. Check out the Place des Vosges and the shops along Rue des Rosiers.",
+    "notes": "Take a walk to get your bearings. Check out the Place des Vosges and the shops along Rue des Rosiers."
+  },
+  {
+    "date": "2025-12-02",
+    "time_window": "19:00-21:00",
+    "location": "Le Marais, Paris",
+    "title": "Dinner at a Creperie",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Enjoy a casual and traditional French crepe dinner.",
+    "notes": "Enjoy a casual and traditional French crepe dinner."
+  },
+  {
+    "date": "2025-12-02",
+    "time_window": "21:00-22:00",
+    "location": "Le Marais, Paris",
+    "title": "Accommodation",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Overnight stay in Le Marais.",
+    "notes": "Return to your accommodation in Le Marais."
+  },
+  {
+    "date": "2025-12-03",
+    "time_window": "09:00-12:00",
+    "location": "Île de la Cité, Paris",
+    "title": "Notre Dame Cathedral & Sainte-Chapelle",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Marvel at the ongoing reconstruction of Notre Dame. Then, visit the stunning stained-glass windows of Sainte-Chapelle.",
+    "notes": "Marvel at the ongoing reconstruction of Notre Dame. Then, visit the stunning stained-glass windows of Sainte-Chapelle."
+  },
+  {
+    "date": "2025-12-03",
+    "time_window": "13:00-15:00",
+    "location": "Latin Quarter, Paris",
+    "title": "Lunch and Exploration",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Cross the bridge to the Left Bank. Find a bistro for lunch and wander through the charming streets of the Latin Quarter.",
+    "notes": "Cross the bridge to the Left Bank. Find a bistro for lunch and wander through the charming streets of the Latin Quarter."
+  },
+  {
+    "date": "2025-12-03",
+    "time_window": "15:00-17:00",
+    "location": "Le Marais, Paris",
+    "title": "Christmas Market",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Visit the Christmas Market at Notre Dame/Square Viviani.",
+    "notes": "Visit the Christmas Market at Notre Dame/Square Viviani. This is one of the most picturesque markets in the city."
+  },
+  {
+    "date": "2025-12-03",
+    "time_window": "19:00-21:00",
+    "location": "Le Marais, Paris",
+    "title": "Dinner and Rest",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Relax with a cozy dinner near your hotel after a busy day.",
+    "notes": "Relax with a cozy dinner near your hotel after a busy day."
+  },
+  {
+    "date": "2025-12-03",
+    "time_window": "21:00-22:00",
+    "location": "Le Marais, Paris",
+    "title": "Accommodation",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Rest up after a day of sightseeing.",
+    "notes": "Rest up after a day of sightseeing."
+  },
+  {
+    "date": "2025-12-04",
+    "time_window": "09:00-11:00",
+    "location": "Le Marais to Montmartre",
+    "title": "Hotel Transfer",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Check out and travel to your next hotel in the Montmartre area.",
+    "notes": "Check out and travel to your next hotel in the Montmartre area."
+  },
+  {
+    "date": "2025-12-04",
+    "time_window": "11:00-12:00",
+    "location": "Montmartre, Paris",
+    "title": "Hotel 2 Check-in",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Settle into your hotel in the artistic Montmartre neighborhood.",
+    "notes": "Settle into your hotel in the artistic Montmartre neighborhood."
+  },
+  {
+    "date": "2025-12-04",
+    "time_window": "12:00-14:00",
+    "location": "Montmartre, Paris",
+    "title": "Lunch and Exploration",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Find a classic bistro for lunch and wander through the charming streets of Montmartre.",
+    "notes": "Find a classic bistro for lunch and wander through the charming streets of Montmartre."
+  },
+  {
+    "date": "2025-12-04",
+    "time_window": "14:00-17:00",
+    "location": "Montmartre, Paris",
+    "title": "Sacré-Cœur Basilica & Artists Square",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Take the funicular up to the basilica for panoramic views of the city. Explore the Place du Tertre, where artists work and sell their art.",
+    "notes": "Take the funicular up to the basilica for panoramic views of the city. Explore the Place du Tertre, where artists work and sell their art."
+  },
+  {
+    "date": "2025-12-04",
+    "time_window": "19:00-21:00",
+    "location": "Montmartre, Paris",
+    "title": "Dinner and Entertainment",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Have dinner in the neighborhood. Consider seeing a cabaret show like the Moulin Rouge, which is a short walk away.",
+    "notes": "Have dinner in the neighborhood. Consider seeing a cabaret show like the Moulin Rouge, which is a short walk away."
+  },
+  {
+    "date": "2025-12-04",
+    "time_window": "21:00-22:00",
+    "location": "Montmartre, Paris",
+    "title": "Accommodation",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Overnight stay in Montmartre.",
+    "notes": "Overnight stay in Montmartre."
+  },
+  {
+    "date": "2025-12-05",
+    "time_window": "09:00-12:00",
+    "location": "Montmartre, Paris",
+    "title": "Musée de l'Erotisme & Shopping",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "A quirky and fun alternative to more traditional museums. Afterward, browse the boutiques in the neighborhood.",
+    "notes": "A quirky and fun alternative to more traditional museums. Afterward, browse the boutiques in the neighborhood."
+  },
+  {
+    "date": "2025-12-05",
+    "time_window": "13:00-15:00",
+    "location": "Champs-Élysées, Paris",
+    "title": "Lunch and Window Shopping",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Walk down the famous avenue, admiring the festive decorations.",
+    "notes": "Walk down the famous avenue, admiring the festive decorations."
+  },
+  {
+    "date": "2025-12-05",
+    "time_window": "15:00-17:00",
+    "location": "Champs-Élysées, Paris",
+    "title": "Arc de Triomphe & Holiday Lights",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Climb the Arc de Triomphe for a panoramic view of the avenues. The Christmas lights will be on and are spectacular.",
+    "notes": "Climb the Arc de Triomphe for a panoramic view of the avenues. The Christmas lights will be on and are spectacular."
+  },
+  {
+    "date": "2025-12-05",
+    "time_window": "19:00-21:00",
+    "location": "Le Marais, Paris",
+    "title": "Dinner and Rest",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Relax with a cozy dinner after a busy day.",
+    "notes": "Relax with a cozy dinner after a busy day."
+  },
+  {
+    "date": "2025-12-05",
+    "time_window": "21:00-22:00",
+    "location": "Montmartre, Paris",
+    "title": "Accommodation",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Overnight stay in Montmartre.",
+    "notes": "Overnight stay in Montmartre."
+  },
+  {
+    "date": "2025-12-06",
+    "time_window": "09:00-10:00",
+    "location": "Montmartre, Paris",
+    "title": "Hotel Transfer",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Check out and take a taxi or RER B train to the Palace of Versailles area.",
+    "notes": "Check out and take a taxi or RER B train to the Palace of Versailles area."
+  },
+  {
+    "date": "2025-12-06",
+    "time_window": "10:00-11:00",
+    "location": "Versailles, France",
+    "title": "Hotel 3 Check-in",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Settle into your hotel near the Palace of Versailles.",
+    "notes": "Settle into your hotel near the Palace of Versailles."
+  },
+  {
+    "date": "2025-12-06",
+    "time_window": "11:00-18:00",
+    "location": "Palace of Versailles, France",
+    "title": "Full Day at Versailles",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "You are already here, so you save time. Purchase a Passport ticket online to access the Palace, Trianon Estate, and Gardens.",
+    "notes": "You are already here, so you save time. Purchase a Passport ticket online to access the Palace, Trianon Estate, and Gardens. Dress warmly for the gardens."
+  },
+  {
+    "date": "2025-12-06",
+    "time_window": "19:00-21:00",
+    "location": "Versailles, France",
+    "title": "Dinner in Versailles",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Enjoy a nice dinner in the town of Versailles, which is beautiful and often overlooked by tourists.",
+    "notes": "Enjoy a nice dinner in the town of Versailles, which is beautiful and often overlooked by tourists."
+  },
+  {
+    "date": "2025-12-06",
+    "time_window": "21:00-22:00",
+    "location": "Versailles, France",
+    "title": "Accommodation",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Overnight stay in Versailles.",
+    "notes": "Overnight stay in Versailles."
+  },
+  {
+    "date": "2025-12-07",
+    "time_window": "11:00-12:00",
+    "location": "Disneyland Paris, France",
+    "title": "Hotel 4 Check-in",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Settle into your hotel near Disneyland. Many have shuttle services directly to the park.",
+    "notes": "Settle into your hotel near Disneyland. Many have shuttle services directly to the park."
+  },
+  {
+    "date": "2025-12-07",
+    "time_window": "12:00-20:00",
+    "location": "Disneyland Paris, France",
+    "title": "Afternoon & Evening at Disneyland Park",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Pre-book your tickets online. The park is especially magical during its Enchanted Christmas season with special parades and shows.",
+    "notes": "Pre-book your tickets online. The park is especially magical during its **Enchanted Christmas** season with special parades and shows."
+  },
+  {
+    "date": "2025-12-07",
+    "time_window": "20:00-21:00",
+    "location": "Disneyland Paris, France",
+    "title": "Dinner at Disney Village",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Have a festive dinner at Disney Village.",
+    "notes": "Have a festive dinner at Disney Village."
+  },
+  {
+    "date": "2025-12-07",
+    "time_window": "21:00-22:00",
+    "location": "Disneyland Paris, France",
+    "title": "Accommodation",
+    "status": "Unconfirmed",
+    "type": "roofed",
+    "activities": "Overnight stay at Disneyland Paris.",
+    "notes": "Overnight stay at Disneyland Paris."
+  },
+  {
+    "date": "2025-12-08",
+    "time_window": "09:00-12:00",
+    "location": "Disneyland Paris, France",
+    "title": "Morning at Disneyland Park",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Use the extra hours from staying at a Disney-affiliated hotel to enjoy the park with fewer crowds.",
+    "notes": "Use the extra hours from staying at a Disney-affiliated hotel to enjoy the park with fewer crowds."
+  },
+  {
+    "date": "2025-12-08",
+    "time_window": "13:00-15:00",
+    "location": "Disneyland to Orly/CDG",
+    "title": "Travel to Airport",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Take the RER A to central Paris and transfer to the RER B for the airport.",
+    "notes": "Take the RER A to central Paris and transfer to the RER B for the airport."
+  },
+  {
+    "date": "2025-12-08",
+    "time_window": "16:00-17:00",
+    "location": "Paris, France",
+    "title": "Departure",
+    "status": "Unconfirmed",
+    "type": "enroute",
+    "activities": "Depart from Paris.",
+    "notes": "Arrive at the airport 3 hours before your flight for international travel."
+  }
+]

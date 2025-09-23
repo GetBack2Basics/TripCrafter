@@ -1,0 +1,24 @@
+*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+html,body,#app,#mapWrap,#map{height:100%}
+body{margin:0;background:#f6f7f9}
+#topbar{display:flex;align-items:center;gap:12px;padding:8px;background:#fff;border-bottom:1px solid #e6e6e6}
+#logo{font-weight:700;color:#222}
+#categoryBar button{margin-right:6px;padding:6px 8px;border-radius:4px;border:1px solid #ddd;background:#fff}
+#mapWrap{position:relative;height:calc(100% - 48px)}
+#map{position:absolute;inset:0}
+.control{position:absolute;background:rgba(255,255,255,0.95);border:1px solid #ddd;border-radius:6px;padding:8px;box-shadow:0 4px 10px rgba(0,0,0,0.08);z-index:10000;pointer-events:auto}
+#zoomControl{left:8px;top:56px;width:44px;padding:6px}
+#zoomControl button{width:100%;height:36px;border-radius:4px;border:1px solid #ccc;background:#fff;font-size:18px}
+#rightPanel{right:12px;top:12px;width:220px;max-height:70%;overflow:auto}
+#poiStatus{left:12px;bottom:12px;padding:6px}
+#permalink{right:12px;bottom:12px;padding:6px}
+.panelTitle{font-weight:700;margin-bottom:6px}
+.overlayList label{display:block;margin-bottom:6px}
+.btn{padding:6px 8px;background:#4F46E5;color:#fff;border-radius:4px;border:0}
+
+/* POI icon styling (divIcon) to approximate OpenPoiMap symbology */
+.poi-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;border:2px solid rgba(255,255,255,0.9);box-shadow:0 2px 6px rgba(0,0,0,0.25)}
+.leaflet-marker-icon .poi-icon{margin:0}
+.poi-icon.small{width:20px;height:20px;font-size:11px}
+/* overlay label highlight when group toggles */
+.overlay-highlight{background:linear-gradient(90deg,rgba(79,70,229,0.08),rgba(79,70,229,0.04));border-radius:4px;padding:2px}

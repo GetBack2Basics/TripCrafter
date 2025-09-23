@@ -287,6 +287,12 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
   const coordsByIdRef = React.useRef({});
   const ZOOM_INCLUDE_ENROUTE = 10; // zoom threshold to include 'enroute' points on the map
 
+  // Gesture controls state (for the external testing UI)
+  const [enablePinch, setEnablePinch] = useState(true);
+  const [enableRotate, setEnableRotate] = useState(false);
+  const [enableBoxZoom, setEnableBoxZoom] = useState(true);
+  const rotationRef = useRef(0); // degrees applied to the map container (prototype only)
+
   // ---- Route segment cache helpers ----
   const getSegmentDocRef = (tripId, fromId, toId) => {
     if (!tripId) return null;
@@ -474,6 +480,174 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
   }, [fetchPoisForBounds]);
 
   useEffect(() => { return () => { mountedRef.current = false; if (poiFetchTimer.current) clearTimeout(poiFetchTimer.current); }; }, []);
+
+  // Gesture handling: pinch-to-zoom and two-finger-rotate (prototype), plus Shift+drag box-zoom
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || typeof window === 'undefined') return;
+
+    const container = map.getContainer && map.getContainer();
+    if (!container) return;
+
+    let pinch = { active: false, startDist: 0, startZoom: 0, centerPoint: null };
+    let rotate = { active: false, startAngle: 0, baseAngle: rotationRef.current };
+    let boxZoomState = { active: false, startX: 0, startY: 0, overlay: null };
+
+    const getDistance = (t0, t1) => {
+      const dx = t1.clientX - t0.clientX;
+      const dy = t1.clientY - t0.clientY;
+      return Math.sqrt(dx*dx + dy*dy);
+    };
+    const getAngle = (t0, t1) => Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX) * 180 / Math.PI;
+
+    const onTouchStart = (e) => {
+      try {
+        if (!enablePinch && !enableRotate) return;
+        if (e.touches && e.touches.length === 2) {
+          const t0 = e.touches[0];
+          const t1 = e.touches[1];
+          pinch.active = enablePinch;
+          rotate.active = enableRotate;
+          pinch.startDist = getDistance(t0, t1);
+          pinch.startZoom = map.getZoom();
+          const centerClientX = (t0.clientX + t1.clientX) / 2;
+          const centerClientY = (t0.clientY + t1.clientY) / 2;
+          try {
+            const rect = container.getBoundingClientRect();
+            pinch.centerPoint = map.containerPointToLatLng(L.point(centerClientX - rect.left, centerClientY - rect.top));
+          } catch (e) {
+            pinch.centerPoint = null;
+          }
+          rotate.startAngle = getAngle(t0, t1);
+          rotate.baseAngle = rotationRef.current || 0;
+          e.preventDefault && e.preventDefault();
+        }
+      } catch (err) { console.warn('touchstart gesture error', err); }
+    };
+
+    const onTouchMove = (e) => {
+      try {
+        if (e.touches && e.touches.length === 2) {
+          const t0 = e.touches[0];
+          const t1 = e.touches[1];
+          if (pinch.active && pinch.startDist > 0) {
+            const currentDist = getDistance(t0, t1);
+            const scale = currentDist / pinch.startDist;
+            const deltaZoom = Math.log2(scale);
+            const targetZoom = pinch.startZoom + deltaZoom;
+            if (pinch.centerPoint) {
+              try { map.setView([pinch.centerPoint.lat, pinch.centerPoint.lng], targetZoom, { animate: false }); } catch (e) {}
+            } else {
+              try { map.setZoom(targetZoom); } catch (e) {}
+            }
+          }
+          if (rotate.active) {
+            const currentAngle = getAngle(t0, t1);
+            const delta = currentAngle - rotate.startAngle;
+            const newAngle = rotate.baseAngle + delta;
+            rotationRef.current = newAngle;
+            // apply a CSS rotate to the map container as a non-invasive prototype
+            container.style.transformOrigin = '50% 50%';
+            container.style.transform = `rotate(${newAngle}deg)`;
+          }
+          e.preventDefault && e.preventDefault();
+        }
+      } catch (err) { console.warn('touchmove gesture error', err); }
+    };
+
+    const onTouchEnd = (e) => {
+      try {
+        if (!e.touches || e.touches.length < 2) {
+          pinch.active = false;
+          rotate.active = false;
+        }
+      } catch (err) { console.warn('touchend gesture error', err); }
+    };
+
+    // Shift+drag box zoom
+    const onMouseDown = (e) => {
+      try {
+        if (!enableBoxZoom) return;
+        if (!e.shiftKey || e.button !== 0) return;
+        boxZoomState.active = true;
+        const rect = container.getBoundingClientRect();
+        boxZoomState.startX = e.clientX - rect.left;
+        boxZoomState.startY = e.clientY - rect.top;
+        const overlay = document.createElement('div');
+        overlay.style.position = 'absolute';
+        overlay.style.left = `${boxZoomState.startX}px`;
+        overlay.style.top = `${boxZoomState.startY}px`;
+        overlay.style.border = '2px dashed #2563eb';
+        overlay.style.background = 'rgba(37,99,235,0.08)';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.zIndex = 9999;
+        overlay.className = '__tripcraft_boxzoom_overlay';
+        container.appendChild(overlay);
+        boxZoomState.overlay = overlay;
+        e.preventDefault && e.preventDefault();
+      } catch (err) { console.warn('boxzoom mousedown error', err); }
+    };
+
+    const onMouseMove = (e) => {
+      try {
+        if (!boxZoomState.active || !boxZoomState.overlay) return;
+        const rect = container.getBoundingClientRect();
+        const x = Math.max(0, Math.min(container.clientWidth, e.clientX - rect.left));
+        const y = Math.max(0, Math.min(container.clientHeight, e.clientY - rect.top));
+        const left = Math.min(boxZoomState.startX, x);
+        const top = Math.min(boxZoomState.startY, y);
+        const width = Math.abs(x - boxZoomState.startX);
+        const height = Math.abs(y - boxZoomState.startY);
+        const o = boxZoomState.overlay;
+        o.style.left = `${left}px`;
+        o.style.top = `${top}px`;
+        o.style.width = `${width}px`;
+        o.style.height = `${height}px`;
+      } catch (err) { console.warn('boxzoom mousemove error', err); }
+    };
+
+    const onMouseUp = (e) => {
+      try {
+        if (!boxZoomState.active) return;
+        const rect = container.getBoundingClientRect();
+        const endX = Math.max(0, Math.min(container.clientWidth, e.clientX - rect.left));
+        const endY = Math.max(0, Math.min(container.clientHeight, e.clientY - rect.top));
+        const left = Math.min(boxZoomState.startX, endX);
+        const top = Math.min(boxZoomState.startY, endY);
+        const right = Math.max(boxZoomState.startX, endX);
+        const bottom = Math.max(boxZoomState.startY, endY);
+        try { if (boxZoomState.overlay && boxZoomState.overlay.parentNode) boxZoomState.overlay.parentNode.removeChild(boxZoomState.overlay); } catch (e) {}
+        boxZoomState.overlay = null;
+        boxZoomState.active = false;
+        if (Math.abs(right - left) < 8 || Math.abs(bottom - top) < 8) return;
+        const nw = map.containerPointToLatLng(L.point(left, top));
+        const se = map.containerPointToLatLng(L.point(right, bottom));
+        try { map.fitBounds(L.latLngBounds([nw, se])); } catch (e) { console.warn('fitBounds failed', e); }
+      } catch (err) { console.warn('boxzoom mouseup error', err); }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    container.addEventListener('mousedown', onMouseDown, { passive: false });
+    window.addEventListener('mousemove', onMouseMove, { passive: false });
+    window.addEventListener('mouseup', onMouseUp, { passive: false });
+
+    return () => {
+      try {
+        container.removeEventListener('touchstart', onTouchStart, { passive: false });
+        container.removeEventListener('touchmove', onTouchMove, { passive: false });
+        container.removeEventListener('touchend', onTouchEnd, { passive: false });
+        container.removeEventListener('touchcancel', onTouchEnd, { passive: false });
+        container.removeEventListener('mousedown', onMouseDown, { passive: false });
+        window.removeEventListener('mousemove', onMouseMove, { passive: false });
+        window.removeEventListener('mouseup', onMouseUp, { passive: false });
+        const leftover = container.querySelector('.__tripcraft_boxzoom_overlay');
+        if (leftover && leftover.parentNode) leftover.parentNode.removeChild(leftover);
+      } catch (e) { /* ignore */ }
+    };
+  }, [mapRef.current, enablePinch, enableRotate, enableBoxZoom]);
 
   // Do not filter any item types: include all tripItems for mapping and sort by date for consistent ordering
   const mappableItems = Array.isArray(tripItems) ? tripItems : [];
@@ -1165,6 +1339,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
             doubleClickZoom={true}
             touchZoom={true}
             scrollWheelZoom={true}
+            boxZoom={enableBoxZoom}
           >
             <TileLayer
               url={baseLayer === 'osm' ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" : "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"}
@@ -1293,6 +1468,31 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
               </div>
             </div>
           </MapContainer>
+
+          {/* Gesture Controls panel (for mobile/QA) */}
+          <div style={{ position: 'absolute', top: 72, left: 12, zIndex: 1500, pointerEvents: 'auto' }}>
+            <div className="bg-white rounded-md shadow p-2 text-sm" style={{ minWidth: 200 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Gesture Controls</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <input type="checkbox" checked={enablePinch} onChange={(e) => setEnablePinch(!!e.target.checked)} />
+                <span>Pinch to zoom</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <input type="checkbox" checked={enableRotate} onChange={(e) => setEnableRotate(!!e.target.checked)} />
+                <span>Two-finger rotate (prototype)</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <input type="checkbox" checked={enableBoxZoom} onChange={(e) => setEnableBoxZoom(!!e.target.checked)} />
+                <span>Shift+drag box zoom</span>
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="px-2 py-1 bg-gray-100 rounded" onClick={() => {
+                  try { rotationRef.current = 0; const m = mapRef.current; if (m && m.getContainer) { const c = m.getContainer(); c.style.transform = ''; } } catch (e) { console.warn(e); }
+                }}>Reset rotation</button>
+                <button className="px-2 py-1 bg-indigo-600 text-white rounded" onClick={async () => { try { if (mapRef.current) mapRef.current.setView(center, 8); } catch (e) { console.warn(e); } }}>Fly to default</button>
+              </div>
+            </div>
+          </div>
 
           {/* Right-side overlay controls */}
           {/* POI status badge */}
