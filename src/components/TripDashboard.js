@@ -1526,7 +1526,23 @@ export default function TripDashboard() {
                 <button onClick={() => setShowStagedModal(false)} className="px-2 py-1 bg-indigo-600 text-white rounded text-sm">Close</button>
               </div>
             </div>
-            <pre className="text-xs bg-gray-50 p-3 rounded border overflow-x-auto">{JSON.stringify(pendingOps, null, 2)}</pre>
+            <div className="space-y-2">
+              {Array.isArray(pendingOps) && pendingOps.length > 0 ? (
+                pendingOps.map((op, idx) => (
+                  <div key={idx} className="flex items-start justify-between gap-3 bg-gray-50 p-2 rounded border">
+                    <div className="text-xs text-gray-700 break-words flex-1">
+                      <div><strong className="text-gray-800">{op.op}</strong> {op.id ? `• id: ${op.id}` : ''} {op.tripId ? `• trip: ${op.tripId}` : ''}</div>
+                      <div className="text-xs text-gray-500 mt-1">{JSON.stringify(op.payload || op, null, 2)}</div>
+                    </div>
+                    <div className="flex-shrink-0 flex flex-col items-end gap-2">
+                      <button onClick={() => { if (!window.confirm('Revert this staged change?')) return; setPendingOps(prev => prev.filter((_, i) => i !== idx)); addToast('Reverted staged change', 'muted'); }} className="px-2 py-1 bg-red-100 text-red-800 rounded text-sm">Revert</button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-gray-500">No staged changes</div>
+              )}
+            </div>
           </div>
         </div>
       )}
