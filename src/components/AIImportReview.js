@@ -30,7 +30,18 @@ function AIImportReview({ importedData, onMerge, onIgnore, onReplace, onEdit, on
                 <div key={entry.id || entry._id || `${date}-${entry.title}`} className="flex items-center gap-3 bg-white rounded shadow p-3">
                   <div className="flex-1">
                     <div className="font-bold text-gray-800">{entry.location}</div>
-                    <div className="text-xs text-gray-500 mb-1">{entry.type} {entry.accommodation && `- ${entry.accommodation}`}</div>
+                    <div className="text-xs text-gray-500 mb-1">{(() => {
+                      const labels = {
+                        roofed: 'Accommodation (roofed)',
+                        camp: 'Campsite (camp)',
+                        enroute: 'Travel / Activity (enroute)',
+                        note: 'Note',
+                        ferry: 'Ferry',
+                        drive: 'Car / Drive',
+                        flight: 'Plane / Flight'
+                      };
+                      return labels[entry.type] || entry.type;
+                    })()} {entry.accommodation && `- ${entry.accommodation}`}</div>
                             {entry.activities && (
                       <div className="text-xs text-indigo-600">
                                 {(() => {

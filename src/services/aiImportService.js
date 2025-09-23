@@ -21,7 +21,13 @@ export class AIImportService {
     }
     switch (detectedType) {
       case 'url':
-        content = await this.extractFromUrl(source);
+        try {
+          content = await this.extractFromUrl(source);
+        } catch (e) {
+          // If fetching the URL failed (CORS, network), provide a fallback content
+          // so the user still gets a useful LLM prompt they can paste into an assistant.
+          content = `SOURCE_URL: ${source}\n\n/* Unable to fetch page content automatically (CORS or network). If possible, open the URL and paste the page text here for best results. */`;
+        }
         break;
       case 'pdf':
         content = await this.extractFromPdf(source);
@@ -159,7 +165,7 @@ export class AIImportService {
         }
 
         // Normalize type and status to allowed values
-        const allowedTypes = ['roofed','camp','enroute','note'];
+  const allowedTypes = ['roofed','camp','enroute','note','ferry','drive','flight'];
         if (!allowedTypes.includes(item.type)) item.type = 'roofed';
         const allowedStatus = ['Booked','Unconfirmed','Cancelled','Not booked'];
         if (!allowedStatus.includes(item.status)) item.status = 'Unconfirmed';

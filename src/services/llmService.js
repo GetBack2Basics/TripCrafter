@@ -9,7 +9,7 @@ export class LLMService {
   }
 
   buildPrompt(text, profile = {}) {
-    return `Parse travel booking information into JSON format.
+  return `Parse travel booking information into JSON format.
 
 INPUT TEXT:
 ${text}
@@ -18,16 +18,17 @@ INSTRUCTIONS:
 1. Extract booking/accommodation and activity information from the text.
 2. Return ONLY a JSON array - no explanations, no markdown.
 3. Each item must be an object with these exact fields:
-   - date: YYYY-MM-DD format (for calendar date). If an activity includes a specific time window, include time details in the "activities" field (see below) and keep "date" as the activity date.
+   - date: YYYY-MM-DD format (for calendar date).
    - location: A specific place string (city, neighbourhood or activity location). When the item is an activity (type 'enroute' or 'note'), include the activity location (e.g. "Paris - Montmartre" or "Rotorua - Whakarewarewa").
    - title: Accommodation or activity title (hotel name, "Hot Air Balloon Ride", "Train to Hobart", etc.).
    - status: "Booked" or "Unconfirmed".
-   - type: "roofed" for accommodations, "camp" for campsites, "enroute" for travel segments and activities, "note" for suggestions/tips.
+  - type: "roofed" for accommodations, "camp" for campsites, "enroute" for travel segments and activities, "note" for suggestions/tips. Also use specific transport/activity types where helpful: "ferry", "drive" (car/drive), "flight" (plane/flight).
    - activities: Description of planned activities. When possible include time windows in HH:MM-HH:MM format (e.g. "06:00-09:00 hot air balloon, 10:00-12:00 brunch"). Separate multiple segments with commas.
    - notes: Additional details such as booking numbers, dietary notes, accessibility info, transport details, pacing constraints, etc.
-4. Each distinct activity at a different location must be its own entry, even if it occurs on the same date. Maintain chronological order (morning -> lunch -> afternoon -> evening).
-5. For multi-night accommodation bookings, OUTPUT ONE accommodation entry PER NIGHT (one date per night).
-6. Ensure the generated itinerary spans the travel dates, includes an entry for each night of accommodation, aligns activities with traveler interests, and considers pace and constraints.
+4. When times are present in the source, extract and include them. Prefer a dedicated "time" field with a single time ("HH:MM") or an ISO 8601 timestamp for precise times. For time ranges prefer a "time_window" or include the window in the "activities" field as HH:MM-HH:MM. If no time information is present, date-only entries are acceptable.
+5. Each distinct activity at a different location must be its own entry, even if it occurs on the same date. Maintain chronological order (morning -> lunch -> afternoon -> evening).
+6. For multi-night accommodation bookings, OUTPUT ONE accommodation entry PER NIGHT (one date per night).
+7. Ensure the generated itinerary spans the travel dates, includes an entry for each night of accommodation, aligns activities with traveler interests, and considers pace and constraints.
 
 TRAVEL PROFILE:
 - Adults: ${profile.adults || 'Not specified'}
@@ -36,7 +37,7 @@ TRAVEL PROFILE:
 - Diet: ${profile.diet || 'Not specified'}
 
 OUTPUT FORMAT EXAMPLE (JSON ONLY):
-[{"date":"2025-07-15","location":"Paris - 1st Arrondissement","title":"Central Hotel (night)","status":"Booked","type":"roofed","activities":"Check-in 15:00-16:00","notes":"Accessible room requested"},{"date":"2025-07-16","location":"Paris - Montmartre","title":"Hot Air Balloon Ride","status":"Unconfirmed","type":"enroute","activities":"06:00-09:00 hot air balloon","notes":"Vegetarian breakfast available"},{"date":"2025-07-16","location":"Paris - Le Marais","title":"Brunch at Café Bleu","status":"Unconfirmed","type":"enroute","activities":"10:00-12:00 brunch","notes":"Vegetarian menu options"},{"date":"2025-07-16","location":"Paris - Louvre Museum","title":"Louvre Visit","status":"Unconfirmed","type":"enroute","activities":"14:00-17:00 museum visit","notes":"Prebook tickets recommended"}]`;
+[{"date":"2025-07-15","time":"15:00","location":"Paris - 1st Arrondissement","title":"Central Hotel (night)","status":"Booked","type":"roofed","activities":"Check-in 15:00-16:00","notes":"Accessible room requested"},{"date":"2025-07-16","time_window":"06:00-09:00","location":"Paris - Montmartre","title":"Hot Air Balloon Ride","status":"Unconfirmed","type":"enroute","activities":"06:00-09:00 hot air balloon","notes":"Vegetarian breakfast available"},{"date":"2025-07-16","time":"10:00","location":"Paris - Le Marais","title":"Brunch at Café Bleu","status":"Unconfirmed","type":"enroute","activities":"10:00-12:00 brunch","notes":"Vegetarian menu options"},{"date":"2025-07-16","time_window":"14:00-17:00","location":"Paris - Louvre Museum","title":"Louvre Visit","status":"Unconfirmed","type":"enroute","activities":"14:00-17:00 museum visit","notes":"Prebook tickets recommended"}]`;
   }
 
   buildCraftPrompt(formData) {
@@ -183,7 +184,7 @@ Each row becomes one JSON object with the following fields:
   "location": "City - Area/Place",
   "title": "Activity or Accommodation Name",
   "status": "Unconfirmed",
-  "type": "roofed|camp|enroute|note",
+  "type": "roofed|camp|enroute|note|ferry|drive|flight",
   "activities": "Short description of what happens",
   "notes": "Extra guidance, dietary, accessibility, transport, or booking info"
 }
@@ -200,10 +201,13 @@ Each row becomes one JSON object with the following fields:
 "note" = optional suggestions/tips
 
 JSON output must contain only the array, no markdown, no explanations.`;
+
+  // Note: we also explicitly ask the LLM to include times when present in the source/preview
+  // Prefer a dedicated "time" field for single times ("HH:MM" or ISO 8601) and "time_window" for ranges ("HH:MM-HH:MM").
   }
 
   async parseBookingInformation(text = '', profile = {}) {
-    const prompt = this.buildPromptWithExample(text, profile);
+  const prompt = this.buildPrompt(text, profile);
     if (this.huggingFaceApiKey) {
       try {
         const result = await this.callHuggingFace(prompt);

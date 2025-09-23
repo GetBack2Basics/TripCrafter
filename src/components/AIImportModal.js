@@ -5,7 +5,7 @@ import TripCraftForm from './TripCraftForm';
 
 function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfile = {} }) {
   const [reviewData, setReviewData] = useState(null);
-  const [importType, setImportType] = useState('url');
+  const [importType, setImportType] = useState('craft');
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -35,6 +35,7 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
       setShowPrompt(false);
       setManualJson('');
       setLlmPrompt('');
+      setImportType('craft');
     }
   }, [isOpen]);
 
@@ -324,7 +325,7 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
   const handleClose = () => {
     setInputValue('');
     setSelectedFile(null);
-    setImportType('url');
+    setImportType('craft');
     onClose();
   };
 
@@ -651,9 +652,26 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                       <div className="mb-2">"Can we start the trip in the Montmartre area instead?"</div>
                     </div>
 
+                    <div className="mb-3">
+                      <div className="font-semibold">Supported entry types</div>
+                      <div className="text-xs text-gray-800 mt-1">
+                        The AI should output itinerary items using these types when appropriate:
+                        <ul className="list-disc list-inside ml-4 mt-1">
+                          <li>Accommodation (roofed)</li>
+                          <li>Camp</li>
+                          <li>Enroute / Travel</li>
+                          <li>Note</li>
+                          <li>Ferry</li>
+                          <li>Car / Drive</li>
+                          <li>Plane / Flight</li>
+                        </ul>
+                      </div>
+                    </div>
+
                     <h4 className="font-semibold">Step 2: Generate JSON for the App</h4>
                     <ol className="list-decimal list-inside ml-4 mb-3">
                       <li><strong>Request JSON:</strong> Once your itinerary is close to what you want, simply say to the AI: "Give me the TripCrafter JSON."</li>
+                      <li><strong>Include times when available:</strong> If your preview includes times, ask the AI to include them; date-only items are fine if times aren't present.</li>
                       <li><strong>Copy the JSON Code:</strong> The AI will provide the itinerary in a block of code. Copy only the code, starting with <code>[</code> and ending with <code>]</code>.</li>
                       <li><strong>Complete the Process:</strong> Paste the copied code into the box below and click <strong>Create Itinerary</strong>.</li>
                     </ol>
@@ -674,7 +692,19 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                 </div>
               ) : (
                 <div>
-                  <div className="font-semibold mb-2 text-yellow-800">AI Import failed. You can copy the prompt below and paste it into Gemini, ChatGPT, or another LLM. Then paste the JSON result below to import manually.</div>
+                  <div className="font-semibold mb-2 text-yellow-800">AI Import failed. Use the prompt below with an LLM to produce TripCrafter JSON, then paste the JSON result here to import manually.</div>
+                  <div className="text-xs text-gray-800 mb-3">
+                    Quick steps:
+                    <ol className="list-decimal list-inside ml-4 mt-1">
+                      <li>Copy the prompt from the box below.</li>
+                      <li>Paste it into your preferred AI assistant (Gemini, ChatGPT, etc.) and run it.</li>
+                      <li>When the AI preview looks right, ask it to return the TripCrafter JSON (copy only the JSON array from <code>[</code> to <code>]</code>).</li>
+                      <li>Paste the JSON into the box below and click <strong>Import JSON</strong> (or <strong>Create Itinerary</strong> for craft).</li>
+                    </ol>
+                  </div>
+                  <div className="text-xs text-gray-700 mb-2">
+                    Supported entry types: roofed (accommodation), camp, enroute (travel/activities), note, ferry, drive (car/drive), flight (plane/flight).
+                  </div>
                   <div className="flex items-start gap-2 mb-2">
                     <textarea
                       className="flex-1 p-2 border border-gray-300 rounded bg-gray-50 text-xs"
@@ -700,6 +730,22 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                   rows={6}
                   placeholder={importType === 'craft' ? "PASTE LLM JSON output below" : "Paste the JSON output from Gemini, ChatGPT, etc."}
                 />
+                  <div className="mt-2 text-xs text-gray-600 flex items-start justify-between">
+                    <div>
+                      Not sure what to paste? Use the example below as a starting point. Times are optional but recommended when available.
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => {
+                        const example = JSON.stringify([
+                          {"date":"2025-12-10","time":"09:30","location":"Disneyland - Main Gate","title":"Disneyland Park Entry","status":"Unconfirmed","type":"enroute","activities":"Park opening and rides","notes":"Buy tickets in advance"},
+                          {"date":"2025-12-10","time_window":"18:00-20:00","location":"Anaheim - Downtown","title":"Dinner at The Local","status":"Unconfirmed","type":"enroute","activities":"Dinner reservation","notes":"Vegetarian options"}
+                        ], null, 2);
+                        setManualJson(example);
+                        addToast('Example JSON inserted', 'muted');
+                      }} className="px-2 py-1 border rounded bg-white text-xs">Insert example</button>
+                      <button type="button" onClick={() => { setManualJson(''); addToast('Cleared JSON', 'muted'); }} className="px-2 py-1 border rounded bg-white text-xs">Clear</button>
+                    </div>
+                  </div>
                 <div className="flex justify-end mt-2">
                   <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">{importType === 'craft' ? 'Create Itinerary' : 'Import JSON'}</button>
                 </div>
@@ -767,6 +813,28 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                     <div className="text-2xl mb-1">🎨</div>
                     <div className="text-sm font-medium">Craft Trip</div>
                   </button>
+                </div>
+                <div className="mt-3 text-sm text-gray-600">
+                  {importType === 'craft' && (
+                    <div>
+                      <strong>Craft Trip (recommended)</strong> — Create a custom itinerary with our Trip Craft form. Generate a preview with the AI, refine it in your LLM, then ask the AI for TripCrafter JSON and paste that into the import box to finish.
+                    </div>
+                  )}
+                  {importType === 'url' && (
+                    <div>
+                      <strong>Website URL</strong> — Paste a booking confirmation or itinerary URL. The importer will fetch the page and try to parse bookings and itinerary items automatically.
+                    </div>
+                  )}
+                  {importType === 'document' && (
+                    <div>
+                      <strong>Document File</strong> — Upload PDFs, images, Word docs or other files containing booking information. The importer will attempt OCR/parse to extract bookings.
+                    </div>
+                  )}
+                  {importType === 'text' && (
+                    <div>
+                      <strong>Text/Email</strong> — Paste the body of an email or other raw text. Good for copying confirmation emails or itineraries from messages.
+                    </div>
+                  )}
                 </div>
               </div>
 
