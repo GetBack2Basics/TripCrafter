@@ -71,6 +71,21 @@ export default function TripDashboard() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedTripForShare, setSelectedTripForShare] = useState(null);
   const [tripProfile, setTripProfile] = useState({ adults: 2, children: 0, interests: [], diet: 'everything', hotelType: 'any', budgetRange: 'any', roomType: 'any' });
+  // Compute a user-visible trip name using several fallbacks so the UI shows a name whenever possible
+  const displayTripName = currentTripName || (userTrips && userTrips.find(t => t.id === currentTripId) && userTrips.find(t => t.id === currentTripId).name) || (tripProfile && tripProfile.name) || 'Trip Itinerary';
+  // Runtime debug: log key values so we can see why fallback is used
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('TripDashboard debug:', {
+        displayTripName,
+        currentTripName,
+        currentTripId,
+        userTripsCount: Array.isArray(userTrips) ? userTrips.length : 0,
+        tripProfileName: tripProfile && tripProfile.name
+      });
+    } catch (e) {}
+  }, [displayTripName, currentTripName, currentTripId, userTrips, tripProfile]);
   // Use normalized default trip data for demo (not-logged-in) users
   // Helper to create a slug for image filenames
   function locationSlug(location) {
@@ -1430,7 +1445,9 @@ export default function TripDashboard() {
           <div className="flex items-center gap-3">
             {!editingTripName ? (
               <>
-                <h2 className="text-2xl font-bold text-indigo-700 tracking-tight">{currentTripName || 'Trip Itinerary'}</h2>
+                <h2 className="text-2xl font-bold text-indigo-700 tracking-tight">{displayTripName}</h2>
+                {/* debug: show computed name (remove in prod) */}
+                <div className="text-xs text-gray-400">Debug name: {displayTripName}</div>
                 <button title="Edit trip" className="text-indigo-500 hover:text-indigo-700" onClick={() => { setShowProfileModal(true); setShowTripSelectModal(true); }} aria-label="Edit trip">✎</button>
               </>
             ) : (
@@ -1469,7 +1486,7 @@ export default function TripDashboard() {
           <div className="flex items-center gap-3 mt-1">
             <div className="text-gray-500 text-sm">Plan, organize, and visualize your trip</div>
             {userId ? (
-              <button onClick={() => setShowProfileModal(true)} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Your trips{currentTripName ? `: ${currentTripName}` : ''}</button>
+              <button onClick={() => setShowProfileModal(true)} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Your trips{displayTripName ? `: ${displayTripName}` : ''}</button>
             ) : (
               <button onClick={() => setShowProfileModal(true)} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Demo trip</button>
             )}
