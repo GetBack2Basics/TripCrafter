@@ -28,6 +28,16 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
     }
   }, [showCreateTripForm]);
 
+  // When the modal is opened, reset the prompt/manual JSON UI so it starts
+  // on the main importer page instead of staying stuck on the prompt view.
+  useEffect(() => {
+    if (isOpen) {
+      setShowPrompt(false);
+      setManualJson('');
+      setLlmPrompt('');
+    }
+  }, [isOpen]);
+
   // helper to copy text reliably and show toast
   const copyToClipboard = async (text) => {
     try {
