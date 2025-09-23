@@ -276,7 +276,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
   const poiFetchTimer = useRef(null);
   const poiClusterRef = useRef(null);
   // Allow POIs to appear at a slightly lower zoom so users see results without heavy zooming
-  const MIN_ZOOM_FOR_POIS = 10;
+  const MIN_ZOOM_FOR_POIS = 8;
   // tourism subtype selectors
   const [tourismSubtypes, setTourismSubtypes] = useState({ museum: false, viewpoint: false, artwork: false, gallery: false, attraction: false, zoo: false, theme_park: false });
   // Queue for fly requests: each entry { id, lat, lng, resolve, reject }
@@ -396,7 +396,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
   };
 
   // Fetch POIs from Overpass for current bounds; debounced
-  const fetchPoisForBounds = useCallback(async () => {
+  const fetchPoisForBounds = useCallback(async (force = false) => {
     try {
       if (!mapRef.current) return;
       const map = mapRef.current;
@@ -411,25 +411,30 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
         setPoiMarkers([]);
         return;
       }
-      // avoid huge bbox queries on low zoom levels
+      // avoid huge bbox queries on low zoom levels unless forced
       const currentZoom = map.getZoom();
-      if (typeof currentZoom === 'number' && currentZoom < MIN_ZOOM_FOR_POIS) {
+      console.debug('fetchPoisForBounds invoked', { currentZoom, MIN_ZOOM_FOR_POIS, force, selectedOverlays });
+      if (!force && typeof currentZoom === 'number' && currentZoom < MIN_ZOOM_FOR_POIS) {
+        // clear markers and update status so UI shows why nothing was fetched
         setPoiMarkers([]);
         setPoiStatus({ count: 0, lastFetchedAt: Date.now(), error: `zoom < ${MIN_ZOOM_FOR_POIS}`, lastQuery: null, lastResponseCount: 0 });
+        console.debug('fetchPoisForBounds aborted due to zoom < MIN_ZOOM_FOR_POIS', { currentZoom, MIN_ZOOM_FOR_POIS });
         return;
       }
       // Use a light rate-limit / debounce
       if (poiFetchTimer.current) clearTimeout(poiFetchTimer.current);
       setPoiStatus({ count: 0, lastFetchedAt: Date.now(), error: null, lastQuery: null, lastResponseCount: 0 });
-      poiFetchTimer.current = setTimeout(async () => {
+              poiFetchTimer.current = setTimeout(async () => {
         try {
           const url = 'https://overpass-api.de/api/interpreter';
           // update status to indicate fetch in-flight and store query
           setPoiStatus(prev => ({ ...prev, error: 'fetching', lastQuery: q, lastBbox: bbox }));
           console.debug('Overpass fetch: url=', url);
+                  console.debug('Overpass fetch starting (this may be rate-limited). bbox=', bbox);
           console.debug('Overpass fetch: bbox=', bbox);
           console.debug('Overpass fetch: query=', q);
           const resp = await fetch(url, { method: 'POST', body: q, headers: { 'Content-Type': 'text/plain' } });
+                  console.debug('Overpass fetch response status:', resp && resp.status);
           const data = await resp.json();
           console.debug('Overpass response elements count:', Array.isArray(data.elements) ? data.elements.length : 0);
           if (!data || !Array.isArray(data.elements)) { setPoiMarkers([]); setPoiStatus({ count: 0, lastFetchedAt: Date.now(), error: 'no-data' }); return; }
@@ -1313,8 +1318,13 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
             <div className="bg-white rounded-md shadow p-2 text-xs" style={{ minWidth: 200 }}>
               <div style={{ fontWeight: 700, fontSize: 12 }}>POI Actions</div>
               <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-                <button className="px-2 py-1 bg-indigo-600 text-white rounded text-xs" onClick={() => { try { fetchPoisForBounds(); } catch (e) { console.warn(e); } }}>Fetch POIs now</button>
-                <button className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs" onClick={() => { try { setSelectedOverlays(prev => ({ ...prev, tourism: !prev.tourism })); } catch (e) { console.warn(e); } }}>{selectedOverlays.tourism ? 'Hide' : 'Show'}</button>
+                <button className="px-2 py-1 bg-indigo-600 text-white rounded text-xs" onClick={() => { try { fetchPoisForBounds(true); } catch (e) { console.warn(e); } }}>Fetch POIs now</button>
+                <button className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs" onClick={() => { try {
+                    setSelectedOverlays(prev => ({ ...prev, tourism: !prev.tourism }));
+                    // when toggled on, enable all tourism subtypes; when toggled off, clear them
+                    const newVal = !selectedOverlays.tourism;
+                    setTourismSubtypes({ museum: newVal, viewpoint: newVal, artwork: newVal, gallery: newVal, attraction: newVal, zoo: newVal, theme_park: newVal });
+                  } catch (e) { console.warn(e); } }}>{selectedOverlays.tourism ? 'Hide' : 'Show'}</button>
               </div>
               {(poiMarkers || []).length > 0 && (
                 <div style={{ marginTop: 8, maxHeight: 220, overflow: 'auto' }}>
@@ -1340,7 +1350,12 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
               </div>
               <div className="font-semibold text-sm mb-2">Overlays</div>
               <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={!!selectedOverlays.tourism} onChange={(e) => { setSelectedOverlays(prev => ({ ...prev, tourism: e.target.checked })); }} /> <span>Tourism POIs</span></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={!!selectedOverlays.tourism} onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSelectedOverlays(prev => ({ ...prev, tourism: checked }));
+                    // when toggled on, enable all tourism subtypes; when toggled off, clear them
+                    setTourismSubtypes({ museum: checked, viewpoint: checked, artwork: checked, gallery: checked, attraction: checked, zoo: checked, theme_park: checked });
+                  }} /> <span>Tourism POIs</span></label>
                 {selectedOverlays.tourism && (
                   <div className="ml-4 mt-2 flex flex-col gap-1 text-sm">
                     <label><input type="checkbox" checked={!!tourismSubtypes.museum} onChange={(e) => setTourismSubtypes(s => ({ ...s, museum: e.target.checked }))} /> <span className="ml-2">Museum</span></label>
@@ -1474,28 +1489,32 @@ function ClusterManager({ mapRef, poiMarkers, selectedOverlays, createPoiIcon, e
     }
 
     // Ensure markercluster plugin is available
-    if (!L.markerClusterGroup) {
-      console.warn('MarkerCluster plugin not available');
-      return;
+    const pluginAvailable = !!L.markerClusterGroup;
+    if (!pluginAvailable) {
+      console.warn('MarkerCluster plugin not available — falling back to plain markers');
     }
 
   console.debug('ClusterManager running, poiMarkers count:', (poiMarkers || []).length);
-  // Create or reuse cluster group
+    // Create or reuse cluster group or a plain marker container
     if (!clusterRef.current) {
-      clusterRef.current = L.markerClusterGroup({ chunkedLoading: true, removeOutsideVisibleBounds: true });
-      try { map.addLayer(clusterRef.current); } catch (e) { console.warn('addLayer failed', e); }
+      if (pluginAvailable) {
+        clusterRef.current = L.markerClusterGroup({ chunkedLoading: true, removeOutsideVisibleBounds: true });
+        try { map.addLayer(clusterRef.current); } catch (e) { console.warn('addLayer failed', e); }
+      } else {
+        // When plugin not available, use a simple array holder and a dedicated LayerGroup
+        clusterRef.current = L.layerGroup();
+        try { map.addLayer(clusterRef.current); } catch (e) { console.warn('addLayer (layerGroup) failed', e); }
+      }
     }
 
     // Clear existing markers
     try { clusterRef.current.clearLayers(); } catch (e) { /* ignore */ }
 
-    // Add new markers
+    // Add new markers (clustered when plugin available, or plain markers otherwise)
     try {
       for (const p of (poiMarkers || [])) {
         try {
           const marker = L.marker([p.lat, p.lon], { icon: createPoiIcon(p.name ? p.name[0] : '') });
-          const safeName = escapeHtml(p.name || p.type || 'POI');
-          // Use a DOM-based popup content to attach event listeners (more reliable)
           const container = document.createElement('div');
           container.style.fontFamily = 'sans-serif';
           const titleEl = document.createElement('div');
@@ -1538,16 +1557,12 @@ function ClusterManager({ mapRef, poiMarkers, selectedOverlays, createPoiIcon, e
           container.appendChild(controls);
 
           marker.bindPopup(container);
-          // Attach handlers after popup opens to ensure elements are in DOM
           marker.on('popupopen', () => {
             try {
               addBtn.onclick = () => {
                 try {
                   if (typeof window.__TRIPCRAFT_MAP_ADD_ITEM__ === 'function') {
                     window.__TRIPCRAFT_MAP_ADD_ITEM__({ location: p.name || '', title: p.name || p.type, type: 'enroute', date: '' });
-                  } else if (typeof attemptFly === 'function') {
-                    // fallback: directly call onAddItem via attemptFly as a poor-man's signal
-                    console.info('Add bridge not available');
                   }
                 } catch (e) { console.warn('Add button handler failed', e); }
               };
@@ -1559,7 +1574,13 @@ function ClusterManager({ mapRef, poiMarkers, selectedOverlays, createPoiIcon, e
               };
             } catch (e) { console.warn('popupopen handler failed', e); }
           });
-          clusterRef.current.addLayer(marker);
+
+          // Add to cluster or plain layerGroup
+          try {
+            clusterRef.current.addLayer ? clusterRef.current.addLayer(marker) : clusterRef.current.addLayer(marker);
+          } catch (e) {
+            try { map.addLayer(marker); } catch (err) { console.warn('Failed to add POI marker to map', err); }
+          }
         } catch (e) { console.warn('Failed to add POI marker', e); }
       }
     } catch (e) { console.warn('Adding markers to cluster failed', e); }
