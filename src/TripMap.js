@@ -1,8 +1,12 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { BedDouble, Tent, Car, Info, Ship } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+// MarkerCluster (imperative integration)
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import 'leaflet.markercluster';
 
 // Fix for default markers in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -240,7 +244,7 @@ function MapController({ markers, flyRequestsRef, flyRequestsVersion }) {
 
   return null;
 }
-function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdateTravelTimes = false, onSaveRouteTimes = null }) {
+function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdateTravelTimes = false, onSaveRouteTimes = null, onAddItem = null }) {
   const [markers, setMarkers] = useState([]);
   const [route, setRoute] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -248,12 +252,30 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
   const [previewRoute, setPreviewRoute] = useState(null);
   const [previewTimes, setPreviewTimes] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  // Search UI state (Nominatim)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [accomNights, setAccomNights] = useState({});
   const [activeIndex, setActiveIndex] = useState(null);
   const [imageIndexes, setImageIndexes] = useState({});
   const [debugResult, setDebugResult] = useState(null);
-    const [mapInstance, setMapInstance] = useState(null);
-    const mapRef = React.useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
+  const mapRef = React.useRef(null);
+  const mountedRef = useRef(true);
+  // POI overlay state
+  const [poiMarkers, setPoiMarkers] = useState([]);
+  const [poiStatus, setPoiStatus] = useState({ count: 0, lastFetchedAt: null, error: null });
+  // POIs off by default
+  const [selectedOverlays, setSelectedOverlays] = useState({ tourism: false });
+  // Topo as default backdrop
+  const [baseLayer, setBaseLayer] = useState('topo');
+  const poiFetchTimer = useRef(null);
+  const poiClusterRef = useRef(null);
+  const MIN_ZOOM_FOR_POIS = 12;
+  // tourism subtype selectors
+  const [tourismSubtypes, setTourismSubtypes] = useState({ museum: false, viewpoint: false, artwork: false, gallery: false, attraction: false, zoo: false, theme_park: false });
   // Queue for fly requests: each entry { id, lat, lng, resolve, reject }
   const flyRequestsRef = React.useRef([]);
   const flyRequestsVersion = React.useRef(0);
@@ -261,6 +283,121 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
   const coordsByIndexRef = React.useRef({});
   const coordsByIdRef = React.useRef({});
   const ZOOM_INCLUDE_ENROUTE = 10; // zoom threshold to include 'enroute' points on the map
+
+  // Helper: create small green POI icon
+  function createPoiIcon(label) {
+    const html = `<div style="width:18px;height:18px;border-radius:4px;background:#10B981;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600">${label || ''}</div>`;
+    return L.divIcon({ html, className: 'poi-div-icon', iconSize: [18, 18], iconAnchor: [9, 9] });
+  }
+
+  // Small helper to escape HTML for popup content
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // Bridge function exposed to popup buttons to add an item via React callback
+  useEffect(() => {
+    window.__TRIPCRAFT_MAP_ADD_ITEM__ = (payload) => {
+      try {
+        if (typeof onAddItem === 'function') onAddItem(payload);
+      } catch (e) { console.warn('Add item bridge failed', e); }
+    };
+    return () => { try { delete window.__TRIPCRAFT_MAP_ADD_ITEM__; } catch (e) {} };
+  }, [onAddItem]);
+
+  // Build Overpass query for selected overlays; bbox = south,west,north,east
+  const buildOverpassQuery = (bbox, overlays, subtypes) => {
+    const clauses = [];
+    if (!overlays) return null;
+    if (overlays.tourism) {
+      const selected = subtypes ? Object.keys(subtypes).filter(k => !!subtypes[k]) : [];
+      if (selected.length > 0) {
+        for (const s of selected) {
+          clauses.push(`node["tourism"="${s}"](${bbox});way["tourism"="${s}"](${bbox});relation["tourism"="${s}"](${bbox});`);
+        }
+      } else {
+        clauses.push(`node["tourism"](${bbox});way["tourism"](${bbox});relation["tourism"](${bbox});`);
+      }
+    }
+    // add other overlays later
+    if (clauses.length === 0) return null;
+    const q = `
+      [out:json][timeout:25];
+      (
+        ${clauses.join('\n')}
+      );
+      out center 200;
+    `;
+    return q;
+  };
+
+  // Fetch POIs from Overpass for current bounds; debounced
+  const fetchPoisForBounds = useCallback(async () => {
+    try {
+      if (!mapRef.current) return;
+      const map = mapRef.current;
+      const bounds = map.getBounds();
+      const south = bounds.getSouth();
+      const west = bounds.getWest();
+      const north = bounds.getNorth();
+      const east = bounds.getEast();
+      const bbox = `${south},${west},${north},${east}`;
+      const q = buildOverpassQuery(bbox, selectedOverlays, tourismSubtypes);
+      if (!q) {
+        setPoiMarkers([]);
+        return;
+      }
+      // avoid huge bbox queries on low zoom levels
+      const currentZoom = map.getZoom();
+      if (typeof currentZoom === 'number' && currentZoom < MIN_ZOOM_FOR_POIS) {
+        setPoiMarkers([]);
+        return;
+      }
+      // Use a light rate-limit / debounce
+      if (poiFetchTimer.current) clearTimeout(poiFetchTimer.current);
+      poiFetchTimer.current = setTimeout(async () => {
+        try {
+          const url = 'https://overpass-api.de/api/interpreter';
+          const resp = await fetch(url, { method: 'POST', body: q, headers: { 'Content-Type': 'text/plain' } });
+          const data = await resp.json();
+          console.debug('Overpass response elements count:', Array.isArray(data.elements) ? data.elements.length : 0);
+          if (!data || !Array.isArray(data.elements)) { setPoiMarkers([]); setPoiStatus({ count: 0, lastFetchedAt: Date.now(), error: 'no-data' }); return; }
+          const out = [];
+          for (const el of data.elements.slice(0, 400)) {
+            let lat = null; let lon = null;
+            if (el.type === 'node') { lat = el.lat; lon = el.lon; }
+            else if (el.type === 'way' || el.type === 'relation') { if (el.center) { lat = el.center.lat; lon = el.center.lon; } }
+            if (!lat || !lon) continue;
+            const name = (el.tags && (el.tags.name || el.tags['name:en'])) || el.tags && el.tags.tourism || '';
+            const type = (el.tags && el.tags.tourism) || 'tourism';
+            out.push({ id: `${el.type}_${el.id}`, lat, lon, name, type });
+          }
+          if (mountedRef.current) {
+            setPoiMarkers(out);
+            setPoiStatus({ count: out.length, lastFetchedAt: Date.now(), error: null });
+          }
+          console.debug('Parsed POIs:', out.length);
+        } catch (err) { console.warn('Overpass fetch failed', err); setPoiMarkers([]); }
+      }, 350);
+    } catch (err) { console.warn('fetchPoisForBounds error', err); }
+  }, [selectedOverlays]);
+
+  // Trigger POI fetch when map moves or overlays change
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const onMoveEnd = () => { fetchPoisForBounds(); };
+    map.on('moveend', onMoveEnd);
+    map.on('zoomend', onMoveEnd);
+    // initial
+    fetchPoisForBounds();
+    return () => {
+      try { map.off('moveend', onMoveEnd); map.off('zoomend', onMoveEnd); } catch (e) {}
+    };
+  }, [fetchPoisForBounds]);
+
+  useEffect(() => { return () => { mountedRef.current = false; if (poiFetchTimer.current) clearTimeout(poiFetchTimer.current); }; }, []);
 
   // Do not filter any item types: include all tripItems for mapping and sort by date for consistent ordering
   const mappableItems = Array.isArray(tripItems) ? tripItems : [];
@@ -277,8 +414,85 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
   if (mappableItems.length === 0) {
     return (
       <div className="text-center text-gray-500 py-8">
-        <p className="text-xl mb-4">No mappable locations to display</p>
-        <p>Add some trip items with locations to see them on the map!</p>
+        <h3 className="text-xl font-semibold text-indigo-700 mb-2">No mappable locations yet</h3>
+        <p className="mb-4">Use the search below to find a place and add it to your trip.</p>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', minWidth: 320 }}>
+            <input
+              aria-label="Search place"
+              placeholder="Find places (e.g. Mount Wellington)"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setShowSearchResults(true); }}
+              onFocus={() => setShowSearchResults(true)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const q = (searchQuery || '').trim();
+                  if (!q) return;
+                  setIsSearching(true);
+                  try {
+                    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=8`);
+                    const data = await resp.json();
+                    setSearchResults(Array.isArray(data) ? data : []);
+                  } catch (err) {
+                    console.error('Search failed', err);
+                    setSearchResults([]);
+                  } finally { setIsSearching(false); }
+                }
+              }}
+              className="px-3 py-2 border rounded-md text-sm w-full"
+            />
+            {showSearchResults && (searchResults || []).length > 0 && (
+              <div style={{ position: 'absolute', top: '44px', left: 0, right: 0, zIndex: 1200 }}>
+                <div className="bg-white rounded-md shadow-md max-h-64 overflow-auto">
+                  {(searchResults || []).map((r, i) => (
+                    <div key={`${r.place_id || i}`} className="p-2 border-b last:border-b-0 flex items-start justify-between">
+                      <div style={{ flex: 1 }}>
+                        <div className="text-sm font-semibold">{r.display_name.split(',')[0]}</div>
+                        <div className="text-xs text-gray-500">{r.display_name}</div>
+                      </div>
+                      <div style={{ marginLeft: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="px-2 py-1 bg-indigo-600 text-white rounded text-xs"
+                          onClick={async () => {
+                            try {
+                              const item = { location: r.display_name, title: r.display_name.split(',')[0], type: 'enroute', date: '', activityLink: '' };
+                              if (typeof onAddItem === 'function') onAddItem(item);
+                              const lat = parseFloat(r.lat);
+                              const lon = parseFloat(r.lon);
+                              if (mapRef.current && Number.isFinite(lat) && Number.isFinite(lon)) mapRef.current.setView([lat, lon], 13);
+                            } catch (err) { console.error('Add place failed', err); }
+                            setShowSearchResults(false);
+                            setSearchQuery('');
+                            setSearchResults([]);
+                          }}
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs"
+                          onClick={() => {
+                            try {
+                              const lat = parseFloat(r.lat);
+                              const lon = parseFloat(r.lon);
+                              if (mapRef.current && Number.isFinite(lat) && Number.isFinite(lon)) mapRef.current.setView([lat, lon], 13);
+                            } catch (e) { console.warn('fly failed', e); }
+                            setShowSearchResults(false);
+                          }}
+                        >
+                          Fly
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {isSearching && <div className="p-2 text-sm text-gray-500">Searching...</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -589,6 +803,90 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
       <div className="border rounded-lg overflow-hidden shadow-lg">
         <div className="relative">
           <div className="p-3 flex items-center gap-3">
+            {/* Search box: Nominatim (OpenStreetMap) to find places and add to trip */}
+            <div style={{ position: 'relative', minWidth: 260 }}>
+              <input
+                aria-label="Search place"
+                placeholder="Find places (e.g. Mount Wellington)"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setShowSearchResults(true); }}
+                onFocus={() => setShowSearchResults(true)}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // perform search
+                    try {
+                      const q = (searchQuery || '').trim();
+                      if (!q) return;
+                      setIsSearching(true);
+                      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=8`);
+                      const data = await resp.json();
+                      setSearchResults(Array.isArray(data) ? data : []);
+                    } catch (err) {
+                      console.error('Search failed', err);
+                      setSearchResults([]);
+                    } finally { setIsSearching(false); }
+                  }
+                }}
+                className="px-3 py-1 border rounded-md text-sm w-full"
+              />
+              {showSearchResults && (searchResults || []).length > 0 && (
+                <div style={{ position: 'absolute', top: '36px', left: 0, right: 0, zIndex: 1200 }}>
+                  <div className="bg-white rounded-md shadow-md max-h-64 overflow-auto">
+                    {(searchResults || []).map((r, i) => (
+                      <div key={`${r.place_id || i}`} className="p-2 border-b last:border-b-0 flex items-start justify-between">
+                        <div style={{ flex: 1 }}>
+                          <div className="text-sm font-semibold">{r.display_name.split(',')[0]}</div>
+                          <div className="text-xs text-gray-500">{r.display_name}</div>
+                        </div>
+                        <div style={{ marginLeft: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <button
+                            type="button"
+                            className="px-2 py-1 bg-indigo-600 text-white rounded text-xs"
+                            onClick={async () => {
+                              try {
+                                const lat = parseFloat(r.lat);
+                                const lon = parseFloat(r.lon);
+                                const item = { location: r.display_name, title: r.display_name.split(',')[0], type: 'enroute', date: '', activityLink: '' };
+                                if (typeof onAddItem === 'function') {
+                                  onAddItem(item);
+                                } else {
+                                  // fallback: stage locally by simulating a travel-time update
+                                  console.info('onAddItem not provided; place found:', item.location);
+                                }
+                                if (mapRef.current && Number.isFinite(lat) && Number.isFinite(lon)) {
+                                  try { mapRef.current.setView([lat, lon], 13); } catch (e) { console.warn('fly-to failed', e); }
+                                }
+                              } catch (err) { console.error('Add place failed', err); }
+                              setShowSearchResults(false);
+                              setSearchQuery('');
+                              setSearchResults([]);
+                            }}
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs"
+                            onClick={() => {
+                              try {
+                                const lat = parseFloat(r.lat);
+                                const lon = parseFloat(r.lon);
+                                if (mapRef.current && Number.isFinite(lat) && Number.isFinite(lon)) mapRef.current.setView([lat, lon], 13);
+                              } catch (e) { console.warn('fly failed', e); }
+                              setShowSearchResults(false);
+                            }}
+                          >
+                            Fly
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {isSearching && <div className="p-2 text-sm text-gray-500">Searching...</div>}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className={`px-3 py-1 rounded-md text-sm ${(!markers || markers.length < 2 || isProcessing) ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-indigo-600 text-white'}`}
@@ -690,6 +988,82 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
             )}
             {/* map-local debug controls removed (use DebugPanel in TripDashboard instead) */}
           </div>
+          {/* Persistent floating search control (top-left) */}
+          <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1400, pointerEvents: 'auto' }}>
+            <div className="bg-white rounded-md shadow p-2" style={{ minWidth: 260 }}>
+              <input
+                aria-label="Map search"
+                placeholder="Search places (press Enter)"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setShowSearchResults(true); }}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const q = (searchQuery || '').trim();
+                    if (!q) return;
+                    setIsSearching(true);
+                    try {
+                      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=8`);
+                      const data = await resp.json();
+                      setSearchResults(Array.isArray(data) ? data : []);
+                    } catch (err) {
+                      console.error('Search failed', err);
+                      setSearchResults([]);
+                    } finally { setIsSearching(false); }
+                  }
+                }}
+                className="px-2 py-1 border rounded text-sm w-full"
+              />
+              {showSearchResults && (searchResults || []).length > 0 && (
+                <div className="mt-2 bg-white rounded shadow max-h-64 overflow-auto">
+                  {(searchResults || []).map((r, i) => (
+                    <div key={`${r.place_id || i}`} className="p-2 border-b last:border-b-0 flex items-start justify-between">
+                      <div style={{ flex: 1 }}>
+                        <div className="text-sm font-semibold">{r.display_name.split(',')[0]}</div>
+                        <div className="text-xs text-gray-500">{r.display_name}</div>
+                      </div>
+                      <div style={{ marginLeft: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="px-2 py-1 bg-indigo-600 text-white rounded text-xs"
+                          onClick={async () => {
+                            try {
+                              const item = { location: r.display_name, title: r.display_name.split(',')[0], type: 'enroute', date: '', activityLink: '' };
+                              if (typeof onAddItem === 'function') onAddItem(item);
+                              const lat = parseFloat(r.lat);
+                              const lon = parseFloat(r.lon);
+                              if (mapRef.current && Number.isFinite(lat) && Number.isFinite(lon)) mapRef.current.setView([lat, lon], 13);
+                            } catch (err) { console.error('Add place failed', err); }
+                            setShowSearchResults(false);
+                            setSearchQuery('');
+                            setSearchResults([]);
+                          }}
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs"
+                          onClick={() => {
+                            try {
+                              const lat = parseFloat(r.lat);
+                              const lon = parseFloat(r.lon);
+                              if (mapRef.current && Number.isFinite(lat) && Number.isFinite(lon)) mapRef.current.setView([lat, lon], 13);
+                            } catch (e) { console.warn('fly failed', e); }
+                            setShowSearchResults(false);
+                          }}
+                        >
+                          Fly
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {isSearching && <div className="p-2 text-sm text-gray-500">Searching...</div>}
+                </div>
+              )}
+            </div>
+          </div>
+
           <MapContainer
             center={center}
             zoom={currentZoom}
@@ -772,7 +1146,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
             scrollWheelZoom={true}
           >
             <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              url={baseLayer === 'osm' ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" : "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             />
 
@@ -831,6 +1205,19 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                 dashArray="8,6"
               />
             )}
+            {/* POI overlay handled via MarkerClusterGroup for performance */}
+            {/* MarkerCluster is created imperatively when map is available and poiMarkers changes */}
+            {/* Imperative MarkerCluster management */}
+            {/* create/update cluster group when mapRef and poiMarkers are available */}
+            {false && <></>}
+            <ClusterManager
+              mapRef={mapRef}
+              poiMarkers={poiMarkers}
+              selectedOverlays={selectedOverlays}
+              createPoiIcon={createPoiIcon}
+              escapeHtml={escapeHtml}
+              attemptFly={attemptFly}
+            />
             {route && console.log('Rendering route with positions:', route.slice(0, 3), '...')}
             <MapController markers={markers} flyRequestsRef={flyRequestsRef} flyRequestsVersion={flyRequestsVersion} zoomThreshold={ZOOM_INCLUDE_ENROUTE} />
               {/* Debug overlay: toggled panel listing items and markers for QA */}
@@ -885,6 +1272,43 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
               </div>
             </div>
           </MapContainer>
+
+          {/* Right-side overlay controls */}
+          {/* POI status badge */}
+          <div style={{ position: 'absolute', top: 12, right: 250, zIndex: 1400, pointerEvents: 'auto' }}>
+            <div className="bg-white rounded-md shadow p-2 text-xs" style={{ minWidth: 160 }}>
+              <div style={{ fontWeight: 700, fontSize: 12 }}>POI Status</div>
+              <div style={{ marginTop: 6 }}>
+                <div>Count: <strong>{poiStatus.count}</strong></div>
+                <div>Last: <strong>{poiStatus.lastFetchedAt ? new Date(poiStatus.lastFetchedAt).toLocaleTimeString() : 'never'}</strong></div>
+                {poiStatus.error && <div style={{ color: 'red' }}>Error: {poiStatus.error}</div>}
+              </div>
+            </div>
+          </div>
+          <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1400, pointerEvents: 'auto' }}>
+            <div className="bg-white rounded-md shadow p-3" style={{ width: 220 }}>
+              <div className="font-semibold text-sm mb-2">Base Layer</div>
+              <div className="flex flex-col gap-1 mb-3">
+                <label><input type="radio" name="base" checked={baseLayer==='osm'} onChange={() => setBaseLayer('osm')} /> <span className="ml-2">Mapnik (OSM)</span></label>
+                <label><input type="radio" name="base" checked={baseLayer==='topo'} onChange={() => setBaseLayer('topo')} /> <span className="ml-2">Topo</span></label>
+              </div>
+              <div className="font-semibold text-sm mb-2">Overlays</div>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={!!selectedOverlays.tourism} onChange={(e) => { setSelectedOverlays(prev => ({ ...prev, tourism: e.target.checked })); }} /> <span>Tourism POIs</span></label>
+                {selectedOverlays.tourism && (
+                  <div className="ml-4 mt-2 flex flex-col gap-1 text-sm">
+                    <label><input type="checkbox" checked={!!tourismSubtypes.museum} onChange={(e) => setTourismSubtypes(s => ({ ...s, museum: e.target.checked }))} /> <span className="ml-2">Museum</span></label>
+                    <label><input type="checkbox" checked={!!tourismSubtypes.viewpoint} onChange={(e) => setTourismSubtypes(s => ({ ...s, viewpoint: e.target.checked }))} /> <span className="ml-2">Viewpoint</span></label>
+                    <label><input type="checkbox" checked={!!tourismSubtypes.artwork} onChange={(e) => setTourismSubtypes(s => ({ ...s, artwork: e.target.checked }))} /> <span className="ml-2">Artwork</span></label>
+                    <label><input type="checkbox" checked={!!tourismSubtypes.gallery} onChange={(e) => setTourismSubtypes(s => ({ ...s, gallery: e.target.checked }))} /> <span className="ml-2">Gallery</span></label>
+                    <label><input type="checkbox" checked={!!tourismSubtypes.attraction} onChange={(e) => setTourismSubtypes(s => ({ ...s, attraction: e.target.checked }))} /> <span className="ml-2">Attraction</span></label>
+                    <label><input type="checkbox" checked={!!tourismSubtypes.zoo} onChange={(e) => setTourismSubtypes(s => ({ ...s, zoo: e.target.checked }))} /> <span className="ml-2">Zoo</span></label>
+                    <label><input type="checkbox" checked={!!tourismSubtypes.theme_park} onChange={(e) => setTourismSubtypes(s => ({ ...s, theme_park: e.target.checked }))} /> <span className="ml-2">Theme Park</span></label>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           {isProcessing && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-1000">
@@ -983,3 +1407,129 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
 }
 
 export default TripMap;
+
+// ClusterManager: imperative component to manage Leaflet.markercluster markers
+function ClusterManager({ mapRef, poiMarkers, selectedOverlays, createPoiIcon, escapeHtml, attemptFly }) {
+  const clusterRef = useRef(null);
+
+  useEffect(() => {
+    const map = mapRef && mapRef.current;
+    if (!map) return;
+
+    // If overlay not selected, remove cluster group
+    if (!selectedOverlays || !selectedOverlays.tourism) {
+      try {
+        if (clusterRef.current) {
+          map.removeLayer(clusterRef.current);
+          clusterRef.current = null;
+        }
+      } catch (e) { console.warn('Removing cluster failed', e); }
+      return;
+    }
+
+    // Ensure markercluster plugin is available
+    if (!L.markerClusterGroup) {
+      console.warn('MarkerCluster plugin not available');
+      return;
+    }
+
+  console.debug('ClusterManager running, poiMarkers count:', (poiMarkers || []).length);
+  // Create or reuse cluster group
+    if (!clusterRef.current) {
+      clusterRef.current = L.markerClusterGroup({ chunkedLoading: true, removeOutsideVisibleBounds: true });
+      try { map.addLayer(clusterRef.current); } catch (e) { console.warn('addLayer failed', e); }
+    }
+
+    // Clear existing markers
+    try { clusterRef.current.clearLayers(); } catch (e) { /* ignore */ }
+
+    // Add new markers
+    try {
+      for (const p of (poiMarkers || [])) {
+        try {
+          const marker = L.marker([p.lat, p.lon], { icon: createPoiIcon(p.name ? p.name[0] : '') });
+          const safeName = escapeHtml(p.name || p.type || 'POI');
+          // Use a DOM-based popup content to attach event listeners (more reliable)
+          const container = document.createElement('div');
+          container.style.fontFamily = 'sans-serif';
+          const titleEl = document.createElement('div');
+          titleEl.style.fontWeight = '700';
+          titleEl.style.marginBottom = '4px';
+          titleEl.textContent = p.name || p.type || 'POI';
+          const typeEl = document.createElement('div');
+          typeEl.style.fontSize = '12px';
+          typeEl.style.color = '#666';
+          typeEl.style.marginBottom = '6px';
+          typeEl.textContent = p.type || '';
+          const controls = document.createElement('div');
+          controls.style.display = 'flex';
+          controls.style.gap = '6px';
+
+          const addBtn = document.createElement('button');
+          addBtn.textContent = 'Add';
+          addBtn.style.padding = '6px 8px';
+          addBtn.style.background = '#4F46E5';
+          addBtn.style.color = '#fff';
+          addBtn.style.borderRadius = '4px';
+          addBtn.style.border = '0';
+          addBtn.style.cursor = 'pointer';
+          addBtn.style.fontSize = '12px';
+
+          const flyBtn = document.createElement('button');
+          flyBtn.textContent = 'Fly';
+          flyBtn.style.padding = '6px 8px';
+          flyBtn.style.background = '#f3f4f6';
+          flyBtn.style.color = '#111';
+          flyBtn.style.borderRadius = '4px';
+          flyBtn.style.border = '0';
+          flyBtn.style.cursor = 'pointer';
+          flyBtn.style.fontSize = '12px';
+
+          controls.appendChild(addBtn);
+          controls.appendChild(flyBtn);
+          container.appendChild(titleEl);
+          container.appendChild(typeEl);
+          container.appendChild(controls);
+
+          marker.bindPopup(container);
+          // Attach handlers after popup opens to ensure elements are in DOM
+          marker.on('popupopen', () => {
+            try {
+              addBtn.onclick = () => {
+                try {
+                  if (typeof window.__TRIPCRAFT_MAP_ADD_ITEM__ === 'function') {
+                    window.__TRIPCRAFT_MAP_ADD_ITEM__({ location: p.name || '', title: p.name || p.type, type: 'enroute', date: '' });
+                  } else if (typeof attemptFly === 'function') {
+                    // fallback: directly call onAddItem via attemptFly as a poor-man's signal
+                    console.info('Add bridge not available');
+                  }
+                } catch (e) { console.warn('Add button handler failed', e); }
+              };
+              flyBtn.onclick = () => {
+                try {
+                  const m = window.__TRIPCRAFT_MAP_INSTANCE__;
+                  if (m && typeof m.setView === 'function') m.setView([p.lat, p.lon], 15);
+                } catch (e) { console.warn('Fly button handler failed', e); }
+              };
+            } catch (e) { console.warn('popupopen handler failed', e); }
+          });
+          clusterRef.current.addLayer(marker);
+        } catch (e) { console.warn('Failed to add POI marker', e); }
+      }
+    } catch (e) { console.warn('Adding markers to cluster failed', e); }
+
+    // Keep a global pointer to the map for popup button fly action
+    try { window.__TRIPCRAFT_MAP_INSTANCE__ = map; } catch (e) {}
+
+    return () => {
+      try {
+        if (clusterRef.current) {
+          try { map.removeLayer(clusterRef.current); } catch (e) {}
+          clusterRef.current = null;
+        }
+      } catch (e) { /* ignore */ }
+    };
+  }, [mapRef && mapRef.current, JSON.stringify(poiMarkers || []), selectedOverlays && selectedOverlays.tourism]);
+
+  return null;
+}

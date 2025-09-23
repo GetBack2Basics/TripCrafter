@@ -1395,7 +1395,14 @@ export default function TripDashboard() {
       <div className="flex-1">
   {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
   {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
-  {activeView === 'map' && <TripMap tripItems={tripItems} onUpdateTravelTime={handleUpdateTravelTime} />}
+  {activeView === 'map' && <TripMap tripItems={tripItems} onUpdateTravelTime={handleUpdateTravelTime} onAddItem={(item) => {
+        // Accept minimal item { location, title, type, date }
+        try {
+          setNewItem(prev => ({ ...prev, ...item, title: item.title || item.location }));
+          // open add form so user can confirm and set date/type if needed
+          setShowAddForm(true);
+        } catch (e) { console.error('onAddItem wrapper failed', e); }
+      }} />}
   {/* Discover view temporarily hidden while Unsplash account is in review */}
       </div>
       {/* Bottom Navigation for mobile */}
