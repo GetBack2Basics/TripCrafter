@@ -201,41 +201,7 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
 
   // Review/merge handlers
   // Work by entry id (or fallback to index) to avoid index mismatches
-  const findEntryIndexById = (entry) => {
-    if (!reviewData) return -1;
-    if (entry.id) {
-      return reviewData.findIndex(e => e.id === entry.id);
-    }
-    // Fallback: match by shallow fields
-    return reviewData.findIndex(e => e.date === entry.date && e.location === entry.location && e.title === entry.title);
-  };
-
-  const setEntryStatusById = (entry, status) => {
-    setReviewData(prev => {
-      if (!prev) return prev;
-      const idx = findEntryIndexById(entry);
-      if (idx === -1) return prev;
-      const updated = prev.map((e, i) => i === idx ? { ...e, _status: status } : e);
-      return updated;
-    });
-  };
-
-  // Enforce one roofed/camp per day: when approving an entry that is roofed or camp,
-  // un-approve any other approved entry with same date and type in the local reviewData.
-  const enforceSinglePerDay = (entry) => {
-    if (!reviewData) return;
-    if (!entry.type || (entry.type !== 'roofed' && entry.type !== 'camp')) return;
-    setReviewData(prev => {
-      if (!prev) return prev;
-      return prev.map(e => {
-        if (e === entry) return e; // will be updated by caller
-        if (e.date === entry.date && e.type === entry.type && e._status === 'approved') {
-          return { ...e, _status: 'pending' };
-        }
-        return e;
-      });
-    });
-  };
+  
 
   const [mergeTarget, setMergeTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
@@ -658,11 +624,30 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
               {/* copy helper: button uses component-scoped copyToClipboard */}
               {importType === 'craft' ? (
                 <div>
-                  <div className="font-semibold mb-2 text-yellow-800">AI Itinerary Generated!</div>
-                  <p className="text-sm text-yellow-700 mb-4">
-                    Here's your personalized itinerary. If you're happy with it, click "Create TripCrafter JSON" below to import it into your trip.
-                    You can also modify the JSON manually if needed.
-                  </p>
+                  <div className="font-semibold mb-2 text-yellow-800">Generate AI based itinerary</div>
+                  <div className="text-sm text-yellow-700 mb-4">
+                    <div className="font-medium mb-2">Create Your Custom Itinerary in Two Simple Steps!</div>
+                    <p className="mb-3">We help you use an AI assistant to build your perfect travel plan. Follow these steps to get started:</p>
+
+                    <h4 className="font-semibold">Step 1: Get Your Itinerary Preview</h4>
+                    <ol className="list-decimal list-inside ml-4 mb-3">
+                      <li><strong>Copy the Prompt:</strong> Copy the entire prompt from the box below.</li>
+                      <li><strong>Paste into Your AI:</strong> Go to your preferred AI assistant (like Gemini, ChatGPT, or Grok) and paste the prompt.</li>
+                      <li><strong>Review &amp; Refine:</strong> The AI will generate a detailed itinerary. Read through the table and make any adjustments needed. You can refine the plan by telling the AI things like:</li>
+                    </ol>
+                    <div className="bg-white p-3 border rounded mb-3 text-xs text-gray-800">
+                      <div className="mb-2">"I like the pace, but can you change the date of the Disneyland trip to December 10th?"</div>
+                      <div className="mb-2">"Remove the river cruise and add a visit to the Panthéon."</div>
+                      <div className="mb-2">"Can we start the trip in the Montmartre area instead?"</div>
+                    </div>
+
+                    <h4 className="font-semibold">Step 2: Generate JSON for the App</h4>
+                    <ol className="list-decimal list-inside ml-4 mb-3">
+                      <li><strong>Request JSON:</strong> Once your itinerary is close to what you want, simply say to the AI: "Give me the TripCrafter JSON."</li>
+                      <li><strong>Copy the JSON Code:</strong> The AI will provide the itinerary in a block of code. Copy only the code, starting with <code>[</code> and ending with <code>]</code>.</li>
+                      <li><strong>Complete the Process:</strong> Paste the copied code into the box below and click <strong>Create Itinerary</strong>.</li>
+                    </ol>
+                  </div>
                   <div className="bg-white p-3 border rounded mb-4 max-h-96 overflow-y-auto">
                     <div className="flex justify-end mb-2">
                       <button
@@ -675,25 +660,6 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
                       </button>
                     </div>
                     <pre className="text-xs whitespace-pre-wrap">{llmPrompt}</pre>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        // Extract JSON from the prompt and auto-import
-                        const jsonMatch = llmPrompt.match(/```json\s*(\[[\s\S]*?\])\s*```/);
-                        if (jsonMatch) {
-                          setManualJson(jsonMatch[1]);
-                          setTimeout(() => {
-                            document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-                          }, 100);
-                        } else {
-                          onError('Could not find JSON in the response. Please copy it manually.');
-                        }
-                      }}
-                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm"
-                    >
-                      Create TripCrafter JSON
-                    </button>
                   </div>
                 </div>
               ) : (
@@ -715,17 +681,17 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
               )}
               <form onSubmit={handleManualJsonSubmit} className="mt-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {importType === 'craft' ? 'Modify JSON (optional):' : 'Paste LLM JSON result here:'}
+                  {importType === 'craft' ? 'PASTE LLM JSON output below' : 'Paste LLM JSON result here:'}
                 </label>
                 <textarea
                   className="w-full p-2 border border-gray-300 rounded bg-white text-xs"
                   value={manualJson}
                   onChange={e => setManualJson(e.target.value)}
                   rows={6}
-                  placeholder={importType === 'craft' ? "Paste or modify the JSON data..." : "Paste the JSON output from Gemini, ChatGPT, etc."}
+                  placeholder={importType === 'craft' ? "PASTE LLM JSON output below" : "Paste the JSON output from Gemini, ChatGPT, etc."}
                 />
                 <div className="flex justify-end mt-2">
-                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">Import JSON</button>
+                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">{importType === 'craft' ? 'Create Itinerary' : 'Import JSON'}</button>
                 </div>
               </form>
             </div>
