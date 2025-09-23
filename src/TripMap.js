@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { db } from './firebase';
+import { doc, getDoc, setDoc, collection, writeBatch } from 'firebase/firestore';
 import { BedDouble, Tent, Car, Info, Ship } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -244,7 +246,7 @@ function MapController({ markers, flyRequestsRef, flyRequestsVersion }) {
 
   return null;
 }
-function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdateTravelTimes = false, onSaveRouteTimes = null, onAddItem = null }) {
+function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelTime, autoUpdateTravelTimes = false, onSaveRouteTimes = null, onAddItem = null }) {
   const [markers, setMarkers] = useState([]);
   const [route, setRoute] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -273,7 +275,8 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
   const [baseLayer, setBaseLayer] = useState('topo');
   const poiFetchTimer = useRef(null);
   const poiClusterRef = useRef(null);
-  const MIN_ZOOM_FOR_POIS = 12;
+  // Allow POIs to appear at a slightly lower zoom so users see results without heavy zooming
+  const MIN_ZOOM_FOR_POIS = 10;
   // tourism subtype selectors
   const [tourismSubtypes, setTourismSubtypes] = useState({ museum: false, viewpoint: false, artwork: false, gallery: false, attraction: false, zoo: false, theme_park: false });
   // Queue for fly requests: each entry { id, lat, lng, resolve, reject }
@@ -283,6 +286,66 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
   const coordsByIndexRef = React.useRef({});
   const coordsByIdRef = React.useRef({});
   const ZOOM_INCLUDE_ENROUTE = 10; // zoom threshold to include 'enroute' points on the map
+
+  // ---- Route segment cache helpers ----
+  const getSegmentDocRef = (tripId, fromId, toId) => {
+    if (!tripId) return null;
+    const id = `${fromId || 'null'}__${toId || 'null'}`;
+    try {
+      return doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${tripId}/routeSegments`, id);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  async function loadSegmentFromServer(tripId, fromId, toId) {
+    try {
+      const ref = getSegmentDocRef(tripId, fromId, toId);
+      if (!ref) return null;
+      const snap = await getDoc(ref);
+      if (!snap || !snap.exists()) return null;
+      return snap.data();
+    } catch (e) { console.warn('loadSegmentFromServer failed', e); return null; }
+  }
+
+  // localStorage fallback key
+  const localKey = (tripId, fromId, toId) => `tripRouteSegment:${tripId}:${fromId || 'null'}:${toId || 'null'}`;
+
+  async function loadSegmentCached(tripId, fromId, toId) {
+    // Try Firestore first (if configured), else localStorage
+    try {
+      if (db && tripId) {
+        const s = await loadSegmentFromServer(tripId, fromId, toId);
+        if (s) return s;
+      }
+    } catch (e) { /* continue to local fallback */ }
+    try {
+      const k = localKey(tripId || 'local', fromId, toId);
+      const raw = localStorage.getItem(k);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed;
+    } catch (e) { return null; }
+  }
+
+  async function saveSegmentCached(tripId, fromId, toId, segment) {
+    try {
+      if (db && tripId) {
+        const ref = getSegmentDocRef(tripId, fromId, toId);
+        if (ref) {
+          await setDoc(ref, { ...segment, fromId, toId, updatedAt: new Date().toISOString() }, { merge: true });
+          return true;
+        }
+      }
+    } catch (e) { console.warn('saveSegmentCached firestore failed', e); }
+    try {
+      const k = localKey(tripId || 'local', fromId, toId);
+      localStorage.setItem(k, JSON.stringify({ ...segment, fromId, toId, updatedAt: new Date().toISOString() }));
+      return true;
+    } catch (e) { console.warn('saveSegmentCached localStorage failed', e); }
+    return false;
+  }
+  // ---- end cache helpers ----
 
   // Helper: create small green POI icon
   function createPoiIcon(label) {
@@ -352,13 +415,20 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
       const currentZoom = map.getZoom();
       if (typeof currentZoom === 'number' && currentZoom < MIN_ZOOM_FOR_POIS) {
         setPoiMarkers([]);
+        setPoiStatus({ count: 0, lastFetchedAt: Date.now(), error: `zoom < ${MIN_ZOOM_FOR_POIS}`, lastQuery: null, lastResponseCount: 0 });
         return;
       }
       // Use a light rate-limit / debounce
       if (poiFetchTimer.current) clearTimeout(poiFetchTimer.current);
+      setPoiStatus({ count: 0, lastFetchedAt: Date.now(), error: null, lastQuery: null, lastResponseCount: 0 });
       poiFetchTimer.current = setTimeout(async () => {
         try {
           const url = 'https://overpass-api.de/api/interpreter';
+          // update status to indicate fetch in-flight and store query
+          setPoiStatus(prev => ({ ...prev, error: 'fetching', lastQuery: q, lastBbox: bbox }));
+          console.debug('Overpass fetch: url=', url);
+          console.debug('Overpass fetch: bbox=', bbox);
+          console.debug('Overpass fetch: query=', q);
           const resp = await fetch(url, { method: 'POST', body: q, headers: { 'Content-Type': 'text/plain' } });
           const data = await resp.json();
           console.debug('Overpass response elements count:', Array.isArray(data.elements) ? data.elements.length : 0);
@@ -375,7 +445,8 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
           }
           if (mountedRef.current) {
             setPoiMarkers(out);
-            setPoiStatus({ count: out.length, lastFetchedAt: Date.now(), error: null });
+            setPoiStatus({ count: out.length, lastFetchedAt: Date.now(), error: null, lastResponseCount: Array.isArray(data.elements) ? data.elements.length : out.length, lastQuery: q });
+            console.debug('POI fetch succeeded — elements:', (data && Array.isArray(data.elements) ? data.elements.length : out.length));
           }
           console.debug('Parsed POIs:', out.length);
         } catch (err) { console.warn('Overpass fetch failed', err); setPoiMarkers([]); }
@@ -516,6 +587,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
 
       setAccomNights(newAccomNights);
 
+      const visibleIndices = [];
       for (let i = 0; i < sortedTripItems.length; i++) {
         const item = sortedTripItems[i];
         // Include all item types (do not skip notes)
@@ -530,6 +602,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
   if (!coords) continue;
 
   coordsByIndex[i] = coords;
+  visibleIndices.push(i);
   if (item && item.id) coordsByIdRef.current[item.id] = coords;
 
   // Include all item types on the map (no type-based filtering)
@@ -560,36 +633,77 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
 
       // Route only if we have at least two visible coordinates
       if (coordinates.length > 1) {
-        console.log('Getting route for coordinates:', coordinates);
-        const routeData = await getRoute(coordinates);
-        console.log('Route data received:', routeData);
-        if (routeData && routeData.geometry) {
-          const routeCoords = routeData.geometry.coordinates.map(coord => [coord[1], coord[0]]); // Convert to [lat, lng]
-          console.log('Converted route coordinates:', routeCoords.slice(0, 5), '...');
-          setRoute(routeCoords);
+        console.log('Assembling route using cached segments where available for trip:', (typeof currentTripId !== 'undefined' ? currentTripId : 'local'));
+        // Build consecutive pairs using visibleIndices and attempt to load cached segments for each
+        const segments = []; // will hold { fromIdx, toIdx, segment } where indices are sortedTripItems indices
+        for (let k = 0; k < visibleIndices.length - 1; k++) {
+          const fromIdx = visibleIndices[k];
+          const toIdx = visibleIndices[k + 1];
+          const from = sortedTripItems[fromIdx];
+          const to = sortedTripItems[toIdx];
+          const fromId = from && from.id ? from.id : String(fromIdx);
+          const toId = to && to.id ? to.id : String(toIdx);
+          const cached = await loadSegmentCached(currentTripId, fromId, toId);
+          if (cached && cached.geometry && Array.isArray(cached.geometry.coordinates)) {
+            segments.push({ fromIdx, toIdx, segment: cached });
+          } else {
+            segments.push({ fromIdx, toIdx, segment: null });
+          }
+        }
 
-          if (autoUpdateTravelTimes && onUpdateTravelTime && routeData.legs) {
-            routeData.legs.forEach((leg, idx) => {
-              const duration = `${Math.round(leg.duration / 60)} mins`;
-              const distance = `${(leg.distance / 1000).toFixed(1)} km`;
-              const destinationIndexInVisible = idx + 1;
-              if (destinationIndexInVisible < coordinates.length) {
-                const coord = coordinates[destinationIndexInVisible];
-                // find matching original index
-                let matchedId = null;
-                for (const k of Object.keys(coordsByIndex)) {
-                  const c = coordsByIndex[k];
-                  if (c && Number(c.lat) === Number(coord.lat) && Number(c.lng) === Number(coord.lng)) {
-                    matchedId = sortedTripItems[Number(k)].id;
-                    break;
-                  }
-                }
-                if (matchedId) onUpdateTravelTime(matchedId, duration, distance, null);
-              }
-            });
+        // For any missing segments, call OSRM per-pair (small requests) and persist results
+        for (const seg of segments) {
+          if (seg.segment) continue;
+          const fromIdx = seg.fromIdx;
+          const toIdx = seg.toIdx;
+          const coordsForRequest = [
+            { lat: Number(coordsByIndex[fromIdx].lat), lng: Number(coordsByIndex[fromIdx].lng) },
+            { lat: Number(coordsByIndex[toIdx].lat), lng: Number(coordsByIndex[toIdx].lng) }
+          ];
+          try {
+            const routeData = await getRoute(coordsForRequest);
+            if (routeData && routeData.geometry) {
+              seg.segment = { geometry: routeData.geometry, legs: routeData.legs, duration: routeData.duration || null, distance: routeData.distance || null };
+              // Save segment to cache
+              const fromId = sortedTripItems[fromIdx].id || String(fromIdx);
+              const toId = sortedTripItems[toIdx].id || String(toIdx);
+              try { await saveSegmentCached(currentTripId, fromId, toId, seg.segment); } catch (e) { console.warn('Failed to save segment', e); }
+            } else {
+              console.warn('OSRM returned no geometry for pair', fromIdx, toIdx);
+            }
+          } catch (e) { console.warn('OSRM pair request failed', e); }
+        }
+
+        // Assemble full route by concatenating geometries in order
+        const fullCoords = [];
+        const travelTimesByDestination = {}; // map destination itemId -> { duration, distance }
+        for (const seg of segments) {
+          if (!seg.segment || !seg.segment.geometry || !Array.isArray(seg.segment.geometry.coordinates)) continue;
+          const coordsArr = seg.segment.geometry.coordinates.map(c => [c[1], c[0]]);
+          // Avoid duplicating the connecting point: skip first point if fullCoords already has last
+          if (fullCoords.length > 0) coordsArr.shift();
+          fullCoords.push(...coordsArr);
+          // If legs available, extract first leg's duration/distance as the travelTime to the destination
+          if (seg.segment.legs && Array.isArray(seg.segment.legs) && seg.segment.legs.length > 0) {
+            const leg = seg.segment.legs[0];
+            const duration = `${Math.round(leg.duration / 60)} mins`;
+            const distance = `${(leg.distance / 1000).toFixed(1)} km`;
+            const destIdx = seg.toIdx;
+            const destItem = sortedTripItems[destIdx];
+            if (destItem && destItem.id) travelTimesByDestination[destItem.id] = { duration, distance };
+          }
+        }
+
+        if (fullCoords.length > 0) {
+          setRoute(fullCoords);
+          // Update travel times using cached/computed legs
+          if (autoUpdateTravelTimes && onUpdateTravelTime) {
+            for (const [itemId, vals] of Object.entries(travelTimesByDestination)) {
+              try { onUpdateTravelTime(itemId, vals.duration, vals.distance, null); } catch (e) {}
+            }
           }
         } else {
-          console.log('No route data received from OSRM');
+          console.log('No assembled coords available from cached segments');
         }
       } else {
         setRoute(null);
@@ -600,7 +714,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
     } finally {
       setIsProcessing(false);
     }
-  }, [sortedTripItems, isProcessing, onUpdateTravelTime, activeIndex, currentZoom]);
+  }, [sortedTripItems, isProcessing, onUpdateTravelTime, activeIndex, currentZoom, currentTripId]);
 
   useEffect(() => {
     processLocations();
@@ -887,105 +1001,7 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              className={`px-3 py-1 rounded-md text-sm ${(!markers || markers.length < 2 || isProcessing) ? 'bg-gray-200 text-gray-600 cursor-not-allowed' : 'bg-indigo-600 text-white'}`}
-              onClick={async () => {
-                // Compute preview times using current markers
-                if (!markers || markers.length < 2 || isProcessing) return;
-                setIsProcessing(true);
-                setIsPreviewing(false);
-                setPreviewRoute(null);
-                setPreviewTimes(null);
-                try {
-                  // Normalize coords: markers may have position as {lat,lng} or [lat, lng]
-                  const coords = markers.map(m => {
-                    const p = m.position;
-                    if (Array.isArray(p) && p.length >= 2) return { lat: Number(p[0]), lng: Number(p[1]) };
-                    if (p && typeof p === 'object') return { lat: Number(p.lat ?? p[0]), lng: Number(p.lng ?? p[1]) };
-                    return null;
-                  }).filter(Boolean);
-                  const data = await getRoute(coords);
-                  if (data) {
-                    const routeCoords = data.geometry.coordinates.map(c => [c[1], c[0]]);
-                    setPreviewRoute(routeCoords);
-                    // Build per-destination preview times (legs)
-                    const pt = {};
-                    if (data.legs) {
-                      data.legs.forEach((leg, idx) => {
-                        const duration = `${Math.round(leg.duration / 60)} mins`;
-                        const distance = `${(leg.distance / 1000).toFixed(1)} km`;
-                        const destinationIndex = idx + 1;
-                        if (destinationIndex < markers.length) {
-                          const itemId = markers[destinationIndex].id;
-                          pt[itemId] = { duration, distance };
-                        }
-                      });
-                    }
-                    setPreviewTimes(pt);
-                    setIsPreviewing(true);
-                  } else {
-                    console.warn('Preview route computation returned no data');
-                  }
-                } catch (err) {
-                  console.error('Preview computation failed', err);
-                } finally {
-                  setIsProcessing(false);
-                }
-              }}
-              disabled={!markers || markers.length < 2 || isProcessing}
-              title={!markers || markers.length < 2 ? 'Need at least two mapped points to compute a route' : isProcessing ? 'Computing preview...' : 'Compute preview route and times'}
-            >
-              Compute Preview
-            </button>
-
-            {isPreviewing && (
-              <>
-                <button
-                  type="button"
-                  className="px-3 py-1 bg-green-600 text-white rounded-md text-sm"
-                  onClick={() => {
-                    if (!previewTimes) return;
-                    const batch = Object.entries(previewTimes).map(([itemId, vals]) => ({ id: itemId, duration: vals.duration, distance: vals.distance }));
-                    // If parent provided onSaveRouteTimes, call it once with the batch
-                    if (onSaveRouteTimes) {
-                      try {
-                        onSaveRouteTimes(batch);
-                      } catch (err) {
-                        console.error('onSaveRouteTimes failed:', err);
-                        // fallback to per-item updates
-                        if (onUpdateTravelTime) {
-                          batch.forEach(b => onUpdateTravelTime(b.id, b.duration, b.distance, null));
-                        }
-                      }
-                    } else if (onUpdateTravelTime) {
-                      // fallback: call per-item updates
-                      batch.forEach(b => onUpdateTravelTime(b.id, b.duration, b.distance, null));
-                    }
-                    // apply preview route as the active route
-                    if (previewRoute) setRoute(previewRoute);
-                    setPreviewRoute(null);
-                    setPreviewTimes(null);
-                    setIsPreviewing(false);
-                  }}
-                >
-                  Save Route Times
-                </button>
-
-                <button
-                  type="button"
-                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded-md text-sm"
-                  onClick={() => {
-                    // Discard preview
-                    setPreviewRoute(null);
-                    setPreviewTimes(null);
-                    setIsPreviewing(false);
-                  }}
-                >
-                  Discard Preview
-                </button>
-              </>
-            )}
+            {/* Compute Preview button removed — not used in current flow */}
             {/* map-local debug controls removed (use DebugPanel in TripDashboard instead) */}
           </div>
           {/* Persistent floating search control (top-left) */}
@@ -1276,13 +1292,43 @@ function TripMap({ tripItems, loadingInitialData, onUpdateTravelTime, autoUpdate
           {/* Right-side overlay controls */}
           {/* POI status badge */}
           <div style={{ position: 'absolute', top: 12, right: 250, zIndex: 1400, pointerEvents: 'auto' }}>
-            <div className="bg-white rounded-md shadow p-2 text-xs" style={{ minWidth: 160 }}>
+            <div className="bg-white rounded-md shadow p-2 text-xs" style={{ minWidth: 220 }}>
               <div style={{ fontWeight: 700, fontSize: 12 }}>POI Status</div>
               <div style={{ marginTop: 6 }}>
-                <div>Count: <strong>{poiStatus.count}</strong></div>
-                <div>Last: <strong>{poiStatus.lastFetchedAt ? new Date(poiStatus.lastFetchedAt).toLocaleTimeString() : 'never'}</strong></div>
-                {poiStatus.error && <div style={{ color: 'red' }}>Error: {poiStatus.error}</div>}
+                <div>Count: <strong>{poiStatus?.count ?? 0}</strong></div>
+                <div>Last: <strong>{poiStatus?.lastFetchedAt ? new Date(poiStatus.lastFetchedAt).toLocaleTimeString() : 'never'}</strong></div>
+                <div>Last Response Count: <strong>{poiStatus?.lastResponseCount ?? '-'}</strong></div>
+                {poiStatus?.error && <div style={{ color: 'red' }}>Error: {poiStatus.error}</div>}
+                {poiStatus?.lastQuery ? (
+                  <details style={{ marginTop: 6, maxWidth: 420 }}>
+                    <summary style={{ cursor: 'pointer' }}>Last Overpass Query (click)</summary>
+                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 11, marginTop: 6 }}>{poiStatus.lastQuery}</pre>
+                  </details>
+                ) : null}
               </div>
+            </div>
+          </div>
+          {/* Small POI quick-actions panel for debugging */}
+          <div style={{ position: 'absolute', top: 120, right: 250, zIndex: 1400, pointerEvents: 'auto' }}>
+            <div className="bg-white rounded-md shadow p-2 text-xs" style={{ minWidth: 200 }}>
+              <div style={{ fontWeight: 700, fontSize: 12 }}>POI Actions</div>
+              <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                <button className="px-2 py-1 bg-indigo-600 text-white rounded text-xs" onClick={() => { try { fetchPoisForBounds(); } catch (e) { console.warn(e); } }}>Fetch POIs now</button>
+                <button className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs" onClick={() => { try { setSelectedOverlays(prev => ({ ...prev, tourism: !prev.tourism })); } catch (e) { console.warn(e); } }}>{selectedOverlays.tourism ? 'Hide' : 'Show'}</button>
+              </div>
+              {(poiMarkers || []).length > 0 && (
+                <div style={{ marginTop: 8, maxHeight: 220, overflow: 'auto' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Nearby POIs</div>
+                  {(poiMarkers || []).slice(0, 10).map((p, i) => (
+                    <div key={p.id || i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <div style={{ flex: 1, fontSize: 12 }}>{p.name || p.type}</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="px-2 py-1 bg-white border rounded text-xs" onClick={() => { try { if (mapRef.current) mapRef.current.setView([p.lat, p.lon], 14); } catch (e) { console.warn(e); } }}>Fly</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1400, pointerEvents: 'auto' }}>

@@ -3,6 +3,36 @@ import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { collection, query, addDoc, updateDoc, deleteDoc, onSnapshot, doc, where, writeBatch, getDocs, arrayUnion } from 'firebase/firestore';
+
+// Helper: invalidate adjacent routeSegments when an item changes
+async function invalidateSegmentsForItem(tripId, itemId, prevId, nextId) {
+  try {
+    if (!tripId) return;
+    const makeId = (a, b) => `${a || 'null'}__${b || 'null'}`;
+    const segIds = [];
+    if (prevId) segIds.push(makeId(prevId, itemId));
+    if (itemId && nextId) segIds.push(makeId(itemId, nextId));
+    // Firestore delete using batch
+    try {
+      const b = writeBatch(db);
+      for (const sid of segIds) {
+        const ref = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${tripId}/routeSegments`, sid);
+        b.delete(ref);
+      }
+      await b.commit();
+    } catch (e) {
+      // Ignore firestore errors; continue to local cleanup
+      console.warn('invalidateSegmentsForItem firestore delete failed', e);
+    }
+    // localStorage fallback cleanup
+    try {
+      for (const sid of segIds) {
+        const key = `tripRouteSegment:${tripId}:${sid.replace(/__/g, ':')}`;
+        try { localStorage.removeItem(key); } catch (e) {}
+      }
+    } catch (e) { /* ignore */ }
+  } catch (e) { console.warn('invalidateSegmentsForItem failed', e); }
+}
 import defaultTasmaniaTripDataRaw from '../Trip-Default_Tasmania2025';
 import TripList from '../TripList';
 import TripMap from '../TripMap';
@@ -781,7 +811,9 @@ export default function TripDashboard() {
           const existingDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, existing.id);
           await deleteDoc(existingDocRef);
           const itineraryRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`);
-              const payload = stripUndefined({ ...incoming }); delete payload.id; await addDoc(itineraryRef, payload);
+          const payload = stripUndefined({ ...incoming }); delete payload.id; await addDoc(itineraryRef, payload);
+          // Invalidate adjacent segments touching the replaced item
+          try { await invalidateSegmentsForItem(currentTripId, existing.id, null, null); } catch (e) { /* ignore */ }
         } catch (e) {
           console.error('Remote replace failed', e);
           addToast('Remote replace failed — check network', 'warning');
@@ -798,6 +830,8 @@ export default function TripDashboard() {
         try {
           const itemDocRef = doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/itineraryItems`, existing.id);
           await updateDoc(itemDocRef, { ...merged });
+          // invalidate adjacent segments touching this item
+          try { await invalidateSegmentsForItem(currentTripId, existing.id, null, null); } catch (e) { /* ignore */ }
         } catch (e) {
           console.error('Remote merge failed', e);
           addToast('Remote merge failed — check network', 'warning');
@@ -1172,6 +1206,43 @@ export default function TripDashboard() {
       }
       await batch.commit();
 
+      // Invalidate adjacent route segments for items affected by pending ops
+      try {
+        const affected = pendingOps.filter(p => ['create', 'update', 'delete'].includes(p.op));
+        const invalidateCalls = [];
+        for (const p of affected) {
+          // resolve final id (map temp -> real if needed)
+          let finalId = p.id || null;
+          if (!finalId && p.tempId) finalId = tempToReal[p.tempId] || null;
+          if (!finalId && p.op === 'create') {
+            // created without temp mapping? skip
+            continue;
+          }
+          // find index in canonicalSorted (which contains temp ids prior to mapping)
+          const findIdInSorted = (id) => {
+            if (!id) return -1;
+            return canonicalSorted.findIndex(it => (it.id === id) || (it.id && id && id.startsWith('temp_') && it.id === id));
+          };
+          // Build a normalized view of sorted ids where temp ids are left as-is; find index using either temp or final
+          let idx = findIdInSorted(finalId);
+          if (idx === -1 && p.tempId) idx = findIdInSorted(p.tempId);
+          if (idx === -1) {
+            // try matching by displayIndex or title fallback
+            idx = canonicalSorted.findIndex(it => it.id === finalId || it.id === p.tempId);
+          }
+          const prev = (idx > 0 && canonicalSorted[idx - 1]) ? (canonicalSorted[idx - 1].id) : null;
+          const next = (idx !== -1 && idx < canonicalSorted.length - 1 && canonicalSorted[idx + 1]) ? (canonicalSorted[idx + 1].id) : null;
+          // map prev/next temp ids to real ids if necessary
+          const mapId = (id) => (id && id.startsWith('temp_') ? (tempToReal[id] || null) : id);
+          const prevFinal = mapId(prev);
+          const nextFinal = mapId(next);
+          if (finalId) {
+            invalidateCalls.push(invalidateSegmentsForItem(currentTripId, finalId, prevFinal, nextFinal));
+          }
+        }
+        try { await Promise.all(invalidateCalls); } catch (e) { /* ignore */ }
+      } catch (e) { console.warn('Failed to invalidate segments after save', e); }
+
         // Process trip-share operations (update trip doc with sharedWith entries)
         for (const s of tripShares) {
           try {
@@ -1292,6 +1363,20 @@ export default function TripDashboard() {
             // ignore
           }
         }
+        // Invalidate all route segments for this trip (they will be recomputed on next map render)
+        try {
+          const segRef = collection(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/routeSegments`);
+          const segSnap = await getDocs(segRef);
+          if (segSnap && segSnap.docs && segSnap.docs.length > 0) {
+            const chunk = 400;
+            for (let i = 0; i < segSnap.docs.length; i += chunk) {
+              const b = writeBatch(db);
+              const slice = segSnap.docs.slice(i, i + chunk);
+              for (const s of slice) b.delete(doc(db, `artifacts/${process.env.REACT_APP_FIREBASE_PROJECT_ID}/public/data/trips/${currentTripId}/routeSegments`, s.id));
+              await b.commit();
+            }
+          }
+        } catch (e) { /* ignore */ }
         for (const it of items) {
           try {
             const payload = stripUndefined({ ...it }); delete payload.id; await addDoc(itineraryRef, payload);
@@ -1395,7 +1480,7 @@ export default function TripDashboard() {
       <div className="flex-1">
   {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
   {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
-  {activeView === 'map' && <TripMap tripItems={tripItems} onUpdateTravelTime={handleUpdateTravelTime} onAddItem={(item) => {
+  {activeView === 'map' && <TripMap tripItems={tripItems} currentTripId={currentTripId} onUpdateTravelTime={handleUpdateTravelTime} onAddItem={(item) => {
         // Accept minimal item { location, title, type, date }
         try {
           setNewItem(prev => ({ ...prev, ...item, title: item.title || item.location }));
