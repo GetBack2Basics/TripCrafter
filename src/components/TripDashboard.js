@@ -86,6 +86,7 @@ export default function TripDashboard() {
       });
     } catch (e) {}
   }, [displayTripName, currentTripName, currentTripId, userTrips, tripProfile]);
+  const [showStagedModal, setShowStagedModal] = useState(false);
   // Use normalized default trip data for demo (not-logged-in) users
   // Helper to create a slug for image filenames
   function locationSlug(location) {
@@ -1481,7 +1482,9 @@ export default function TripDashboard() {
           <div className="mt-2 flex items-center gap-2">
             <button onClick={() => savePendingChanges()} disabled={!hasPending() || isSaving} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm disabled:opacity-50">{isSaving ? 'Saving...' : 'Save changes'}</button>
             <button onClick={() => discardPendingChanges()} disabled={!hasPending() || isSaving} className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm disabled:opacity-50">Discard staged</button>
-            {hasPending() && <div className="text-xs text-gray-500 ml-2">Staged changes: {pendingOps.length}</div>}
+            {hasPending() && (
+              <button onClick={() => setShowStagedModal(true)} className="text-xs text-gray-500 ml-2 underline">Staged changes: {pendingOps.length}</button>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1">
             <div className="text-gray-500 text-sm">Plan, organize, and visualize your trip</div>
@@ -1512,6 +1515,21 @@ export default function TripDashboard() {
         <BottomNav activeView={activeView} setActiveView={setActiveView} />
       </div>
       {/* Modals (stubbed) */}
+      {showStagedModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white p-4 rounded shadow max-w-3xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-semibold">Staged changes ({pendingOps.length})</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(pendingOps, null, 2)); addToast('Copied staged JSON to clipboard', 'info'); }} className="px-2 py-1 bg-gray-100 rounded text-sm">Copy JSON</button>
+                <button onClick={() => { if (window.confirm('Discard all staged changes?')) { setPendingOps([]); addToast('Discarded staged changes', 'muted'); setShowStagedModal(false); } }} className="px-2 py-1 bg-red-100 text-red-800 rounded text-sm">Discard all</button>
+                <button onClick={() => setShowStagedModal(false)} className="px-2 py-1 bg-indigo-600 text-white rounded text-sm">Close</button>
+              </div>
+            </div>
+            <pre className="text-xs bg-gray-50 p-3 rounded border overflow-x-auto">{JSON.stringify(pendingOps, null, 2)}</pre>
+          </div>
+        </div>
+      )}
   <AIImportModal isOpen={showAIImportModal} onClose={() => setShowAIImportModal(false)} onImportSuccess={handleImportResult} onError={msg => alert(msg)} initialProfile={tripProfile} />
   <MergeRequestModal requests={mergeRequests} onResolve={handleResolveMergeRequest} onClose={() => setMergeRequests([])} />
   <TripProfileModal isOpen={showProfileModal} profile={tripProfile} tripItems={tripItems} userTrips={userTrips} userId={userId} currentTripId={currentTripId} onLoad={handleImportProfileLoad} onClose={() => setShowProfileModal(false)} onCreate={() => setShowTripCreateModal(true)} onSelect={(trip) => { handleTripSelect(trip); setShowProfileModal(false); }} onDelete={(trip) => handleStageDeleteTrip(trip)} onShare={(trip) => handleOpenShareModal(trip)} onSave={(p) => {
