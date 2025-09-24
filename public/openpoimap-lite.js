@@ -324,29 +324,39 @@
           if(!btn) return;
           btn.onclick = function(ev){
             ev && ev.preventDefault && ev.preventDefault();
-            if(window.openTripFormForEdit && typeof window.openTripFormForEdit === 'function'){
+            // Prepare normalized item for host TripForm
+            const item = {
+              id: meta.id || meta.tempId || null,
+              date: meta.date || '',
+              location: meta.display_name || meta.location || '',
+              title: meta.name || meta.title || meta.label || '',
+              notes: meta.notes || '',
+              type: (meta.type || meta.category || 'enroute'),
+              activityLink: meta.activityLink || ''
+            };
+
+            // Try to call host helper, retry briefly if it's not yet available (covers slow React mount)
+            let attempts = 0;
+            const maxAttempts = 12; // ~1.2s total
+            const tryOpen = function(){
+              attempts++;
+              if(window.openTripFormForEdit && typeof window.openTripFormForEdit === 'function'){
+                try{ window.openTripFormForEdit(item); }catch(e){ console.warn('openTripFormForEdit failed', e); }
+                try{ marker.closePopup(); }catch(e){}
+                return;
+              }
+              if(attempts < maxAttempts){
+                setTimeout(tryOpen, 100);
+                return;
+              }
+              // final fallback: inline prompt edit (only after retries)
               try{
-                // Normalize the demo meta into the TripForm shape the host expects
-                const item = {
-                  id: meta.id || meta.tempId || null,
-                  date: meta.date || '',
-                  location: meta.display_name || meta.location || '',
-                  title: meta.name || meta.title || meta.label || '',
-                  notes: meta.notes || '',
-                  type: (meta.type || meta.category || 'enroute'),
-                  activityLink: meta.activityLink || ''
-                };
-                window.openTripFormForEdit(item);
-              }catch(e){ console.warn('openTripFormForEdit failed', e); }
-              try{ marker.closePopup(); }catch(e){}
-              return;
-            }
-            // fallback inline edit
-            try{
-              const current = meta.name || meta.label || '';
-              const nw = prompt('Edit name', current);
-              if(nw !== null){ meta.name = nw; try{ marker.setPopupContent(createInfoPopupContent(meta, tag)); }catch(e){} }
-            }catch(e){ console.warn('popup edit failed', e); }
+                const current = meta.name || meta.label || '';
+                const nw = prompt('Edit name', current);
+                if(nw !== null){ meta.name = nw; try{ marker.setPopupContent(createInfoPopupContent(meta, tag, isWaypoint)); }catch(e){} }
+              }catch(e){ console.warn('popup edit failed', e); }
+            };
+            tryOpen();
           };
         }catch(e){}
       });
