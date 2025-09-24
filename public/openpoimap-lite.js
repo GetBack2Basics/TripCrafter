@@ -443,6 +443,17 @@
     return null;
   }
 
+  // localStorage loader for route segments (used as a fallback or to inspect cached segments)
+  function loadSegmentCachedLocal(tripId, fromId, toId){
+    try{
+      const k = `tripRouteSegment:${tripId}:${fromId || 'null'}:${toId || 'null'}`;
+      const raw = localStorage.getItem(k);
+      if(!raw) return null;
+      const obj = JSON.parse(raw);
+      return obj;
+    }catch(e){ return null; }
+  }
+
   async function saveSegmentCachedFirestore(tripId, fromId, toId, segment) {
     if (!tripId || !segment) return false;
     if (isFirebaseAvailable()) {
@@ -486,6 +497,40 @@
     });
     // fit map
     try{ map.fitBounds(routeLayer.getBounds(), { padding:[40,40] }); }catch(e){}
+  }
+
+  // --- Segment debug UI --------------------------------------------------
+  const _segmentDebugRecords = [];
+  function addSegmentDebugRecord(tripId, fromId, toId, source, info){
+    const rec = { tripId, fromId, toId, source: source || 'unknown', info: info || null, ts: (new Date()).toISOString() };
+    _segmentDebugRecords.push(rec);
+    renderSegmentDebug();
+  }
+
+  function renderSegmentDebug(){
+    try{
+      let container = document.getElementById('segmentDebug');
+      if(!container){
+        container = document.createElement('div'); container.id = 'segmentDebug';
+        container.style.position='fixed'; container.style.right='12px'; container.style.bottom='12px'; container.style.maxHeight='240px';
+        container.style.overflow='auto'; container.style.background='rgba(255,255,255,0.95)'; container.style.border='1px solid #ddd'; container.style.padding='8px';
+        container.style.fontSize='12px'; container.style.zIndex = 99999; container.style.width='320px'; container.style.boxShadow='0 6px 18px rgba(0,0,0,0.12)';
+        const title = document.createElement('div'); title.textContent='Segment cache debug (recent)'; title.style.fontWeight='700'; title.style.marginBottom='6px'; container.appendChild(title);
+        const clear = document.createElement('button'); clear.textContent='Clear'; clear.style.float='right'; clear.style.marginTop='-22px'; clear.onclick=()=>{ _segmentDebugRecords.length=0; renderSegmentDebug(); };
+        container.appendChild(clear);
+        const list = document.createElement('div'); list.id='segmentDebugList'; container.appendChild(list);
+        document.body.appendChild(container);
+      }
+      const list = container.querySelector('#segmentDebugList');
+      list.innerHTML = '';
+      const recent = _segmentDebugRecords.slice(-60).reverse();
+      for(const r of recent){
+        const row = document.createElement('div'); row.style.display='flex'; row.style.justifyContent='space-between'; row.style.marginBottom='6px'; row.style.borderBottom='1px dashed #eee'; row.style.paddingBottom='4px';
+        const left = document.createElement('div'); left.style.flex='1'; left.innerHTML = `<div style="font-weight:600">${r.tripId} [${r.fromId}→${r.toId}]</div><div style="color:#555">${r.source}${r.info?(' • '+String(r.info)):''}</div><div style="color:#888;font-size:11px">${r.ts}</div>`;
+        row.appendChild(left);
+        list.appendChild(row);
+      }
+    }catch(e){/* ignore UI errors */}
   }
 
   function refreshRouteList(){
@@ -658,7 +703,12 @@
             const fromId = String(i);
             const toId = String(i+1);
             let seg = null;
-            try { seg = await loadSegmentCachedFirestore(tripId, fromId, toId); } catch(e){}
+            // try Firestore (if configured)
+            try { seg = await loadSegmentCachedFirestore(tripId, fromId, toId); if(seg && seg.geometry){ addSegmentDebugRecord(tripId, fromId, toId, 'firestore'); } } catch(e){ seg=null; }
+            // fallback to localStorage cached segment
+            if(!seg){
+              try{ const localSeg = loadSegmentCachedLocal(tripId, fromId, toId); if(localSeg && localSeg.geometry){ seg = localSeg; addSegmentDebugRecord(tripId, fromId, toId, 'local'); } }catch(e){}
+            }
             if(seg && seg.geometry) {
               segments.push(seg);
             } else {
@@ -668,10 +718,12 @@
                 const routeResp = await getRouteOSRM(pair);
                 if(routeResp && routeResp.geometry) {
                   const saved = { geometry: routeResp.geometry, legs: routeResp.legs || null, duration: routeResp.duration || null, distance: routeResp.distance || null };
-                  try { await saveSegmentCachedFirestore(tripId, fromId, toId, saved); } catch (e) {}
+                  try { await saveSegmentCachedFirestore(tripId, fromId, toId, saved); addSegmentDebugRecord(tripId, fromId, toId, 'osrm', 'fetched and saved'); } catch (e) { addSegmentDebugRecord(tripId, fromId, toId, 'osrm', 'fetched'); }
                   segments.push(saved);
+                } else {
+                  addSegmentDebugRecord(tripId, fromId, toId, 'osrm', 'no-route');
                 }
-              } catch (e) { console.warn('pairwise OSRM failed', e); }
+              } catch (e) { console.warn('pairwise OSRM failed', e); addSegmentDebugRecord(tripId, fromId, toId, 'osrm', 'error'); }
             }
           }
 
