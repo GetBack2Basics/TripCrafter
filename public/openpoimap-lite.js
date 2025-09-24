@@ -653,27 +653,65 @@
       waypointMarkers.forEach(m=>map.removeLayer(m)); waypointMarkers = [];
       refreshRouteList();
       document.getElementById('poiStatus').textContent = 'Loading sample...';
+      // Build a list of unique, processed locations and an index of any existing coords
       const normalized = [];
-      for(const item of sample){
-        let loc = item.location || '';
+      const existingCoordsByKey = new Map();
+      function processLocationText(raw){
+        let loc = raw || '';
         if(/\bto\b/i.test(loc)){
-          const parts = loc.split(/\bto\b/i).map(s=>s.trim());
-          loc = parts[parts.length-1];
+          const parts = loc.split(/\bto\b/i).map(s=>s.trim()); loc = parts[parts.length-1];
         }
-        if(normalized.length===0 || normalized[normalized.length-1].location !== loc){ normalized.push({ location: loc, title: item.title }); }
+        return loc.trim();
+      }
+      // Scan sample items for any pre-saved lat/lng and populate existingCoordsByKey
+      for(const item of sample){
+        const loc = processLocationText(item.location || '');
+        const key = normalizeLocationKey(loc);
+        if(item && item.lat && item.lng){
+          existingCoordsByKey.set(key, { lat: parseFloat(item.lat), lng: parseFloat(item.lng), display_name: item.display_name || item.name || null });
+        }
+        // Build normalized list (unique sequential locations, same logic as before)
+        if(normalized.length===0 || normalized[normalized.length-1].location !== loc){ normalized.push({ location: loc, key, title: item.title || item.name || loc }); }
       }
       const bounds = L.latLngBounds();
       // normalized contains unique location strings from sample items; we need to map them back to trip items
+      // Track if we added coords to any sample items so we can persist them back
+      let persistedChanges = false;
       for(const n of normalized){
         try{
+          // If coords already exist in the loaded sample (Firestore or localStorage), use them
+          if(existingCoordsByKey.has(n.key)){
+            const g = existingCoordsByKey.get(n.key);
+            logStatus(`Using saved coords: ${n.location} → ${g.lat.toFixed(5)},${g.lng.toFixed(5)}`);
+            routePoints.push({ label: n.title || n.location, lat: g.lat, lng: g.lng, display_name: g.display_name });
+            bounds.extend([g.lat,g.lng]);
+            refreshRouteList();
+            continue;
+          }
           logStatus('Geocoding: '+n.location);
           // Use cached geocode lookup to avoid repeated Nominatim calls across sessions
           const g = await getCachedGeocode(n.location);
-          if(g){ logStatus(`✓ ${n.location} → ${g.lat.toFixed(5)},${g.lng.toFixed(5)}`); routePoints.push({ label: n.title || n.location, lat: g.lat, lng: g.lng, display_name: g.display_name || g.display_name }); bounds.extend([g.lat,g.lng]); refreshRouteList(); }
-          else { logStatus('✗ geocode miss for '+n.location); console.warn('Geocode miss for', n.location); }
+          if(g){
+            logStatus(`✓ ${n.location} → ${g.lat.toFixed(5)},${g.lng.toFixed(5)}`);
+            routePoints.push({ label: n.title || n.location, lat: g.lat, lng: g.lng, display_name: g.display_name || g.display_name });
+            bounds.extend([g.lat,g.lng]);
+            // Write coordinates back into the sample items so subsequent loads won't re-geocode
+            try{
+              for(const item of sample){
+                const loc2 = processLocationText(item.location || '');
+                if(normalizeLocationKey(loc2) === n.key){ item.lat = g.lat; item.lng = g.lng; item.display_name = item.display_name || g.display_name; }
+              }
+              persistedChanges = true;
+            }catch(e){ /* ignore persisting errors here */ }
+            refreshRouteList();
+          } else { logStatus('✗ geocode miss for '+n.location); console.warn('Geocode miss for', n.location); }
           // still add a short pause to be friendly to the geocode service on first-run
           await new Promise(r=>setTimeout(r, 400));
         }catch(e){ console.error('Error geocoding', n.location, e); }
+      }
+      // Persist any newly-added coordinates back to Firestore/localStorage
+      if(persistedChanges){
+        try{ await saveTripItemsToFirestore(SAMPLE_TRIP_ID, sample); try{ logStatus('Persisted new coordinates to storage'); }catch(e){} }catch(e){ console.warn('Failed saving updated sample items', e); }
       }
       // fit the map to all waypoints if any
       if(routePoints.length>0){
