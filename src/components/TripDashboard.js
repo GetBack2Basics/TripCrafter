@@ -39,6 +39,7 @@ import TripMap from '../TripMap';
 import TripTable from '../TripTable';
 import BottomNav from './BottomNav';
 import AIImportModal from './AIImportModal';
+import TripDiscover from '../TripDiscover';
 import MergeRequestModal from './MergeRequestModal';
 import TripProfileModal from './TripProfileModal';
 import TripHelpModal from './TripHelpModal';
@@ -52,8 +53,8 @@ import TripShareModal from './TripShareModal';
 
 export default function TripDashboard() {
   // Minimal state for UI skeleton
-  // Start on itinerary view to avoid showing Discover while Unsplash access is pending
-  const [activeView, setActiveView] = useState('itinerary');
+  // Start on discover view so images are visible by default for testing
+  const [activeView, setActiveView] = useState('discover');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIImportModal, setShowAIImportModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -87,6 +88,11 @@ export default function TripDashboard() {
     } catch (e) {}
   }, [displayTripName, currentTripName, currentTripId, userTrips, tripProfile]);
   const [showStagedModal, setShowStagedModal] = useState(false);
+
+  // Debug: log active view changes
+  useEffect(() => {
+    try { console.debug('TripDashboard activeView:', activeView); } catch (e) {}
+  }, [activeView]);
   // Use normalized default trip data for demo (not-logged-in) users
   // Helper to create a slug for image filenames
   function locationSlug(location) {
@@ -1509,6 +1515,11 @@ export default function TripDashboard() {
         } catch (e) { console.error('onAddItem wrapper failed', e); }
       }} />}
   {/* Discover view temporarily hidden while Unsplash account is in review */}
+  {activeView === 'discover' && (
+    <div className="p-4">
+      <TripDiscover tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />
+    </div>
+  )}
       </div>
       {/* Bottom Navigation for mobile */}
       <div className="md:hidden mt-4">
