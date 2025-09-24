@@ -151,6 +151,32 @@
     ]
   };
 
+  // Dynamically build overlay checkboxes from groupMap so every tag is available
+  function buildOverlayCheckboxes(){
+    try{
+      const container = document.querySelector('.overlayList');
+      if(!container) return;
+      container.innerHTML = '';
+      // For each group, render a small header and its tags
+      for(const group of Object.keys(groupMap)){
+        const header = document.createElement('div'); header.style.fontWeight='700'; header.style.marginTop='6px'; header.textContent = group.charAt(0).toUpperCase() + group.slice(1);
+        container.appendChild(header);
+        const tags = groupMap[group] || [];
+        const listWrap = document.createElement('div'); listWrap.style.display='flex'; listWrap.style.flexDirection='column'; listWrap.style.marginBottom='8px';
+        for(const tag of tags){
+          const label = document.createElement('label'); label.style.fontSize='13px'; label.style.marginBottom='2px';
+          const inp = document.createElement('input'); inp.type='checkbox'; inp.setAttribute('data-cat', tag); inp.style.marginRight='6px';
+          label.appendChild(inp);
+          const text = document.createTextNode(' ' + (tag.replace(/_/g,' ')));
+          label.appendChild(text);
+          listWrap.appendChild(label);
+        }
+        container.appendChild(listWrap);
+      }
+    }catch(e){ console.warn('buildOverlayCheckboxes failed', e); }
+  }
+
+
   function highlightOverlays(list, on){
     list.forEach(tag=>{
       // highlight the label in the right panel if present
@@ -826,6 +852,9 @@
   }
 
   document.getElementById('fetchPois').addEventListener('click',fetchDemoPois);
+  // Build overlay checkboxes dynamically from groupMap
+  try{ buildOverlayCheckboxes(); }catch(e){/* ignore */}
+
   document.getElementById('clearAll').addEventListener('click',()=>{
     // clear all POIs and reset overlay checkbox state so users can re-enable overlays
     allClusters.clearLayers();
