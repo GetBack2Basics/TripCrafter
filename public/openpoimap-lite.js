@@ -316,7 +316,19 @@
           btn.onclick = function(ev){
             ev && ev.preventDefault && ev.preventDefault();
             if(window.openTripFormForEdit && typeof window.openTripFormForEdit === 'function'){
-              try{ window.openTripFormForEdit(Object.assign({}, meta)); }catch(e){ console.warn('openTripFormForEdit failed', e); }
+              try{
+                // Normalize the demo meta into the TripForm shape the host expects
+                const item = {
+                  id: meta.id || meta.tempId || null,
+                  date: meta.date || '',
+                  location: meta.display_name || meta.location || '',
+                  title: meta.name || meta.title || meta.label || '',
+                  notes: meta.notes || '',
+                  type: (meta.type || meta.category || 'enroute'),
+                  activityLink: meta.activityLink || ''
+                };
+                window.openTripFormForEdit(item);
+              }catch(e){ console.warn('openTripFormForEdit failed', e); }
               try{ marker.closePopup(); }catch(e){}
               return;
             }

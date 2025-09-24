@@ -54,3 +54,9 @@ body{margin:0;background:#f6f7f9}
 .poi-card .actions{ display:flex;justify-content:flex-end;gap:8px }
 .poi-card .actions button{ padding:6px 8px;border-radius:6px;border:0;background:#f3f4f6;color:#111;font-size:13px }
 .poi-card .actions .edit{ background:#4F46E5;color:#fff }
+
+/* Ensure Leaflet popup wrapper doesn't add competing padding so the .poi-card can control look */
+.leaflet-popup-content-wrapper{ padding:0; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.12); }
+.leaflet-popup-content { padding:0 }
+.leaflet-popup-tip-container { display:none }
+.leaflet-popup-content .poi-card{ width:100px; max-width:15vw; box-sizing:border-box }
