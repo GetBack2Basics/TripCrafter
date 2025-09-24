@@ -21,17 +21,61 @@ if (!fetchFn) {
   }
 }
 
-module.exports = async (req, res) => {
+// Netlify functions expect an exported `handler` with signature (event, context)
+// We'll adapt the same logic but read from event.queryStringParameters and
+// return a standard { statusCode, headers, body } response.
+exports.handler = async function handler(event, context) {
   try {
-    const q = (req.query.q || req.query.query || 'travel').split(',')[0];
+    const qs = event && event.queryStringParameters ? event.queryStringParameters : {};
+    // Accept q + optional state/country to disambiguate locations (e.g., Newcastle NSW Australia)
+    const rawQ = (qs.q || qs.query || 'travel');
+    const rawState = qs.state || qs.s || '';
+    const rawCountry = qs.country || qs.c || '';
+
+    // Sanitize and normalize a search query: prefer first two comma-separated parts (city, state),
+    // append state and country if provided, remove postal codes and punctuation, collapse whitespace.
+    const sanitizeQuery = (qstr, stateStr, countryStr) => {
+      try {
+        let parts = [];
+        if (typeof qstr === 'string' && qstr.trim()) {
+          const tokens = qstr.split(',').map(s => s.trim()).filter(Boolean);
+          // keep at most first two parts from the location string (city [, state])
+          const head = tokens.slice(0, 2).join(' ');
+          if (head) parts.push(head);
+        }
+        if (stateStr && String(stateStr).trim()) parts.push(String(stateStr).trim());
+        if (countryStr && String(countryStr).trim()) parts.push(String(countryStr).trim());
+
+        let combined = parts.join(' ').trim() || 'travel';
+        // remove common postcode sequences (3-6 digits)
+        combined = combined.replace(/\b\d{3,6}\b/g, '');
+        // replace any non-word (letters/numbers/underscore) and non-space characters with a space
+        combined = combined.replace(/[^\w\s]/g, ' ');
+        // collapse multiple spaces
+        combined = combined.replace(/\s+/g, ' ').trim();
+        // limit length to avoid overly long queries
+        if (combined.length > 100) combined = combined.slice(0, 100).trim();
+        return combined || 'travel';
+      } catch (e) {
+        return (qstr || 'travel').split(',')[0] || 'travel';
+      }
+    };
+
+  let q = sanitizeQuery(rawQ, rawState, rawCountry);
     const perPage = 3;
 
     const accessKey = process.env.UNSPLASH_ACCESS_KEY || process.env.REACT_APP_UNSPLASH_ACCESS_KEY;
 
+    const jsonResponse = (obj, status = 200) => ({
+      statusCode: status,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(obj),
+    });
+
     if (!accessKey) {
       // No key: return source.unsplash.com dynamic images (public, no key needed)
       const images = [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${encodeURIComponent(q)}&sig=${i}`);
-      return res.json({ source: 'source.unsplash.com', images });
+      return jsonResponse({ source: 'source.unsplash.com', images, query: q });
     }
 
     // Use Unsplash Search API
@@ -50,7 +94,7 @@ module.exports = async (req, res) => {
       console.error('Unsplash search failed', resp.status, text);
       // Fallback to source.unsplash.com if API call fails
       const images = [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${encodeURIComponent(q)}&sig=${i}`);
-      return res.json({ source: 'source.unsplash.com', images, warning: 'unsplash api call failed' });
+      return jsonResponse({ source: 'source.unsplash.com', images, warning: 'unsplash api call failed', query: q });
     }
 
     const data = await resp.json();
@@ -58,14 +102,19 @@ module.exports = async (req, res) => {
 
     if (!images.length) {
       const fallback = [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${encodeURIComponent(q)}&sig=${i}`);
-      return res.json({ source: 'source.unsplash.com', images: fallback, warning: 'no results' });
+      return jsonResponse({ source: 'source.unsplash.com', images: fallback, warning: 'no results', query: q });
     }
 
-    return res.json({ source: 'unsplash-api', images });
+    return jsonResponse({ source: 'unsplash-api', images, query: q });
   } catch (err) {
     console.error('unsplash-proxy error', err && err.message);
-    const q = (req.query.q || 'travel').split(',')[0];
-    const images = [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${encodeURIComponent(q)}&sig=${i}`);
-    return res.status(200).json({ source: 'source.unsplash.com', images, error: err && err.message });
+    const qs = event && event.queryStringParameters ? event.queryStringParameters : {};
+    const fallbackQ = (qs.q || 'travel').split(',')[0] || 'travel';
+    const images = [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${encodeURIComponent(fallbackQ)}&sig=${i}`);
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'source.unsplash.com', images, error: err && err.message, query: fallbackQ }),
+    };
   }
 };

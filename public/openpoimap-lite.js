@@ -57,16 +57,19 @@
     return (s.substring(0,3).toUpperCase()).padEnd(3,'X');
   }
   function makeCategoryIcon(cat){
-    if(iconCache.has(cat)) return iconCache.get(cat);
+    // Coerce falsy categories to a stable string so we never try to read
+    // properties like `.length` on undefined.
+    const key = String(cat || '__');
+    if (iconCache.has(key)) return iconCache.get(key);
     // pick a color per category (simple hash)
     const colors = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f'];
-    let sum = 0; for(let i=0;i<cat.length;i++) sum += cat.charCodeAt(i);
+    let sum = 0; for (let i = 0; i < key.length; i++) sum += key.charCodeAt(i);
     const color = colors[sum % colors.length];
-    colorMap.set(cat, color);
-    const code = makeCode(cat);
+    colorMap.set(key, color);
+    const code = makeCode(key);
     const html = '<div class="poi-icon" style="background:'+color+'">'+code+'</div>';
-    const ic = L.divIcon({className:'', html:html, iconSize:[28,28], iconAnchor:[14,28]});
-    iconCache.set(cat, ic);
+    const ic = L.divIcon({ className: '', html: html, iconSize: [28, 28], iconAnchor: [14, 28] });
+    iconCache.set(key, ic);
     return ic;
   }
 
@@ -193,7 +196,10 @@
   }
 
   function addPoi(lat,lng,name, category){
-    const mk = L.marker([lat,lng], { icon: category ? makeCategoryIcon(category) : undefined });
+    // Only include the icon option when a category is provided. Passing
+    // `icon: undefined` can break Leaflet's internal marker creation (options.icon
+    // would be undefined and Marker tries to call createIcon on it).
+  const mk = category ? L.marker([lat,lng], { icon: makeCategoryIcon(category) }) : L.marker([lat,lng]);
     const meta = { name: name, category: category, lat: lat, lng: lng };
     mk.bindPopup(createInfoPopupContent(meta, category));
     mk.on('click',()=>mk.openPopup());
@@ -253,7 +259,13 @@
     // create numbered markers for waypoints
     points.forEach((p, idx)=>{
       const meta = Object.assign({}, p, { index: idx+1 });
-      const m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#4F46E5'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+      let m;
+      try {
+        m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#4F46E5'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+      } catch (e) {
+        console.warn('Marker creation with divIcon failed, falling back to default marker', e);
+        m = L.marker([p.lat,p.lng]).addTo(map);
+      }
       m.bindPopup(createInfoPopupContent(meta, null));
       m.on('click', ()=> m.openPopup());
       routeMarkers.push(m);
@@ -296,7 +308,13 @@
       if(waypointMarkers.length>0) return;
       routePoints.forEach((p, idx)=>{
         const meta = Object.assign({}, p, { index: idx+1 });
-        const m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#06b6d4'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+        let m;
+        try {
+          m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#06b6d4'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+        } catch (e) {
+          console.warn('Marker creation with divIcon failed, falling back to default marker', e);
+          m = L.marker([p.lat,p.lng]).addTo(map);
+        }
         m.bindPopup(createInfoPopupContent(meta, null));
         m.on('click', ()=> m.openPopup());
         waypointMarkers.push(m);
@@ -377,7 +395,13 @@
         // add visible waypoint markers for each point so user sees them even if routing fails
         routePoints.forEach((p, idx)=>{
           const meta = Object.assign({}, p, { index: idx+1 });
-          const m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#06b6d4'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+          let m;
+          try {
+            m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#06b6d4'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+          } catch (e) {
+            console.warn('Marker creation with divIcon failed, falling back to default marker', e);
+            m = L.marker([p.lat,p.lng]).addTo(map);
+          }
           m.bindPopup(createInfoPopupContent(meta, null));
           m.on('click', ()=> m.openPopup());
           waypointMarkers.push(m);
@@ -467,6 +491,21 @@
 
   // initial
   setBase('osm');
-  fetchDemoPois();
+  // Auto-load Paris sample trip when ?owner=<ownerId> or ?trip=paris is present in the URL
+  (function(){
+    try{
+      const params = new URLSearchParams(window.location.search);
+      const owner = params.get('owner');
+      const trip = params.get('trip');
+      const AUTO_OWNER = 'Yc1vLpmyYXg8PLGJKLaYUDdbwHI3';
+      if(owner === AUTO_OWNER || trip === 'paris'){
+        // load the sample-trip.json (Paris) and compute routing/waypoints automatically
+        loadSampleTrip();
+        return;
+      }
+    }catch(e){ /* ignore and fall back */ }
+    // default: demo POIs
+    fetchDemoPois();
+  })();
 
 })();

@@ -1714,7 +1714,13 @@ function ClusterManager({ mapRef, poiMarkers, selectedOverlays, createPoiIcon, e
     try {
       for (const p of (poiMarkers || [])) {
         try {
-          const marker = L.marker([p.lat, p.lon], { icon: createPoiIcon(p.name ? p.name[0] : '') });
+          let marker;
+          try {
+            marker = L.marker([p.lat, p.lon], { icon: createPoiIcon(p.name ? p.name[0] : '') });
+          } catch (e) {
+            console.warn('createPoiIcon failed, falling back to default marker', e);
+            marker = L.marker([p.lat, p.lon]);
+          }
           const container = document.createElement('div');
           container.style.fontFamily = 'sans-serif';
           const titleEl = document.createElement('div');

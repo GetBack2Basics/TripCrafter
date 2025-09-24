@@ -1453,9 +1453,6 @@ export default function TripDashboard() {
             {!editingTripName ? (
               <>
                 <h2 className="text-2xl font-bold text-indigo-700 tracking-tight">{displayTripName}</h2>
-                {/* debug: show computed name (remove in prod) */}
-                <div className="text-xs text-gray-400">Debug name: {displayTripName}</div>
-                <button title="Edit trip" className="text-indigo-500 hover:text-indigo-700" onClick={() => { setShowProfileModal(true); setShowTripSelectModal(true); }} aria-label="Edit trip">✎</button>
               </>
             ) : (
               <form onSubmit={async (e) => { e.preventDefault(); try {
@@ -1517,7 +1514,7 @@ export default function TripDashboard() {
   {/* Discover view temporarily hidden while Unsplash account is in review */}
   {activeView === 'discover' && (
     <div className="p-4">
-      <TripDiscover tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />
+      <TripDiscover tripItems={tripItems} tripProfile={tripProfile} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />
     </div>
   )}
       </div>
