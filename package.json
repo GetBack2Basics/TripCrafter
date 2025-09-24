@@ -9,6 +9,7 @@
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.541.0",
+    "node-fetch": "^2.7.0",
     "pdfjs-dist": "^5.4.54",
     "puppeteer": "^24.22.0",
     "puppeteer-core": "^24.22.0",

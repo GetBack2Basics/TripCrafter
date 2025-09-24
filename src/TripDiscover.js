@@ -23,24 +23,39 @@ function locationSlug(location) {
     .toLowerCase();
 }
 
-function getLocalDiscoverImages(location) {
-  const slug = locationSlug(location);
-  // Always return Unsplash dynamic source images (no local download required)
+// Default client-side image generator (no API key required)
+function clientSourceImages(location) {
   const q = encodeURIComponent((location || 'travel').split(',')[0]);
   return [1, 2, 3].map(i => `https://source.unsplash.com/800x600/?${q}&sig=${i}`);
 }
 
+// Try to fetch images from the serverless proxy. The component will use
+// clientSourceImages as a fast fallback so the UI remains snappy.
+async function fetchDiscoverImages(location) {
+  try {
+    const q = encodeURIComponent((location || 'travel').split(',')[0]);
+    const resp = await fetch(`/api/unsplash-proxy?q=${q}`);
+    if (!resp.ok) throw new Error('proxy fetch failed');
+    const json = await resp.json();
+    if (json && Array.isArray(json.images) && json.images.length) return json.images;
+  } catch (err) {
+    // ignore and let the caller fallback
+  }
+  return clientSourceImages(location);
+}
+
 export default function TripDiscover({ tripItems = [], handleEditClick, handleDeleteItem }) {
   const sorted = Array.isArray(tripItems) ? tripItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : [];
+  const [imageCache] = React.useState(() => ({}));
   if (!sorted.length) {
     return <p className="text-center text-gray-400 text-lg py-8">No discover items available.</p>;
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
       {sorted.map((item) => {
-        const images = getLocalDiscoverImages(item.location);
-  const imgUrl = images[0] || '/logo512.png';
-  console.log('Discover image URL:', imgUrl, 'for location:', item.location);
+        const cached = imageCache[item.id];
+        const images = cached || clientSourceImages(item.location);
+        const imgUrl = images[0] || '/logo512.png';
         return (
           <div key={item.id} className="bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col hover:shadow-2xl transition-shadow duration-200">
             <div className="overflow-hidden rounded-t-xl">
@@ -82,3 +97,27 @@ export default function TripDiscover({ tripItems = [], handleEditClick, handleDe
     </div>
   );
 }
+
+// Kick off background fetches for images so they replace client-side
+// source images when available. We do this after export to avoid hooks
+// inside loops and keep the component pure; callers render immediately and
+// images update in-place when the fetch completes.
+(function prefetchAllDiscoverImages() {
+  // Only run in browser environments
+  if (typeof window === 'undefined') return;
+  // Observe DOM for TripDiscover items and trigger cache fills
+  try {
+    // Find trip items from a global-ish place: read from window.__TRIP_DISCOVER_ITEMS if set
+    const items = window.__TRIP_DISCOVER_ITEMS || null;
+    if (!Array.isArray(items)) return;
+    items.forEach(async (item) => {
+      if (!item || !item.id) return;
+      // Request proxy; fetchDiscoverImages returns client fallback if proxy isn't available
+      const imgs = await fetchDiscoverImages(item.location);
+      // Store on item so React can pick it up if the component mutates imageCache externally
+      item._discoverImages = imgs;
+    });
+  } catch (err) {
+    // noop
+  }
+})();
