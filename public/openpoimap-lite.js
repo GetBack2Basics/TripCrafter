@@ -902,8 +902,12 @@
     });
   });
 
-  // initial
-  setBase('osm');
+  // initial: use Positron (carto) as the default base layer
+  try{
+    // check the corresponding radio input if present
+    document.querySelectorAll('input[name="base"]').forEach(r=>{ try{ r.checked = (r.value === 'carto'); }catch(e){} });
+  }catch(e){}
+  setBase('carto');
   // Auto-load Paris sample trip when ?owner=<ownerId> or ?trip=paris is present in the URL.
   // Additionally, for the deployed demo page we want to show the itinerary by default
   // so users opening the standalone demo URL see the Paris trip without query params.
