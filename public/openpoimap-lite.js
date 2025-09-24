@@ -243,14 +243,21 @@
     return Array.from(new Set(groups));
   }
   function createInfoPopupContent(obj, tag){
-    const json = escapeHtml(JSON.stringify(obj, null, 2));
-  const textHint = obj.name || obj.label || obj.title || obj.display_name || '';
-  const groups = getGroupsForTag(tag, textHint);
+    const textHint = obj.name || obj.label || obj.title || obj.display_name || '';
+    const groups = getGroupsForTag(tag, textHint);
     const title = escapeHtml(obj.name || obj.label || obj.title || obj.display_name || 'POI');
-    let html = `<div style="max-width:360px;"><div style="font-weight:700;margin-bottom:6px;">${title}</div>`;
+    let html = `<div style="max-width:360px;font-family:Arial,Helvetica,sans-serif;">`;
+    html += `<div style="font-weight:700;margin-bottom:6px;color:#111">${title}</div>`;
     if(tag){ html += `<div style="font-size:12px;color:#444;margin-bottom:6px;"><strong>Category:</strong> ${escapeHtml(tag)}</div>`; }
-    if(groups && groups.length){ html += `<div style="font-size:12px;color:#444;margin-bottom:6px;"><strong>OpenPoiMap groups:</strong> ${escapeHtml(groups.join(', '))}</div>`; }
-    html += `<pre style="white-space:pre-wrap;background:#f7f7f7;padding:6px;border-radius:4px;margin:6px 0;">${json}</pre></div>`;
+    if(groups && groups.length){ html += `<div style="font-size:12px;color:#444;margin-bottom:6px;"><strong>Groups:</strong> ${escapeHtml(groups.join(', '))}</div>`; }
+    if(obj.display_name){ html += `<div style="font-size:12px;color:#555;margin-bottom:6px;">${escapeHtml(obj.display_name)}</div>`; }
+    if(typeof obj.lat === 'number' && typeof obj.lng === 'number'){ html += `<div style="font-size:12px;color:#666;margin-bottom:6px;"><strong>Coords:</strong> ${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}</div>`; }
+    // Lightweight details list (no raw JSON)
+    const metaRows = [];
+    if(obj.activityLink) metaRows.push(`<div><strong>Link:</strong> ${escapeHtml(obj.activityLink)}</div>`);
+    if(obj.nights) metaRows.push(`<div><strong>Nights:</strong> ${escapeHtml(String(obj.nights))}</div>`);
+    if(metaRows.length) html += `<div style="font-size:12px;color:#444;margin-bottom:6px;">${metaRows.join('')}</div>`;
+    html += `</div>`;
     return html;
   }
 
@@ -576,13 +583,15 @@
     points.forEach((p, idx)=>{
       const meta = Object.assign({}, p, { index: idx+1 });
       let m;
-      try {
-        const icon = makeTypeIcon(null, String(idx+1), true);
-        m = icon ? L.marker([p.lat,p.lng], { icon: icon }).addTo(map) : L.marker([p.lat,p.lng]).addTo(map);
-      } catch (e) {
-        console.warn('Marker creation failed, falling back to default marker', e);
-        m = L.marker([p.lat,p.lng]).addTo(map);
-      }
+        try {
+          // Render a number-only marker whose color comes from CSS variables (50% opacity)
+          const html = `<div class="wp-num">${String(idx+1)}</div>`;
+          const icon = L.divIcon({ html, className: '', iconSize:[20,20], iconAnchor:[10,10] });
+          m = L.marker([p.lat,p.lng], { icon }).addTo(map);
+        } catch (e) {
+          console.warn('Marker creation failed, falling back to default marker', e);
+          m = L.marker([p.lat,p.lng]).addTo(map);
+        }
       try{ attachPopupWithEdit(m, meta, null); }catch(e){ try{ m.bindPopup(createInfoPopupContent(meta, null)); m.on('click', ()=> m.openPopup()); }catch(e){} }
       routeMarkers.push(m);
     });
@@ -660,8 +669,9 @@
         const meta = Object.assign({}, p, { index: idx+1 });
         let m;
         try {
-          const icon = makeTypeIcon(null, String(idx+1), true);
-          m = icon ? L.marker([p.lat,p.lng], { icon: icon }).addTo(map) : L.marker([p.lat,p.lng]).addTo(map);
+          const html = `<div class="wp-num">${String(idx+1)}</div>`;
+          const icon = L.divIcon({ html, className: '', iconSize:[20,20], iconAnchor:[10,10] });
+          m = L.marker([p.lat,p.lng], { icon }).addTo(map);
         } catch (e) {
           console.warn('Marker creation failed, falling back to default marker', e);
           m = L.marker([p.lat,p.lng]).addTo(map);
@@ -812,7 +822,8 @@
           const meta = Object.assign({}, p, { index: idx+1 });
           let m;
           try {
-            m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#06b6d4'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+            const html = `<div class="wp-num">${String(idx+1)}</div>`;
+            m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html, className:'', iconSize:[28,28], iconAnchor:[14,14] }) }).addTo(map);
           } catch (e) {
             console.warn('Marker creation with divIcon failed, falling back to default marker', e);
             m = L.marker([p.lat,p.lng]).addTo(map);

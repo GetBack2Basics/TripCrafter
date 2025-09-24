@@ -22,3 +22,18 @@ body{margin:0;background:#f6f7f9}
 .poi-icon.small{width:20px;height:20px;font-size:11px}
 /* overlay label highlight when group toggles */
 .overlay-highlight{background:linear-gradient(90deg,rgba(79,70,229,0.08),rgba(79,70,229,0.04));border-radius:4px;padding:2px}
+
+/* Shared type color variables (RGB) so demo and React app can reference the same hues */
+:root{
+	--type-roofed: 79,70,229;    /* indigo */
+	--type-camp: 16,185,129;     /* green */
+	--type-enroute: 245,158,66;  /* orange */
+	--type-note: 139,92,246;     /* purple */
+	--type-ferry: 59,130,246;    /* blue */
+	--type-car: 107,114,128;     /* gray */
+}
+
+/* Waypoint number styling (no solid background, colored text at 50% opacity) */
+.wp-num{
+	display:flex;align-items:center;justify-content:center;width:20px;height:20px;font-weight:700;font-size:12px;background:transparent;border-radius:50%;border:0;color:rgba(var(--type-enroute),0.5);
+}

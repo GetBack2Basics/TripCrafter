@@ -110,20 +110,12 @@ async function getRoute(coordinates) {
 // Create custom marker icon
 function createCustomIcon(number, type, isActive, scale = 1) {
   const size = 20 * scale;
+  // Render a plain number (no colored background). Color is provided by CSS variables
+  // shared across the demo and React app (RGB values stored in --type-... variables).
+  const cssType = type ? type : 'enroute';
+  const colorExpr = `rgba(var(--type-${cssType}), 0.5)`;
   const html = `
-    <div style="
-      width: ${size}px;
-      height: ${size}px;
-      border-radius: 50%;
-      background-color: ${isActive ? '#f59e42' : type === 'roofed' || type === 'camp' ? '#2563eb' : type === 'enroute' ? '#f59e42' : '#4F46E5'};
-      border: 2px solid ${isActive ? '#f59e42' : 'white'};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: ${12 * scale}px;
-    ">
+    <div class="wp-num" style="width: ${size}px; height: ${size}px; font-size: ${12 * scale}px; color: ${colorExpr};">
       ${number}
     </div>
   `;
@@ -1638,10 +1630,11 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
                   </span>
                   <button
                     type="button"
-                    className="absolute -top-2 -left-2 bg-indigo-600 text-white text-[10px] font-semibold rounded-full w-6 h-6 flex items-center justify-center"
+                    className="timeline-num absolute -top-2 -left-2 flex items-center justify-center"
                     title={`Fly to ${getPlaceName(item.location)}`}
                     aria-label={`Fly to ${getPlaceName(item.location)}`}
                     onClick={(e) => { e.stopPropagation(); try { attemptFly(item.id); } catch (err) { console.warn('badge fly failed', err); } }}
+                    style={{ color: `rgba(var(--type-${item.type || 'enroute'}), 0.5)` }}
                   >
                     {displayIndex}
                   </button>

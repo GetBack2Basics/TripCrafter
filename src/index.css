@@ -28,6 +28,22 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+/* Shared type color variables (RGB) — mirror values used by the demo so both share the same palette */
+:root{
+  --type-roofed: 79,70,229;    /* indigo */
+  --type-camp: 16,185,129;     /* green */
+  --type-enroute: 245,158,66;  /* orange */
+  --type-note: 139,92,246;     /* purple */
+  --type-ferry: 59,130,246;    /* blue */
+  --type-car: 107,114,128;     /* gray */
+}
+
+/* Timeline number badge using colored text with 50% opacity */
+.timeline-num {
+  width: 28px; height: 28px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; background: transparent; border:0;
+  color: rgba(var(--type-enroute), 0.5);
+}
+
 /* Improve map UX: show hand/grab cursor and grabbing while dragging */
 .leaflet-container {
   cursor: grab;
