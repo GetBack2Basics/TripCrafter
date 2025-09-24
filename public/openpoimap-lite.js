@@ -197,8 +197,13 @@
         const target = btn.getAttribute('data-target');
         const panel = document.getElementById(target);
         if(!panel) return;
-        // initialize state
-        const collapsed = isPanelCollapsed(target);
+        // initialize state: default collapsed for actionsPanel/routePanel unless user has a saved preference
+        let collapsed = isPanelCollapsed(target);
+        if(collapsed === false){
+          // if no preference exists, default to collapsed for the two main panels
+          const prefExists = (function(){ try{ return localStorage.getItem(PANEL_COLLAPSE_KEY_PREFIX+target) !== null; }catch(e){ return false; }})();
+          if(!prefExists && (target === 'actionsPanel' || target === 'routePanel')) collapsed = true;
+        }
         panel.style.display = collapsed ? 'none' : '';
         btn.textContent = collapsed ? '+' : '−';
         btn.setAttribute('aria-expanded', String(!collapsed));
@@ -249,14 +254,46 @@
     return html;
   }
 
+  // Attach a popup to a marker that includes an Edit button. If the host
+  // application exposes `window.openTripFormForEdit`, prefer calling that
+  // function (so the React TripForm is used). Otherwise fall back to a
+  // simple prompt-based edit flow.
+  function attachPopupWithEdit(marker, meta, tag){
+    try{
+      const popupId = 'popup_edit_' + Math.random().toString(36).slice(2,9);
+      const content = createInfoPopupContent(meta, tag) + `<div style="margin-top:6px;text-align:right;"><button id="${popupId}" style="padding:6px 8px">Edit</button></div>`;
+      marker.bindPopup(content);
+      marker.on('popupopen', function(){
+        try{
+          const btn = document.getElementById(popupId);
+          if(!btn) return;
+          btn.onclick = function(ev){
+            ev && ev.preventDefault && ev.preventDefault();
+            // If the host app provides an edit integration, call it and return.
+            if(window.openTripFormForEdit && typeof window.openTripFormForEdit === 'function'){
+              try{ window.openTripFormForEdit(Object.assign({}, meta)); }catch(e){ console.warn('openTripFormForEdit failed', e); }
+              try{ marker.closePopup(); }catch(e){}
+              return;
+            }
+            // Fallback: prompt the user for a new name/label and update the popup
+            try{
+              const current = meta.name || meta.label || '';
+              const nw = prompt('Edit name', current);
+              if(nw !== null){ meta.name = nw; try{ marker.setPopupContent(createInfoPopupContent(meta, tag) + `<div style="margin-top:6px;text-align:right;"><button id="${popupId}" style="padding:6px 8px">Edit</button></div>`); }catch(e){} }
+            }catch(e){ console.warn('popup edit failed', e); }
+          };
+        }catch(e){}
+      });
+    }catch(e){ console.warn('attachPopupWithEdit failed', e); throw e; }
+  }
+
   function addPoi(lat,lng,name, category){
     // Only include the icon option when a category is provided. Passing
     // `icon: undefined` can break Leaflet's internal marker creation (options.icon
     // would be undefined and Marker tries to call createIcon on it).
   const mk = category ? L.marker([lat,lng], { icon: makeCategoryIcon(category) }) : L.marker([lat,lng]);
     const meta = { name: name, category: category, lat: lat, lng: lng };
-    mk.bindPopup(createInfoPopupContent(meta, category));
-    mk.on('click',()=>mk.openPopup());
+    try{ attachPopupWithEdit(mk, meta, category); }catch(e){ try{ mk.bindPopup(createInfoPopupContent(meta, category)); mk.on('click',()=>mk.openPopup()); }catch(e){} }
     if(category){
       const cluster = getOrCreateCluster(category);
       cluster.addLayer(mk);
@@ -540,13 +577,13 @@
       const meta = Object.assign({}, p, { index: idx+1 });
       let m;
       try {
-        m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#4F46E5'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+        const icon = makeTypeIcon(null, String(idx+1), true);
+        m = icon ? L.marker([p.lat,p.lng], { icon: icon }).addTo(map) : L.marker([p.lat,p.lng]).addTo(map);
       } catch (e) {
-        console.warn('Marker creation with divIcon failed, falling back to default marker', e);
+        console.warn('Marker creation failed, falling back to default marker', e);
         m = L.marker([p.lat,p.lng]).addTo(map);
       }
-      m.bindPopup(createInfoPopupContent(meta, null));
-      m.on('click', ()=> m.openPopup());
+      try{ attachPopupWithEdit(m, meta, null); }catch(e){ try{ m.bindPopup(createInfoPopupContent(meta, null)); m.on('click', ()=> m.openPopup()); }catch(e){} }
       routeMarkers.push(m);
     });
     // fit map
@@ -623,13 +660,13 @@
         const meta = Object.assign({}, p, { index: idx+1 });
         let m;
         try {
-          m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html:`<div class='poi-icon small' style='background:#06b6d4'>${String(idx+1)}</div>`, className:'', iconSize:[28,28] }) }).addTo(map);
+          const icon = makeTypeIcon(null, String(idx+1), true);
+          m = icon ? L.marker([p.lat,p.lng], { icon: icon }).addTo(map) : L.marker([p.lat,p.lng]).addTo(map);
         } catch (e) {
-          console.warn('Marker creation with divIcon failed, falling back to default marker', e);
+          console.warn('Marker creation failed, falling back to default marker', e);
           m = L.marker([p.lat,p.lng]).addTo(map);
         }
-        m.bindPopup(createInfoPopupContent(meta, null));
-        m.on('click', ()=> m.openPopup());
+        try{ attachPopupWithEdit(m, meta, null); }catch(e){ try{ m.bindPopup(createInfoPopupContent(meta, null)); m.on('click', ()=> m.openPopup()); }catch(e){} }
         waypointMarkers.push(m);
       });
     }
@@ -961,7 +998,7 @@
       }
     }catch(e){ /* ignore and fall back */ }
     // default for other contexts: demo POIs
-    fetchDemoPois();
-  })();
+      fetchDemoPois();
+    })();
 
-})();
+  })();

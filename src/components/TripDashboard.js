@@ -598,16 +598,25 @@ export default function TripDashboard() {
     setNewItem(item);
     setShowAddForm(true);
   };
-  const handleSaveEdit = () => {
+
+  // Expose a global helper so external pages/scripts (demo) can open the TripForm
+  // and populate it for editing. Usage: window.openTripFormForEdit(item)
+  try{
+    window.openTripFormForEdit = function(item){
+      try{ if(!item) return; setEditingItem(item); setNewItem(item); setShowAddForm(true); }catch(e){ console.warn('openTripFormForEdit failed', e); }
+    };
+  }catch(e){}
+  const handleSaveEdit = (formData) => {
     const resetLocal = () => {
       setShowAddForm(false);
       setEditingItem(null);
       setNewItem({ date: '', location: '', title: '', status: 'Unconfirmed', notes: '', travelTime: '', activities: '', type: 'roofed', activityLink: '' });
     };
     // Stage the edit locally and queue a pending update
-    setTripItems(prev => sortTripItems(prev.map(item => item.id === (editingItem && editingItem.id) ? { ...item, ...newItem } : item)));
+    const payload = formData || newItem;
+    setTripItems(prev => sortTripItems(prev.map(item => item.id === (editingItem && editingItem.id) ? { ...item, ...payload } : item)));
     if (editingItem && editingItem.id) {
-      setPendingOps(prev => [...prev, { op: 'update', id: editingItem.id, payload: { ...newItem } }]);
+      setPendingOps(prev => [...prev, { op: 'update', id: editingItem.id, payload: { ...payload } }]);
     }
     resetLocal();
   };
