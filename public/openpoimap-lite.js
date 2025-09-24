@@ -1,6 +1,8 @@
 (function(){
   // Minimal standalone OpenPoiMap-like demo
   const map = L.map('map', { center:[44.402,10.424], zoom:10, zoomControl:false });
+  // Enable verbose debug UI by setting window.__OPENPOIMAP_DEBUG__ = true before loading the script
+  const DEBUG_MODE = !!(window.__OPENPOIMAP_DEBUG__);
 
   const layers = {
     osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap contributors' }).addTo(map),
@@ -157,12 +159,25 @@
       const container = document.querySelector('.overlayList');
       if(!container) return;
       container.innerHTML = '';
-      // For each group, render a small header and its tags
+      // small helpers for persisted collapsed state per overlay group
+      const OVERLAY_COLLAPSE_KEY = 'openpoimap_overlay_collapsed:';
+      const isCollapsedStored = (id)=>{ try{ return localStorage.getItem(OVERLAY_COLLAPSE_KEY+id) === '1'; }catch(e){ return null; } };
+      const setCollapsedStored = (id, v)=>{ try{ if(v) localStorage.setItem(OVERLAY_COLLAPSE_KEY+id,'1'); else localStorage.removeItem(OVERLAY_COLLAPSE_KEY+id); }catch(e){} };
+
+      // For each group, render a header with a toggle and its tags (collapsed by default)
       for(const group of Object.keys(groupMap)){
-        const header = document.createElement('div'); header.style.fontWeight='700'; header.style.marginTop='6px'; header.textContent = group.charAt(0).toUpperCase() + group.slice(1);
-        container.appendChild(header);
+        const gid = String(group);
+        const headerWrap = document.createElement('div'); headerWrap.style.display='flex'; headerWrap.style.alignItems='center'; headerWrap.style.justifyContent='space-between'; headerWrap.style.marginTop='8px';
+        const title = document.createElement('div'); title.style.fontWeight='700'; title.style.cursor='pointer'; title.textContent = gid.charAt(0).toUpperCase() + gid.slice(1);
+        // caret indicator
+        const caret = document.createElement('div'); caret.textContent = '+'; caret.style.marginLeft='8px'; caret.style.fontWeight='700'; caret.setAttribute('aria-hidden','true');
+        headerWrap.appendChild(title); headerWrap.appendChild(caret);
+        container.appendChild(headerWrap);
+
         const tags = groupMap[group] || [];
-        const listWrap = document.createElement('div'); listWrap.style.display='flex'; listWrap.style.flexDirection='column'; listWrap.style.marginBottom='8px';
+        const listWrap = document.createElement('div'); listWrap.style.display='flex'; listWrap.style.flexDirection='column'; listWrap.style.marginBottom='6px'; listWrap.style.marginLeft='6px';
+
+        // create checkboxes for this group's tags
         for(const tag of tags){
           const label = document.createElement('label'); label.style.fontSize='13px'; label.style.marginBottom='2px';
           const inp = document.createElement('input'); inp.type='checkbox'; inp.setAttribute('data-cat', tag); inp.style.marginRight='6px';
@@ -171,6 +186,24 @@
           label.appendChild(text);
           listWrap.appendChild(label);
         }
+
+        // default collapsed unless the user has a stored preference
+        const stored = isCollapsedStored(gid);
+        const defaultCollapsed = (stored === null) ? true : stored; // true by default on first view
+        listWrap.style.display = defaultCollapsed ? 'none' : 'flex';
+        caret.textContent = defaultCollapsed ? '+' : '−';
+
+        // clicking header toggles visibility and persists state
+        const toggle = ()=>{
+          const nowCollapsed = listWrap.style.display === 'none';
+          const nextCollapsed = !nowCollapsed;
+          listWrap.style.display = nextCollapsed ? 'none' : 'flex';
+          caret.textContent = nextCollapsed ? '+' : '−';
+          setCollapsedStored(gid, nextCollapsed);
+        };
+        title.addEventListener('click', toggle);
+        caret.addEventListener('click', toggle);
+
         container.appendChild(listWrap);
       }
     }catch(e){ console.warn('buildOverlayCheckboxes failed', e); }
@@ -246,17 +279,21 @@
     const textHint = obj.name || obj.label || obj.title || obj.display_name || '';
     const groups = getGroupsForTag(tag, textHint);
     const title = escapeHtml(obj.name || obj.label || obj.title || obj.display_name || 'POI');
-    let html = `<div style="max-width:360px;font-family:Arial,Helvetica,sans-serif;">`;
-    html += `<div style="font-weight:700;margin-bottom:6px;color:#111">${title}</div>`;
-    if(tag){ html += `<div style="font-size:12px;color:#444;margin-bottom:6px;"><strong>Category:</strong> ${escapeHtml(tag)}</div>`; }
-    if(groups && groups.length){ html += `<div style="font-size:12px;color:#444;margin-bottom:6px;"><strong>Groups:</strong> ${escapeHtml(groups.join(', '))}</div>`; }
-    if(obj.display_name){ html += `<div style="font-size:12px;color:#555;margin-bottom:6px;">${escapeHtml(obj.display_name)}</div>`; }
-    if(typeof obj.lat === 'number' && typeof obj.lng === 'number'){ html += `<div style="font-size:12px;color:#666;margin-bottom:6px;"><strong>Coords:</strong> ${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}</div>`; }
+    let html = `<div class="poi-card">`;
+    html += `<div class="title">${title}</div>`;
+    if(tag){ html += `<div class="sub"><strong>Category:</strong> ${escapeHtml(tag)}</div>`; }
+    if(groups && groups.length){ html += `<div class="sub"><strong>Groups:</strong> ${escapeHtml(groups.join(', '))}</div>`; }
+    if(obj.display_name){ html += `<div class="meta">${escapeHtml(obj.display_name)}</div>`; }
+    if(typeof obj.lat === 'number' && typeof obj.lng === 'number'){ html += `<div class="meta"><strong>Coords:</strong> ${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}</div>`; }
     // Lightweight details list (no raw JSON)
     const metaRows = [];
     if(obj.activityLink) metaRows.push(`<div><strong>Link:</strong> ${escapeHtml(obj.activityLink)}</div>`);
     if(obj.nights) metaRows.push(`<div><strong>Nights:</strong> ${escapeHtml(String(obj.nights))}</div>`);
-    if(metaRows.length) html += `<div style="font-size:12px;color:#444;margin-bottom:6px;">${metaRows.join('')}</div>`;
+    if(metaRows.length) html += `<div class="meta">${metaRows.join('')}</div>`;
+    // notes
+    if(obj.notes) html += `<div class="notes">${escapeHtml(obj.notes)}</div>`;
+    // actions
+    html += `<div class="actions"><button class="edit">Edit</button></div>`;
     html += `</div>`;
     return html;
   }
@@ -267,26 +304,27 @@
   // simple prompt-based edit flow.
   function attachPopupWithEdit(marker, meta, tag){
     try{
-      const popupId = 'popup_edit_' + Math.random().toString(36).slice(2,9);
-      const content = createInfoPopupContent(meta, tag) + `<div style="margin-top:6px;text-align:right;"><button id="${popupId}" style="padding:6px 8px">Edit</button></div>`;
+      const content = createInfoPopupContent(meta, tag);
       marker.bindPopup(content);
       marker.on('popupopen', function(){
         try{
-          const btn = document.getElementById(popupId);
+          // Look for the edit button inside the popup content
+          const popupEl = marker.getPopup && marker.getPopup().getElement ? marker.getPopup().getElement() : document.querySelector('.leaflet-popup-content');
+          if(!popupEl) return;
+          const btn = popupEl.querySelector('.edit');
           if(!btn) return;
           btn.onclick = function(ev){
             ev && ev.preventDefault && ev.preventDefault();
-            // If the host app provides an edit integration, call it and return.
             if(window.openTripFormForEdit && typeof window.openTripFormForEdit === 'function'){
               try{ window.openTripFormForEdit(Object.assign({}, meta)); }catch(e){ console.warn('openTripFormForEdit failed', e); }
               try{ marker.closePopup(); }catch(e){}
               return;
             }
-            // Fallback: prompt the user for a new name/label and update the popup
+            // fallback inline edit
             try{
               const current = meta.name || meta.label || '';
               const nw = prompt('Edit name', current);
-              if(nw !== null){ meta.name = nw; try{ marker.setPopupContent(createInfoPopupContent(meta, tag) + `<div style="margin-top:6px;text-align:right;"><button id="${popupId}" style="padding:6px 8px">Edit</button></div>`); }catch(e){} }
+              if(nw !== null){ meta.name = nw; try{ marker.setPopupContent(createInfoPopupContent(meta, tag)); }catch(e){} }
             }catch(e){ console.warn('popup edit failed', e); }
           };
         }catch(e){}
@@ -584,8 +622,9 @@
       const meta = Object.assign({}, p, { index: idx+1 });
       let m;
         try {
-          // Render a number-only marker whose color comes from CSS variables (50% opacity)
-          const html = `<div class="wp-num">${String(idx+1)}</div>`;
+          // Determine type class (use category or meta.type if available)
+          const t = (p.category || p.type || 'enroute').toString().replace(/[^a-z0-9\-]/ig,'').toLowerCase();
+          const html = `<div class="wp-num type-${t}">${String(idx+1)}</div>`;
           const icon = L.divIcon({ html, className: '', iconSize:[20,20], iconAnchor:[10,10] });
           m = L.marker([p.lat,p.lng], { icon }).addTo(map);
         } catch (e) {
@@ -608,6 +647,7 @@
   }
 
   function renderSegmentDebug(){
+    if(!DEBUG_MODE) return; // only render debug UI when explicitly enabled
     try{
       let container = document.getElementById('segmentDebug');
       if(!container){
@@ -615,9 +655,11 @@
         container.style.position='fixed'; container.style.right='12px'; container.style.bottom='12px'; container.style.maxHeight='240px';
         container.style.overflow='auto'; container.style.background='rgba(255,255,255,0.95)'; container.style.border='1px solid #ddd'; container.style.padding='8px';
         container.style.fontSize='12px'; container.style.zIndex = 99999; container.style.width='320px'; container.style.boxShadow='0 6px 18px rgba(0,0,0,0.12)';
-        const title = document.createElement('div'); title.textContent='Segment cache debug (recent)'; title.style.fontWeight='700'; title.style.marginBottom='6px'; container.appendChild(title);
-        const clear = document.createElement('button'); clear.textContent='Clear'; clear.style.float='right'; clear.style.marginTop='-22px'; clear.onclick=()=>{ _segmentDebugRecords.length=0; renderSegmentDebug(); };
-        container.appendChild(clear);
+  const headerWrap = document.createElement('div'); headerWrap.style.display='flex'; headerWrap.style.justifyContent='space-between'; headerWrap.style.alignItems='center'; headerWrap.style.marginBottom='6px';
+  const title = document.createElement('div'); title.textContent='Segment cache debug (recent)'; title.style.fontWeight='700'; titleWrap = title; headerWrap.appendChild(title);
+  const clear = document.createElement('button'); clear.textContent='Clear'; clear.style.marginLeft='8px'; clear.onclick=()=>{ _segmentDebugRecords.length=0; renderSegmentDebug(); };
+  headerWrap.appendChild(clear);
+  container.appendChild(headerWrap);
         const list = document.createElement('div'); list.id='segmentDebugList'; container.appendChild(list);
         document.body.appendChild(container);
       }
@@ -665,11 +707,12 @@
     // helper to ensure visible waypoint markers
     function createWaypointMarkersIfNeeded(){
       if(waypointMarkers.length>0) return;
-      routePoints.forEach((p, idx)=>{
+        routePoints.forEach((p, idx)=>{
         const meta = Object.assign({}, p, { index: idx+1 });
         let m;
         try {
-          const html = `<div class="wp-num">${String(idx+1)}</div>`;
+          const t = (p.category || p.type || 'enroute').toString().replace(/[^a-z0-9\-]/ig,'').toLowerCase();
+          const html = `<div class="wp-num type-${t}">${String(idx+1)}</div>`;
           const icon = L.divIcon({ html, className: '', iconSize:[20,20], iconAnchor:[10,10] });
           m = L.marker([p.lat,p.lng], { icon }).addTo(map);
         } catch (e) {
@@ -818,18 +861,19 @@
       if(routePoints.length>0){
         try{ map.fitBounds(bounds.pad(0.2)); }catch(e){}
         // add visible waypoint markers for each point so user sees them even if routing fails
-        routePoints.forEach((p, idx)=>{
+          routePoints.forEach((p, idx)=>{
           const meta = Object.assign({}, p, { index: idx+1 });
           let m;
           try {
-            const html = `<div class="wp-num">${String(idx+1)}</div>`;
+            const t = (p.category || p.type || 'enroute').toString().replace(/[^a-z0-9\-]/ig,'').toLowerCase();
+            const html = `<div class="wp-num type-${t}">${String(idx+1)}</div>`;
             m = L.marker([p.lat,p.lng], { icon: L.divIcon({ html, className:'', iconSize:[28,28], iconAnchor:[14,14] }) }).addTo(map);
           } catch (e) {
             console.warn('Marker creation with divIcon failed, falling back to default marker', e);
             m = L.marker([p.lat,p.lng]).addTo(map);
           }
-          m.bindPopup(createInfoPopupContent(meta, null));
-          m.on('click', ()=> m.openPopup());
+          // use attachPopupWithEdit so edit button links to host
+          try{ attachPopupWithEdit(m, meta, null); }catch(e){ m.bindPopup(createInfoPopupContent(meta, null)); m.on('click', ()=> m.openPopup()); }
           waypointMarkers.push(m);
         });
         document.getElementById('poiStatus').textContent = 'Loaded '+routePoints.length+' points';

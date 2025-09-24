@@ -35,5 +35,22 @@ body{margin:0;background:#f6f7f9}
 
 /* Waypoint number styling (no solid background, colored text at 50% opacity) */
 .wp-num{
-	display:flex;align-items:center;justify-content:center;width:20px;height:20px;font-weight:700;font-size:12px;background:transparent;border-radius:50%;border:0;color:rgba(var(--type-enroute),0.5);
-}
+  display:flex;align-items:center;justify-content:center;width:28px;height:28px;font-weight:700;font-size:13px;border-radius:50%;background:#2b2b2b;color:rgba(var(--type-enroute),0.95);border:2px solid rgba(255,255,255,0.06);box-shadow:0 2px 6px rgba(0,0,0,0.25);line-height:1}
+
+/* Per-type number color helpers. JS will add a class like `type-enroute` to the wp-num element. */
+.wp-num.type-roofed{ color: rgba(var(--type-roofed),0.95); }
+.wp-num.type-camp{ color: rgba(var(--type-camp),0.95); }
+.wp-num.type-enroute{ color: rgba(var(--type-enroute),0.95); }
+.wp-num.type-note{ color: rgba(var(--type-note),0.95); }
+.wp-num.type-ferry{ color: rgba(var(--type-ferry),0.95); }
+.wp-num.type-car{ color: rgba(var(--type-car),0.95); }
+
+/* Popup card view to match TripForm card styling */
+.poi-card{ max-width:360px;font-family:Arial,Helvetica,sans-serif;padding:10px;background:#fff;border-radius:8px;border:1px solid #e6e6e6;box-shadow:0 6px 18px rgba(0,0,0,0.06);color:#111 }
+.poi-card .title{ font-weight:700;margin-bottom:6px;font-size:15px }
+.poi-card .sub{ font-size:12px;color:#4b5563;margin-bottom:8px }
+.poi-card .meta{ font-size:13px;color:#374151;margin-bottom:8px }
+.poi-card .notes{ font-size:13px;color:#6b7280;margin-bottom:8px }
+.poi-card .actions{ display:flex;justify-content:flex-end;gap:8px }
+.poi-card .actions button{ padding:6px 8px;border-radius:6px;border:0;background:#f3f4f6;color:#111;font-size:13px }
+.poi-card .actions .edit{ background:#4F46E5;color:#fff }
