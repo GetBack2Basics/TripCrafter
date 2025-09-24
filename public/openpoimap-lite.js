@@ -230,6 +230,47 @@
     return null;
   }
 
+  // --- Geocode caching (localStorage) ---------------------------------
+  const GEOCODE_CACHE_KEY = 'openpoimap_geocode_v1';
+  let __geocodeCache = null; // in-memory cache mirror
+
+  function loadGeocodeCache(){
+    if(__geocodeCache) return __geocodeCache;
+    try{
+      const raw = localStorage.getItem(GEOCODE_CACHE_KEY);
+      __geocodeCache = raw ? JSON.parse(raw) : {};
+    }catch(e){ __geocodeCache = {}; }
+    return __geocodeCache;
+  }
+
+  function saveGeocodeCache(){
+    try{ localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(__geocodeCache || {})); }catch(e){ /* ignore */ }
+  }
+
+  function normalizeLocationKey(loc){
+    if(!loc) return '__';
+    // similar normalization as sample loader: trim, lower, remove extra whitespace
+    return String(loc).replace(/\bto\b/i,'').replace(/[\u2013\u2014\u2012]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+  }
+
+  async function getCachedGeocode(location){
+    const cache = loadGeocodeCache();
+    const key = normalizeLocationKey(location);
+    if(cache && cache[key]){
+      try{ logStatus('Geocode cache hit: '+location); }catch(e){}
+      return cache[key];
+    }
+    try{ logStatus('Geocode cache miss: '+location); }catch(e){}
+    const g = await geocodeLocation(location);
+    if(g){
+      // store minimal payload
+      cache[key] = { lat: g.lat, lng: g.lng, display_name: g.display_name, updatedAt: (new Date()).toISOString() };
+      __geocodeCache = cache;
+      try{ saveGeocodeCache(); }catch(e){}
+    }
+    return g;
+  }
+
   function logStatus(msg){
     try{
       const el = document.getElementById('loaderStatus');
@@ -248,6 +289,140 @@
     }catch(e){ console.error('Routing error', e); }
     return null;
   }
+
+  // --- Optional Firebase integration (lightweight, dynamic) -----------------
+  // Behavior:
+  // - If the page exposes a global `__FIREBASE_CONFIG__` object (or if
+  //   window.firebase already exists), we attempt to load the Firebase
+  //   compat SDK dynamically and use Firestore to read/write trip items and
+  //   routeSegments under the same `artifacts/${projectId}/public/data/trips/...`
+  // - If Firebase is not configured, we silently fall back to localStorage.
+
+  let FIRESTORE = null;
+  let FIREBASE_PROJECT_ID = null;
+
+  function isFirebaseAvailable() {
+    return !!FIRESTORE;
+  }
+
+  function loadFirebaseSdkIfNeeded() {
+    // If FIRESTORE already set, resolve immediately
+    if (FIRESTORE) return Promise.resolve(FIRESTORE);
+    // Look for an injected config object
+    const cfg = window.__FIREBASE_CONFIG__ || window.__firebase_config || (window.__APP && window.__APP.firebaseConfig) || null;
+    if (!cfg) return Promise.resolve(null);
+    FIREBASE_PROJECT_ID = cfg.projectId || cfg.projectID || cfg.project || cfg['project_id'] || null;
+
+    // Load compat SDKs (app + firestore) so code can run in this static page
+    const scripts = [
+      'https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js',
+      'https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js'
+    ];
+
+    return new Promise((resolve) => {
+      let loaded = 0;
+      function onLoad() {
+        loaded++;
+        if (loaded === scripts.length) {
+          try {
+            if (!window.firebase || !window.firebase.initializeApp) return resolve(null);
+            try { window.firebase.initializeApp(cfg); } catch (e) { /* already initialized possibly */ }
+            try { FIRESTORE = window.firebase.firestore(); } catch (e) { FIRESTORE = null; }
+            return resolve(FIRESTORE);
+          } catch (e) {
+            console.warn('Firebase init failed', e); return resolve(null);
+          }
+        }
+      }
+      scripts.forEach(src => {
+        const s = document.createElement('script'); s.src = src; s.onload = onLoad; s.onerror = onLoad; document.head.appendChild(s);
+      });
+    });
+  }
+
+  // Firestore helpers (fall back to localStorage when unavailable)
+  function tripItemsDocPath(tripId) {
+    // document path: artifacts/{projectId}/public/data/trips/{tripId}/items
+    return `artifacts/${FIREBASE_PROJECT_ID || 'local'}/public/data/trips/${tripId}/items`;
+  }
+
+  async function fetchTripItemsFromFirestore(tripId) {
+    if (!tripId) return null;
+    if (!isFirebaseAvailable()) return null;
+    try {
+      const docRef = FIRESTORE.doc(tripItemsDocPath(tripId));
+      const snap = await docRef.get();
+      if (snap && snap.exists) {
+        const data = snap.data ? snap.data() : (snap.data || snap);
+        // Accept either array at data.items or top-level array
+        if (Array.isArray(data.items)) return data.items;
+        if (Array.isArray(data)) return data;
+        return null;
+      }
+    } catch (e) { console.warn('fetchTripItemsFromFirestore failed', e); }
+    return null;
+  }
+
+  async function saveTripItemsToFirestore(tripId, items) {
+    if (!tripId || !items) return false;
+    // save as a single doc with field `items` to make reads simpler
+    if (isFirebaseAvailable()) {
+      try {
+        const docRef = FIRESTORE.doc(tripItemsDocPath(tripId));
+        await docRef.set({ items: items, updatedAt: new Date().toISOString() }, { merge: true });
+        return true;
+      } catch (e) { console.warn('saveTripItemsToFirestore failed', e); }
+    }
+    // fallback localStorage
+    try { localStorage.setItem(`tripItems:${tripId}`, JSON.stringify(items)); return true; } catch (e) { return false; }
+  }
+
+  async function loadTripItemsCached(tripId) {
+    // Try Firestore first, then localStorage
+    try {
+      const r = await fetchTripItemsFromFirestore(tripId);
+      if (r && r.length) return r;
+    } catch (e) {}
+    try { const raw = localStorage.getItem(`tripItems:${tripId}`); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  }
+
+  // routeSegments helpers (match TripMap.js pattern)
+  function getSegmentDocRefPath(tripId, fromId, toId) {
+    const id = `${fromId || 'null'}__${toId || 'null'}`;
+    return `artifacts/${FIREBASE_PROJECT_ID || 'local'}/public/data/trips/${tripId}/routeSegments/${id}`;
+  }
+
+  async function loadSegmentCachedFirestore(tripId, fromId, toId) {
+    if (!tripId) return null;
+    if (!isFirebaseAvailable()) return null;
+    try {
+      const path = getSegmentDocRefPath(tripId, fromId, toId);
+      const docRef = FIRESTORE.doc(path);
+      const snap = await docRef.get();
+      if (snap && snap.exists) return snap.data ? snap.data() : (snap.data || snap);
+    } catch (e) { console.warn('loadSegmentCachedFirestore failed', e); }
+    return null;
+  }
+
+  async function saveSegmentCachedFirestore(tripId, fromId, toId, segment) {
+    if (!tripId || !segment) return false;
+    if (isFirebaseAvailable()) {
+      try {
+        const path = getSegmentDocRefPath(tripId, fromId, toId);
+        const docRef = FIRESTORE.doc(path);
+        await docRef.set({ ...segment, fromId, toId, updatedAt: new Date().toISOString() }, { merge: true });
+        return true;
+      } catch (e) { console.warn('saveSegmentCachedFirestore failed', e); }
+    }
+    // fallback to localStorage
+    try {
+      const k = `tripRouteSegment:${tripId}:${fromId || 'null'}:${toId || 'null'}`;
+      localStorage.setItem(k, JSON.stringify({ ...segment, fromId, toId, updatedAt: new Date().toISOString() }));
+      return true;
+    } catch (e) { console.warn('saveSegmentCached localStorage failed', e); }
+    return false;
+  }
+
 
   function renderRoute(routeGeojson, points){
     // clear previous
@@ -360,11 +535,33 @@
     mapAddMode = !mapAddMode; e.target.textContent = 'Map add: ' + (mapAddMode ? 'on' : 'off');
   });
 
+  // Clear geocode cache button (if present in the HTML)
+  try{
+    const clearBtn = document.getElementById('clearGeocodeCacheBtn');
+    if(clearBtn){
+      clearBtn.addEventListener('click', ()=>{
+        try{ __geocodeCache = {}; localStorage.removeItem(GEOCODE_CACHE_KEY); logStatus('Geocode cache cleared'); alert('Geocode cache cleared'); }catch(e){ console.warn('Failed to clear cache', e); }
+      });
+    }
+  }catch(e){}
+
   // --- Sample trip loader (fetches sample-trip.json) ---
   async function loadSampleTrip(){
     try{
-      const resp = await fetch('/sample-trip.json');
-      const sample = await resp.json();
+      // Ensure Firebase SDK loaded if present on the host page
+      await loadFirebaseSdkIfNeeded();
+
+      const SAMPLE_TRIP_ID = 'paris-sample';
+
+      // First try to load trip items from Firestore/local cache
+      let sample = await loadTripItemsCached(SAMPLE_TRIP_ID);
+      if (!sample || !Array.isArray(sample) || sample.length === 0) {
+        // fallback to baked-in sample file
+        const resp = await fetch('/sample-trip.json');
+        sample = await resp.json();
+        // persist a copy locally for next loads (localStorage or Firestore when available)
+        try { await saveTripItemsToFirestore(SAMPLE_TRIP_ID, sample); } catch (e) {}
+      }
       routePoints = [];
       // clear previous waypoint markers
       waypointMarkers.forEach(m=>map.removeLayer(m)); waypointMarkers = [];
@@ -380,12 +577,15 @@
         if(normalized.length===0 || normalized[normalized.length-1].location !== loc){ normalized.push({ location: loc, title: item.title }); }
       }
       const bounds = L.latLngBounds();
+      // normalized contains unique location strings from sample items; we need to map them back to trip items
       for(const n of normalized){
         try{
           logStatus('Geocoding: '+n.location);
-          const g = await geocodeLocation(n.location);
-          if(g){ logStatus(`✓ ${n.location} → ${g.lat.toFixed(5)},${g.lng.toFixed(5)}`); routePoints.push({ label: n.title || n.location, lat: g.lat, lng: g.lng, display_name: g.display_name }); bounds.extend([g.lat,g.lng]); refreshRouteList(); }
+          // Use cached geocode lookup to avoid repeated Nominatim calls across sessions
+          const g = await getCachedGeocode(n.location);
+          if(g){ logStatus(`✓ ${n.location} → ${g.lat.toFixed(5)},${g.lng.toFixed(5)}`); routePoints.push({ label: n.title || n.location, lat: g.lat, lng: g.lng, display_name: g.display_name || g.display_name }); bounds.extend([g.lat,g.lng]); refreshRouteList(); }
           else { logStatus('✗ geocode miss for '+n.location); console.warn('Geocode miss for', n.location); }
+          // still add a short pause to be friendly to the geocode service on first-run
           await new Promise(r=>setTimeout(r, 400));
         }catch(e){ console.error('Error geocoding', n.location, e); }
       }
@@ -408,7 +608,49 @@
         });
         document.getElementById('poiStatus').textContent = 'Loaded '+routePoints.length+' points';
       }
-  if(routePoints.length>1){ logStatus('Requesting route from OSRM for '+routePoints.length+' points...'); const r = await getRouteOSRM(routePoints); if(r){ logStatus('✓ route received — drawing'); renderRoute(r.geometry, routePoints); try{ map.fitBounds(L.polyline(r.geometry.coordinates.map(c=>[c[1],c[0]])).getBounds().pad(0.15)); }catch(e){} } else { logStatus('✗ routing failed'); document.getElementById('poiStatus').textContent += ' • routing failed'; } }
+        if(routePoints.length>1){
+          logStatus('Requesting route from OSRM for '+routePoints.length+' points...');
+          // Before calling OSRM, attempt to load any cached segments between consecutive points
+          const tripId = SAMPLE_TRIP_ID;
+          const segments = [];
+          for(let i=0;i<routePoints.length-1;i++){
+            const fromId = String(i);
+            const toId = String(i+1);
+            let seg = null;
+            try { seg = await loadSegmentCachedFirestore(tripId, fromId, toId); } catch(e){}
+            if(seg && seg.geometry) {
+              segments.push(seg);
+            } else {
+              // fetch pair-wise segment from OSRM and store it
+              try {
+                const pair = [ { lat: routePoints[i].lat, lng: routePoints[i].lng }, { lat: routePoints[i+1].lat, lng: routePoints[i+1].lng } ];
+                const routeResp = await getRouteOSRM(pair);
+                if(routeResp && routeResp.geometry) {
+                  const saved = { geometry: routeResp.geometry, legs: routeResp.legs || null, duration: routeResp.duration || null, distance: routeResp.distance || null };
+                  try { await saveSegmentCachedFirestore(tripId, fromId, toId, saved); } catch (e) {}
+                  segments.push(saved);
+                }
+              } catch (e) { console.warn('pairwise OSRM failed', e); }
+            }
+          }
+
+          // Concatenate segments if available, else fall back to full OSRM route request
+          let assembled = null;
+          if(segments.length === routePoints.length-1){
+            // assemble full coords
+            const fullCoords = [];
+            for(const s of segments){
+              if(!s || !s.geometry || !Array.isArray(s.geometry.coordinates)) continue;
+              const coordsArr = s.geometry.coordinates.map(c=>[c[1], c[0]]);
+              if(fullCoords.length>0) coordsArr.shift();
+              fullCoords.push(...coordsArr);
+            }
+            if(fullCoords.length>0){ assembled = { geometry: { coordinates: fullCoords.map(c=>[c[1], c[0]]) }, fullCoords }; }
+          }
+
+          if(assembled){ logStatus('✓ assembled route from cached segments — drawing'); renderRoute({ coordinates: assembled.fullCoords.map(c=>[c[0], c[1]]) }, routePoints); try{ map.fitBounds(L.polyline(assembled.fullCoords).getBounds().pad(0.15)); }catch(e){} }
+          else { const r = await getRouteOSRM(routePoints); if(r){ logStatus('✓ route received — drawing'); renderRoute(r.geometry, routePoints); try{ map.fitBounds(L.polyline(r.geometry.coordinates.map(c=>[c[1],c[0]])).getBounds().pad(0.15)); }catch(e){} } else { logStatus('✗ routing failed'); document.getElementById('poiStatus').textContent += ' • routing failed'; } }
+        }
     }catch(e){ console.error('Failed to load sample trip', e); alert('Failed to load sample trip'); }
   }
 
