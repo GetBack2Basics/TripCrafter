@@ -491,20 +491,30 @@
 
   // initial
   setBase('osm');
-  // Auto-load Paris sample trip when ?owner=<ownerId> or ?trip=paris is present in the URL
+  // Auto-load Paris sample trip when ?owner=<ownerId> or ?trip=paris is present in the URL.
+  // Additionally, for the deployed demo page we want to show the itinerary by default
+  // so users opening the standalone demo URL see the Paris trip without query params.
   (function(){
     try{
       const params = new URLSearchParams(window.location.search);
       const owner = params.get('owner');
       const trip = params.get('trip');
       const AUTO_OWNER = 'Yc1vLpmyYXg8PLGJKLaYUDdbwHI3';
+      // If explicit param matches, load sample
       if(owner === AUTO_OWNER || trip === 'paris'){
-        // load the sample-trip.json (Paris) and compute routing/waypoints automatically
+        loadSampleTrip();
+        return;
+      }
+      // If this is the demo page on the deployed site (or the file path), prefer the sample trip
+      const host = (window && window.location && window.location.hostname) ? window.location.hostname : '';
+      const path = (window && window.location && window.location.pathname) ? window.location.pathname : '';
+      const isDeployedDemo = host.indexOf('tripcrafter.netlify.app') !== -1 || path.indexOf('openpoimap-lite') !== -1;
+      if(isDeployedDemo){
         loadSampleTrip();
         return;
       }
     }catch(e){ /* ignore and fall back */ }
-    // default: demo POIs
+    // default for other contexts: demo POIs
     fetchDemoPois();
   })();
 
