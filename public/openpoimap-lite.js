@@ -275,25 +275,33 @@
     // unique
     return Array.from(new Set(groups));
   }
-  function createInfoPopupContent(obj, tag){
+  // isWaypoint: when true render the card-style with Edit icon used for trip waypoints
+  function createInfoPopupContent(obj, tag, isWaypoint){
     const textHint = obj.name || obj.label || obj.title || obj.display_name || '';
     const groups = getGroupsForTag(tag, textHint);
     const title = escapeHtml(obj.name || obj.label || obj.title || obj.display_name || 'POI');
+    // Non-waypoint / generic POI popup: simple compact markup
+    if(!isWaypoint){
+      let html = `<div style="max-width:280px;font-family:Arial,Helvetica,sans-serif;">`;
+      html += `<div style="font-weight:700;margin-bottom:6px;color:#111">${title}</div>`;
+      if(tag){ html += `<div style="font-size:12px;color:#444;margin-bottom:6px;"><strong>Category:</strong> ${escapeHtml(tag)}</div>`; }
+      if(groups && groups.length){ html += `<div style="font-size:12px;color:#444;margin-bottom:6px;"><strong>Groups:</strong> ${escapeHtml(groups.join(', '))}</div>`; }
+      if(obj.display_name){ html += `<div style="font-size:12px;color:#555;margin-bottom:6px;">${escapeHtml(obj.display_name)}</div>`; }
+      if(typeof obj.lat === 'number' && typeof obj.lng === 'number'){ html += `<div style="font-size:12px;color:#666;margin-bottom:6px;"><strong>Coords:</strong> ${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}</div>`; }
+      html += `</div>`;
+      return html;
+    }
+
+    // Waypoint: use the card-style layout and an edit PEN icon button to open TripForm
     let html = `<div class="poi-card">`;
     html += `<div class="title">${title}</div>`;
     if(tag){ html += `<div class="sub"><strong>Category:</strong> ${escapeHtml(tag)}</div>`; }
     if(groups && groups.length){ html += `<div class="sub"><strong>Groups:</strong> ${escapeHtml(groups.join(', '))}</div>`; }
     if(obj.display_name){ html += `<div class="meta">${escapeHtml(obj.display_name)}</div>`; }
     if(typeof obj.lat === 'number' && typeof obj.lng === 'number'){ html += `<div class="meta"><strong>Coords:</strong> ${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}</div>`; }
-    // Lightweight details list (no raw JSON)
-    const metaRows = [];
-    if(obj.activityLink) metaRows.push(`<div><strong>Link:</strong> ${escapeHtml(obj.activityLink)}</div>`);
-    if(obj.nights) metaRows.push(`<div><strong>Nights:</strong> ${escapeHtml(String(obj.nights))}</div>`);
-    if(metaRows.length) html += `<div class="meta">${metaRows.join('')}</div>`;
-    // notes
     if(obj.notes) html += `<div class="notes">${escapeHtml(obj.notes)}</div>`;
-    // actions
-    html += `<div class="actions"><button class="edit">Edit</button></div>`;
+    // actions: show a pen icon button that matches the app's small action
+    html += `<div class="actions"><button class="edit" title="Edit"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></div>`;
     html += `</div>`;
     return html;
   }
@@ -304,7 +312,8 @@
   // simple prompt-based edit flow.
   function attachPopupWithEdit(marker, meta, tag){
     try{
-      const content = createInfoPopupContent(meta, tag);
+      const isWaypoint = !!(meta && (typeof meta.index === 'number' || meta.isWaypoint || tag === null));
+      const content = createInfoPopupContent(meta, tag, isWaypoint);
       marker.bindPopup(content);
       marker.on('popupopen', function(){
         try{
@@ -350,7 +359,7 @@
     // would be undefined and Marker tries to call createIcon on it).
   const mk = category ? L.marker([lat,lng], { icon: makeCategoryIcon(category) }) : L.marker([lat,lng]);
     const meta = { name: name, category: category, lat: lat, lng: lng };
-    try{ attachPopupWithEdit(mk, meta, category); }catch(e){ try{ mk.bindPopup(createInfoPopupContent(meta, category)); mk.on('click',()=>mk.openPopup()); }catch(e){} }
+  try{ attachPopupWithEdit(mk, meta, category); }catch(e){ try{ mk.bindPopup(createInfoPopupContent(meta, category, false)); mk.on('click',()=>mk.openPopup()); }catch(e){} }
     if(category){
       const cluster = getOrCreateCluster(category);
       cluster.addLayer(mk);
@@ -643,7 +652,7 @@
           console.warn('Marker creation failed, falling back to default marker', e);
           m = L.marker([p.lat,p.lng]).addTo(map);
         }
-      try{ attachPopupWithEdit(m, meta, null); }catch(e){ try{ m.bindPopup(createInfoPopupContent(meta, null)); m.on('click', ()=> m.openPopup()); }catch(e){} }
+  try{ attachPopupWithEdit(m, meta, null); }catch(e){ try{ m.bindPopup(createInfoPopupContent(meta, null, true)); m.on('click', ()=> m.openPopup()); }catch(e){} }
       routeMarkers.push(m);
     });
     // fit map
@@ -731,7 +740,7 @@
           console.warn('Marker creation failed, falling back to default marker', e);
           m = L.marker([p.lat,p.lng]).addTo(map);
         }
-        try{ attachPopupWithEdit(m, meta, null); }catch(e){ try{ m.bindPopup(createInfoPopupContent(meta, null)); m.on('click', ()=> m.openPopup()); }catch(e){} }
+  try{ attachPopupWithEdit(m, meta, null); }catch(e){ try{ m.bindPopup(createInfoPopupContent(meta, null, true)); m.on('click', ()=> m.openPopup()); }catch(e){} }
         waypointMarkers.push(m);
       });
     }
@@ -885,7 +894,7 @@
             m = L.marker([p.lat,p.lng]).addTo(map);
           }
           // use attachPopupWithEdit so edit button links to host
-          try{ attachPopupWithEdit(m, meta, null); }catch(e){ m.bindPopup(createInfoPopupContent(meta, null)); m.on('click', ()=> m.openPopup()); }
+          try{ attachPopupWithEdit(m, meta, null); }catch(e){ m.bindPopup(createInfoPopupContent(meta, null, true)); m.on('click', ()=> m.openPopup()); }
           waypointMarkers.push(m);
         });
         document.getElementById('poiStatus').textContent = 'Loaded '+routePoints.length+' points';
