@@ -46,7 +46,32 @@ async function fetchDiscoverImages(location) {
 
 export default function TripDiscover({ tripItems = [], handleEditClick, handleDeleteItem }) {
   const sorted = Array.isArray(tripItems) ? tripItems.slice().sort((a, b) => (a?.date || '').localeCompare(b?.date || '')) : [];
-  const [imageCache] = React.useState(() => ({}));
+  const [imageCache, setImageCache] = React.useState(() => ({}));
+
+  // Debug: log props to the console so we can diagnose why nothing renders
+  React.useEffect(() => {
+    try {
+      console.debug('TripDiscover mounted/updated:', { count: Array.isArray(tripItems) ? tripItems.length : 0, sample: (tripItems || [])[0] });
+    } catch (e) {}
+  }, [tripItems]);
+
+  // Fetch server-side images in background and populate imageCache when available
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!Array.isArray(tripItems) || tripItems.length === 0) return;
+      for (const item of tripItems) {
+        try {
+          const imgs = await fetchDiscoverImages(item.location);
+          if (!mounted) return;
+          setImageCache(prev => ({ ...prev, [item.id]: imgs }));
+        } catch (e) {
+          // ignore per-location errors
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, [tripItems]);
   if (!sorted.length) {
     return <p className="text-center text-gray-400 text-lg py-8">No discover items available.</p>;
   }
