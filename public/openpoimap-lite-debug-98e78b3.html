@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OpenPoiMap Lite - Debug (98e78b3)</title>
+  <link rel="stylesheet" href="/openpoimap-lite.css">
+  <style>body,html{height:100%;margin:0}#map{height:100%}</style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="loaderStatus" style="position:fixed;right:8px;top:8px;z-index:600;background:#fff;padding:8px;border-radius:6px;max-width:320px;max-height:60vh;overflow:auto;font-size:12px;border:1px solid #ccc"></div>
+  <script src="/openpoimap-lite-debug-98e78b3.js"></script>
+  <!-- Also include a direct, cache-busted copy of the canonical script to verify content served by Netlify -->
+  <script>
+    (function(){
+      var ts = new Date().getTime();
+      var s = document.createElement('script');
+      s.src = '/openpoimap-lite.js?_cb=' + ts;
+      s.onload = function(){ console.info('Cache-busted openpoimap-lite loaded'); };
+      s.onerror = function(){ console.warn('Cache-busted openpoimap-lite failed to load'); };
+      document.body.appendChild(s);
+    })();
+  </script>
+</body>
+</html>
