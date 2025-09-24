@@ -386,6 +386,45 @@
     try { const raw = localStorage.getItem(`tripItems:${tripId}`); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   }
 
+  // Ensure a trip is persisted to Firestore on first-run when available
+  // This is generic for any tripId and will write the provided `items`
+  // to Firestore if no server copy exists yet (and mark a local flag
+  // so the browser doesn't repeatedly attempt the write).
+  async function ensureTripPersistedToFirestore(tripId, items) {
+    if (!tripId || !items || !items.length) return;
+    // Use a local flag to avoid repeated writes from the same browser
+    try {
+      const localFlag = localStorage.getItem(`tripSavedToFirestore:${tripId}`);
+      if (localFlag) return; // already wrote from this browser
+    } catch (e) {}
+
+    try {
+      await loadFirebaseSdkIfNeeded();
+    } catch (e) {}
+
+    if (!isFirebaseAvailable()) {
+      // nothing to do if Firestore not configured
+      return;
+    }
+
+    try {
+      // If a server-side copy already exists, skip writing
+      const existing = await fetchTripItemsFromFirestore(tripId);
+      if (existing && Array.isArray(existing) && existing.length > 0) {
+        try { localStorage.setItem(`tripSavedToFirestore:${tripId}`, new Date().toISOString()); } catch (e) {}
+        return;
+      }
+    } catch (e) { /* continue to attempt save */ }
+
+    try {
+      await saveTripItemsToFirestore(tripId, items);
+      try { localStorage.setItem(`tripSavedToFirestore:${tripId}`, new Date().toISOString()); } catch (e) {}
+      try { logStatus('Sample trip persisted to Firestore (first-run)'); } catch (e) {}
+    } catch (e) {
+      console.warn('Failed to persist sample trip to Firestore', e);
+    }
+  }
+
   // routeSegments helpers (match TripMap.js pattern)
   function getSegmentDocRefPath(tripId, fromId, toId) {
     const id = `${fromId || 'null'}__${toId || 'null'}`;
@@ -562,6 +601,8 @@
         // persist a copy locally for next loads (localStorage or Firestore when available)
         try { await saveTripItemsToFirestore(SAMPLE_TRIP_ID, sample); } catch (e) {}
       }
+  // Ensure a server-side copy exists on first-run when Firestore is configured
+  try { ensureTripPersistedToFirestore(SAMPLE_TRIP_ID, sample); } catch (e) { /* ignore */ }
       routePoints = [];
       // clear previous waypoint markers
       waypointMarkers.forEach(m=>map.removeLayer(m)); waypointMarkers = [];
@@ -637,18 +678,29 @@
           // Concatenate segments if available, else fall back to full OSRM route request
           let assembled = null;
           if(segments.length === routePoints.length-1){
-            // assemble full coords
-            const fullCoords = [];
+            // assemble full coords in [lng,lat] order (OSRM standard)
+            const fullCoordsLngLat = [];
             for(const s of segments){
               if(!s || !s.geometry || !Array.isArray(s.geometry.coordinates)) continue;
-              const coordsArr = s.geometry.coordinates.map(c=>[c[1], c[0]]);
-              if(fullCoords.length>0) coordsArr.shift();
-              fullCoords.push(...coordsArr);
+              // s.geometry.coordinates are expected as [lng,lat]
+              const coordsArr = s.geometry.coordinates.slice();
+              // avoid duplicating the junction point between segments
+              if(fullCoordsLngLat.length>0) coordsArr.shift();
+              fullCoordsLngLat.push(...coordsArr);
             }
-            if(fullCoords.length>0){ assembled = { geometry: { coordinates: fullCoords.map(c=>[c[1], c[0]]) }, fullCoords }; }
+            if(fullCoordsLngLat.length>0){
+              // prepare a latlngs array for Leaflet (array of [lat,lng])
+              const latlngs = fullCoordsLngLat.map(c=>[c[1], c[0]]);
+              assembled = { geometry: { coordinates: fullCoordsLngLat }, latlngs, fullCoordsLngLat };
+            }
           }
 
-          if(assembled){ logStatus('✓ assembled route from cached segments — drawing'); renderRoute({ coordinates: assembled.fullCoords.map(c=>[c[0], c[1]]) }, routePoints); try{ map.fitBounds(L.polyline(assembled.fullCoords).getBounds().pad(0.15)); }catch(e){} }
+          if(assembled){
+            logStatus('✓ assembled route from cached segments — drawing');
+            // renderRoute expects geometry.coordinates as [lng,lat]
+            renderRoute(assembled.geometry, routePoints);
+            try{ map.fitBounds(L.polyline(assembled.latlngs).getBounds().pad(0.15)); }catch(e){}
+          }
           else { const r = await getRouteOSRM(routePoints); if(r){ logStatus('✓ route received — drawing'); renderRoute(r.geometry, routePoints); try{ map.fitBounds(L.polyline(r.geometry.coordinates.map(c=>[c[1],c[0]])).getBounds().pad(0.15)); }catch(e){} } else { logStatus('✗ routing failed'); document.getElementById('poiStatus').textContent += ' • routing failed'; } }
         }
     }catch(e){ console.error('Failed to load sample trip', e); alert('Failed to load sample trip'); }
