@@ -187,6 +187,34 @@
     });
   }
 
+  // Collapsible panels (persist state in localStorage)
+  const PANEL_COLLAPSE_KEY_PREFIX = 'openpoimap_panel_collapsed:';
+  function isPanelCollapsed(id){ try{ return localStorage.getItem(PANEL_COLLAPSE_KEY_PREFIX+id) === '1'; }catch(e){ return false; } }
+  function setPanelCollapsed(id, collapsed){ try{ if(collapsed) localStorage.setItem(PANEL_COLLAPSE_KEY_PREFIX+id,'1'); else localStorage.removeItem(PANEL_COLLAPSE_KEY_PREFIX+id); }catch(e){} }
+  function wireCollapseButtons(){
+    try{
+      Array.from(document.querySelectorAll('.collapseBtn')).forEach(btn=>{
+        const target = btn.getAttribute('data-target');
+        const panel = document.getElementById(target);
+        if(!panel) return;
+        // initialize state
+        const collapsed = isPanelCollapsed(target);
+        panel.style.display = collapsed ? 'none' : '';
+        btn.textContent = collapsed ? '+' : '−';
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.addEventListener('click', ()=>{
+          const nowCollapsed = panel.style.display !== '' && panel.style.display !== 'block';
+          const newCollapsed = !nowCollapsed;
+          panel.style.display = newCollapsed ? 'none' : '';
+          btn.textContent = newCollapsed ? '+' : '−';
+          btn.setAttribute('aria-expanded', String(!newCollapsed));
+          setPanelCollapsed(target, newCollapsed);
+        });
+      });
+    }catch(e){ /* ignore */ }
+  }
+
+
   // Helpers for info popups: escape HTML and produce JSON + OpenPoiMap group info
   function escapeHtml(str){ return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   // Return OpenPoiMap groups for a tag; if tag is falsy, attempt to infer groups from a text snippet
@@ -854,6 +882,7 @@
   document.getElementById('fetchPois').addEventListener('click',fetchDemoPois);
   // Build overlay checkboxes dynamically from groupMap
   try{ buildOverlayCheckboxes(); }catch(e){/* ignore */}
+  try{ wireCollapseButtons(); }catch(e){/* ignore */}
 
   document.getElementById('clearAll').addEventListener('click',()=>{
     // clear all POIs and reset overlay checkbox state so users can re-enable overlays

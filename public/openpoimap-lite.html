@@ -54,25 +54,38 @@
           </div>
 
           <hr />
-          <div class="panelTitle">Actions</div>
-          <button id="fetchPois">Fetch POIs (demo)</button>
-          <button id="resetView">Reset view</button>
+          <div class="panelTitle" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Actions</span>
+            <button class="collapseBtn" data-target="actionsPanel" aria-expanded="true" style="font-size:14px;padding:2px 6px">−</button>
+          </div>
+          <div id="actionsPanel">
+            <button id="fetchPois">Fetch POIs (demo)</button>
+            <button id="resetView">Reset view</button>
+          </div>
           <hr />
-          <div class="panelTitle">Route Planner</div>
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-            <input id="locInput" type="text" placeholder="Address or place" style="flex:1;padding:6px;font-size:13px;" />
-            <button id="addLocation">Add</button>
+          <div class="panelTitle" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Route Planner</span>
+            <button class="collapseBtn" data-target="routePanel" aria-expanded="true" style="font-size:14px;padding:2px 6px">−</button>
           </div>
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <button id="computeRoute">Compute Route</button>
-            <button id="clearRoute">Clear Route</button>
-            <button id="mapAddToggle">Map add: off</button>
-            <button id="loadSample">Load Sample Trip</button>
-          </div>
-          <div id="routeList" style="max-height:160px;overflow:auto;font-size:13px;border:1px solid #eee;padding:6px;background:#fff"></div>
-          <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
-            <div id="routeProgress" style="display:none;align-items:center"><div class="oc-spinner" style="margin-right:8px"></div><div id="routeProgressText">Preparing...</div></div>
-            <div id="loaderStatus" style="flex:1;max-height:140px;overflow:auto;font-size:12px;background:#111;color:#eee;padding:6px;border-radius:4px;">Status logs will appear here.</div>
+          <div id="routePanel">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+              <input id="locInput" type="text" placeholder="Address or place" style="flex:1;padding:6px;font-size:13px;" />
+              <button id="addLocation">Add</button>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:6px;">
+              <button id="computeRoute">Compute Route</button>
+              <button id="clearRoute">Clear Route</button>
+              <button id="mapAddToggle">Map add: off</button>
+              <button id="loadSample">Load Sample Trip</button>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button id="clearGeocodeCacheBtn" style="background:#f3f4f6;padding:6px;border-radius:6px">Clear geocode cache</button>
+            </div>
+            <div id="routeList" style="max-height:160px;overflow:auto;font-size:13px;border:1px solid #eee;padding:6px;background:#fff"></div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+              <div id="routeProgress" style="display:none;align-items:center"><div class="oc-spinner" style="margin-right:8px"></div><div id="routeProgressText">Preparing...</div></div>
+              <div id="loaderStatus" style="flex:1;max-height:140px;overflow:auto;font-size:12px;background:#111;color:#eee;padding:6px;border-radius:4px;">Status logs will appear here.</div>
+            </div>
           </div>
         </div>
       </div>
