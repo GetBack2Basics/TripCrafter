@@ -1085,6 +1085,72 @@
     }catch(e){ /* ignore and fall back */ }
     // default for other contexts: demo POIs
       fetchDemoPois();
+    
+    // Listen for host messages (postMessage) to allow embedding apps to sync trip data.
+    window.addEventListener('message', async (ev) => {
+      try {
+        const msg = ev && ev.data ? ev.data : null;
+        if (!msg || typeof msg !== 'object') return;
+        if (msg.type === 'syncTrip') {
+          const { tripId, items } = msg.payload || {};
+          // Clear existing route and clusters
+          try { routePoints = []; if(routeLayer){ map.removeLayer(routeLayer); routeLayer = null; } } catch (e) {}
+          allClusters.clearLayers(); clusterGroups.clear();
+          // Add waypoints: if lat/lng present use them, otherwise try to geocode
+          const toAdd = [];
+          for (const it of (items || [])) {
+            if (it && typeof it.lat === 'number' && typeof it.lng === 'number') {
+              toAdd.push({ lat: it.lat, lng: it.lng, title: it.title || it.location || '', id: it.id, type: it.type });
+            } else if (it && it.location) {
+              const g = await geocodeLocation(it.location);
+              if (g) toAdd.push({ lat: g.lat, lng: g.lng, title: it.title || it.location || '', id: it.id, type: it.type });
+            }
+          }
+          // Draw markers and route
+          try{
+            if (toAdd.length > 0) {
+              // Add markers and gather route points
+              routePoints = toAdd.map(t => ({ label: t.title, lat: t.lat, lng: t.lng }));
+              // clear any existing routeLayer
+              try { if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; } } catch(e){}
+              const latlngs = routePoints.map(p => [p.lat, p.lng]);
+              routeLayer = L.polyline(latlngs, { color: '#4F46E5', weight: 4, opacity: 0.8 }).addTo(map);
+              // add waypoint markers
+              waypointMarkers.forEach(m => { try { map.removeLayer(m); } catch(e){} }); waypointMarkers = [];
+              for (const p of toAdd) {
+                const mk = L.marker([p.lat, p.lng]);
+                mk.bindPopup(`<div style="font-weight:700">${escapeHtml(p.title || 'Waypoint')}</div>`);
+                mk.addTo(map); waypointMarkers.push(mk);
+              }
+              if (toAdd.length > 0) map.fitBounds(L.latLngBounds(latlngs), { maxZoom: 12, padding: [40,40] });
+            }
+          }catch(e){ console.warn('syncTrip render failed', e); }
+          // respond back acknowledging sync
+          try { ev.source && ev.source.postMessage && ev.source.postMessage({ type: 'syncAck', payload: { tripId, count: (items || []).length } }, ev.origin || '*'); } catch (e) {}
+        } else if (msg.type === 'flyTo') {
+          const { lat, lng, zoom } = msg.payload || {};
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            try { map.flyTo([lat, lng], zoom || 12, { animate: true }); } catch (e) { map.setView([lat, lng], zoom || 12); }
+          }
+        } else if (msg.type === 'flyToLocation') {
+          // Accept a string location from host, geocode it (with cache), then fly
+          const { location, zoom } = msg.payload || {};
+          if (location && typeof location === 'string') {
+            try {
+              const g = await getCachedGeocode(location);
+              if (g && typeof g.lat === 'number' && typeof g.lng === 'number') {
+                try { map.flyTo([g.lat, g.lng], zoom || 12, { animate: true }); } catch (e) { map.setView([g.lat, g.lng], zoom || 12); }
+                try { ev.source && ev.source.postMessage && ev.source.postMessage({ type: 'flyAck', payload: { ok: true, lat: g.lat, lng: g.lng, display_name: g.display_name } }, ev.origin || '*'); } catch (e) {}
+              } else {
+                try { ev.source && ev.source.postMessage && ev.source.postMessage({ type: 'flyAck', payload: { ok: false, error: 'not_found' } }, ev.origin || '*'); } catch (e) {}
+              }
+            } catch (e) {
+              try { ev.source && ev.source.postMessage && ev.source.postMessage({ type: 'flyAck', payload: { ok: false, error: String(e) } }, ev.origin || '*'); } catch (e) {}
+            }
+          }
+        }
+      } catch (e) { console.warn('host message handler failed', e); }
+    }, false);
     })();
 
   })();
