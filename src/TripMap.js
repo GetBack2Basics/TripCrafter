@@ -171,6 +171,9 @@ function DebugOverlay({ markers = [], attemptFly }) {
   );
 }
 
+// Mount the legacy lite map into the placeholder using the dynamic loader
+import OpenPoiMapLoader from './OpenPoiMapLoader';
+
 // Main TripMap component with Leaflet
 // MapController attaches a reliable map fly helper using react-leaflet's useMap
 function MapController({ markers, flyRequestsRef, flyRequestsVersion }) {
@@ -285,6 +288,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
   const geocodeCacheRef = React.useRef({});
   const coordsByIndexRef = React.useRef({});
   const coordsByIdRef = React.useRef({});
+  const lastAssembledTripRef = React.useRef(null);
   const ZOOM_INCLUDE_ENROUTE = 10; // zoom threshold to include 'enroute' points on the map
 
   // ---- Route segment cache helpers ----
@@ -638,7 +642,12 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
 
       // Route only if we have at least two visible coordinates
       if (coordinates.length > 1) {
-        console.log('Assembling route using cached segments where available for trip:', (typeof currentTripId !== 'undefined' ? currentTripId : 'local'));
+        // Avoid spamming the console when currentTripId is repeatedly null/undefined
+        const tid = (typeof currentTripId !== 'undefined' && currentTripId !== null) ? currentTripId : 'local';
+        if (lastAssembledTripRef.current !== tid) {
+          console.log('Assembling route using cached segments where available for trip:', tid);
+          lastAssembledTripRef.current = tid;
+        }
         // Build consecutive pairs using visibleIndices and attempt to load cached segments for each
         const segments = []; // will hold { fromIdx, toIdx, segment } where indices are sortedTripItems indices
         for (let k = 0; k < visibleIndices.length - 1; k++) {
@@ -1086,57 +1095,13 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
           </div>
 
           {/* Map area removed per request — placeholder kept for layout */}
-          <div id="map-placeholder" style={{ height: '500px', width: '100%', background: '#f3f4f6', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
+          <div id="openpoimap-container" style={{ height: '500px', width: '100%', background: '#f3f4f6', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
             Map removed — legacy OpenPoiMap Lite or internal MapContainer will mount here.
           </div>
+          {/* Mount dynamic legacy lite map loader which will inject the desired script into the container above */}
+          <OpenPoiMapLoader />
 
-          {/* Right-side overlay controls */}
-          {/* POI status badge */}
-          <div style={{ position: 'absolute', top: 12, right: 250, zIndex: 1400, pointerEvents: 'auto' }}>
-            <div className="bg-white rounded-md shadow p-2 text-xs" style={{ minWidth: 220 }}>
-              <div style={{ fontWeight: 700, fontSize: 12 }}>POI Status</div>
-              <div style={{ marginTop: 6 }}>
-                <div>Count: <strong>{poiStatus?.count ?? 0}</strong></div>
-                <div>Last: <strong>{poiStatus?.lastFetchedAt ? new Date(poiStatus.lastFetchedAt).toLocaleTimeString() : 'never'}</strong></div>
-                <div>Last Response Count: <strong>{poiStatus?.lastResponseCount ?? '-'}</strong></div>
-                {poiStatus?.error && <div style={{ color: 'red' }}>Error: {poiStatus.error}</div>}
-                {poiStatus?.lastQuery ? (
-                  <details style={{ marginTop: 6, maxWidth: 420 }}>
-                    <summary style={{ cursor: 'pointer' }}>Last Overpass Query (click)</summary>
-                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 11, marginTop: 6 }}>{poiStatus.lastQuery}</pre>
-                  </details>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          {/* Small POI quick-actions panel for debugging */}
-          <div style={{ position: 'absolute', top: 120, right: 250, zIndex: 1400, pointerEvents: 'auto' }}>
-            <div className="bg-white rounded-md shadow p-2 text-xs" style={{ minWidth: 200 }}>
-              <div style={{ fontWeight: 700, fontSize: 12 }}>POI Actions</div>
-              <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-                <button className="px-2 py-1 bg-indigo-600 text-white rounded text-xs" onClick={() => { try { fetchPoisForBounds(true); } catch (e) { console.warn(e); } }}>Fetch POIs now</button>
-                <button className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs" onClick={() => { try {
-                    setSelectedOverlays(prev => ({ ...prev, tourism: !prev.tourism }));
-                    // when toggled on, enable all tourism subtypes; when toggled off, clear them
-                    const newVal = !selectedOverlays.tourism;
-                    setTourismSubtypes({ museum: newVal, viewpoint: newVal, artwork: newVal, gallery: newVal, attraction: newVal, zoo: newVal, theme_park: newVal });
-                  } catch (e) { console.warn(e); } }}>{selectedOverlays.tourism ? 'Hide' : 'Show'}</button>
-              </div>
-              {(poiMarkers || []).length > 0 && (
-                <div style={{ marginTop: 8, maxHeight: 220, overflow: 'auto' }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Nearby POIs</div>
-                  {(poiMarkers || []).slice(0, 10).map((p, i) => (
-                    <div key={p.id || i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                      <div style={{ flex: 1, fontSize: 12 }}>{p.name || p.type}</div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="px-2 py-1 bg-white border rounded text-xs" onClick={() => { try { if (mapRef.current) mapRef.current.setView([p.lat, p.lon], 14); } catch (e) { console.warn(e); } }}>Fly</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Right-side overlay controls removed here — legacy loader renders those UI elements */}
           <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1400, pointerEvents: 'auto' }}>
             <div className="bg-white rounded-md shadow p-3" style={{ width: 220 }}>
               <div className="font-semibold text-sm mb-2">Base Layer</div>
