@@ -86,6 +86,36 @@ async function geocodeLocation(location) {
     }
   }
   console.debug('Geocoding: no results for any candidate for', location);
+
+  // Offline fallback map for common sample locations (helps when Nominatim is not reachable
+  // from the development environment). This is intentionally small and only used as a
+  // development convenience.
+  const FALLBACK_GEO = {
+    'le marais': { lat: 48.8575, lng: 2.3580 },
+    'île de la cité': { lat: 48.8530, lng: 2.3499 },
+    'ile de la cite': { lat: 48.8530, lng: 2.3499 },
+    'montmartre': { lat: 48.8867, lng: 2.3431 },
+    'champs-Élysées': { lat: 48.8698, lng: 2.3076 },
+    'champs-elysees': { lat: 48.8698, lng: 2.3076 },
+    'versailles': { lat: 48.8049, lng: 2.1204 },
+    'disneyland paris': { lat: 48.8722, lng: 2.7758 },
+    'orly': { lat: 48.7233, lng: 2.3795 },
+    'cdg': { lat: 49.0097, lng: 2.5479 },
+    'le marais, paris': { lat: 48.8575, lng: 2.3580 },
+    'montmartre, paris': { lat: 48.8867, lng: 2.3431 },
+    'île de la cité, paris': { lat: 48.8530, lng: 2.3499 }
+  };
+
+  try {
+    const key = clean(location).toLowerCase();
+    for (const k of Object.keys(FALLBACK_GEO)) {
+      if (key.indexOf(k) !== -1) {
+        console.debug('Geocode fallback hit for', location, '->', FALLBACK_GEO[k]);
+        return FALLBACK_GEO[k];
+      }
+    }
+  } catch (e) { /* ignore fallback failures */ }
+
   return null;
 }
 
@@ -172,7 +202,7 @@ function DebugOverlay({ markers = [], attemptFly }) {
 }
 
 // Mount the legacy lite map into the placeholder using the dynamic loader
-import OpenPoiMapLoader from './OpenPoiMapLoader';
+// iframe will be used to embed the remote demo instead of the dynamic loader
 
 // Main TripMap component with Leaflet
 // MapController attaches a reliable map fly helper using react-leaflet's useMap
@@ -1094,12 +1124,48 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
             </div>
           </div>
 
-          {/* Map area removed per request — placeholder kept for layout */}
-          <div id="openpoimap-container" style={{ height: '500px', width: '100%', background: '#f3f4f6', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
-            Map removed — legacy OpenPoiMap Lite or internal MapContainer will mount here.
-          </div>
-          {/* Mount dynamic legacy lite map loader which will inject the desired script into the container above */}
-          <OpenPoiMapLoader />
+          {/* Embed remote demo in an iframe */}
+            <div style={{ height: '500px', width: '100%', borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
+              {/* Render the interactive Leaflet map directly so routes/waypoints are driven by React state */}
+              <MapContainer
+                whenCreated={(m) => { mapRef.current = m; setMapInstance(m); }}
+                center={center}
+                zoom={currentZoom || 7}
+                style={{ width: '100%', height: '100%' }}
+              >
+                {/* base layers */}
+                {baseLayer === 'topo' && <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" attribution="© OpenTopoMap contributors" />}
+                {baseLayer === 'carto' && <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png" attribution="© CartoDB" />}
+                {baseLayer === 'osm' && <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap contributors" />}
+
+                {/* controller to process fly requests */}
+                <MapController markers={markers} flyRequestsRef={flyRequestsRef} flyRequestsVersion={flyRequestsVersion.current} />
+
+                {/* route polyline */}
+                {route && Array.isArray(route) && route.length > 0 && (
+                  <Polyline positions={route} pathOptions={{ color: '#f59e42', weight: 4, opacity: 0.9 }} />
+                )}
+
+                {/* markers from trip items */}
+                {(markers || []).map((m) => (
+                  <Marker key={m.id || `${m.index}`} position={m.position} icon={m.icon}>
+                    <Popup>
+                      <div style={{ minWidth: 180 }}>
+                        <div style={{ fontWeight: 700 }}>{escapeHtml(getPlaceName(m.item && m.item.location))}</div>
+                        {m.item && m.item.type && <div style={{ fontSize: 12, color: '#666' }}>{m.item.type}</div>}
+                        <div style={{ marginTop: 6 }}>
+                          <button onClick={async () => { try { await attemptFly(m.id || m.index); } catch (e) { console.warn(e); } }} style={{ padding: '6px 8px', background: '#4F46E5', color: '#fff', border: 0, borderRadius: 4 }}>Fly</button>
+                          <button onClick={() => { try { if (typeof window.__TRIPCRAFT_MAP_ADD_ITEM__ === 'function') window.__TRIPCRAFT_MAP_ADD_ITEM__({ location: m.item.location, title: getPlaceName(m.item.location), type: m.item.type || 'enroute' }); } catch (e) { console.warn(e); } }} style={{ marginLeft: 8, padding: '6px 8px', background: '#f3f4f6', border: 0, borderRadius: 4 }}>Add</button>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+
+                {/* POI cluster manager (imperative) */}
+                <ClusterManager mapRef={mapRef} poiMarkers={poiMarkers} selectedOverlays={selectedOverlays} createPoiIcon={createPoiIcon} escapeHtml={escapeHtml} attemptFly={attemptFly} />
+              </MapContainer>
+            </div>
 
           {/* Right-side overlay controls removed here — legacy loader renders those UI elements */}
           <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1400, pointerEvents: 'auto' }}>
