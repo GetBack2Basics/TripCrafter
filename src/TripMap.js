@@ -53,6 +53,59 @@ async function geocodeLocation(location) {
 
   const candidates = [];
   const original = clean(location);
+  // --- caching helpers ---
+  const normalizeKey = (s) => {
+    try {
+      return String((s || '').toLowerCase()).replace(/[\u2013\u2014\u2012]/g, ' ').replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim();
+    } catch (e) { return String(s || '').toLowerCase(); }
+  };
+
+  const getGeocodeDocRef = (key) => {
+    try {
+      const pid = process.env.REACT_APP_FIREBASE_PROJECT_ID;
+      if (!pid || !db) return null;
+      return doc(db, `artifacts/${pid}/public/data/geocodes`, key);
+    } catch (e) { return null; }
+  };
+
+  async function loadCachedGeocode(key) {
+    // Try Firestore first
+    try {
+      const ref = getGeocodeDocRef(key);
+      if (ref) {
+        const snap = await getDoc(ref);
+        if (snap && snap.exists && snap.exists()) {
+          const data = snap.data ? snap.data() : (snap.data || snap);
+          if (data && (data.lat || data.lng)) return { lat: Number(data.lat), lng: Number(data.lng), display_name: data.display_name || data.name || null };
+        }
+      }
+    } catch (e) { /* ignore firestore read errors */ }
+    // Then localStorage fallback
+    try {
+      const raw = localStorage.getItem(`tripGeocode:${key}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && (parsed.lat || parsed.lng)) return { lat: Number(parsed.lat), lng: Number(parsed.lng), display_name: parsed.display_name || parsed.name || null };
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  async function saveCachedGeocode(key, payload) {
+    if (!key || !payload) return false;
+    // Write to Firestore if available
+    try {
+      const ref = getGeocodeDocRef(key);
+      if (ref) {
+        await setDoc(ref, { ...payload, updatedAt: new Date().toISOString() }, { merge: true });
+      }
+    } catch (e) { /* ignore write errors */ }
+    // Always persist locally as well
+    try {
+      localStorage.setItem(`tripGeocode:${key}`, JSON.stringify({ ...payload, updatedAt: new Date().toISOString() }));
+    } catch (e) { /* ignore */ }
+    return true;
+  }
+  // --- end caching helpers ---
   candidates.push(original);
   // replace hyphens with space
   candidates.push(clean(original.replace(/[-–—]/g, ' ')));
@@ -69,6 +122,15 @@ async function geocodeLocation(location) {
     if (!q) continue;
     if (tried.has(q)) continue;
     tried.add(q);
+    // check cached geocode by normalized key before calling remote
+    try {
+      const key = normalizeKey(q);
+      const cached = await loadCachedGeocode(key);
+      if (cached) {
+        console.debug('Geocode cache hit for', q, '->', cached);
+        return cached;
+      }
+    } catch (e) { /* ignore cache read errors */ }
     try {
       console.debug('Geocoding attempt:', q);
       const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
@@ -78,6 +140,8 @@ async function geocodeLocation(location) {
         const lng = parseFloat(data[0].lon);
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
           console.debug('Geocoding success for', q, { lat, lng, display_name: data[0].display_name });
+          // persist successful geocode to cache
+          try { await saveCachedGeocode(normalizeKey(q), { lat, lng, display_name: data[0].display_name }); } catch (e) {}
           return { lat, lng };
         }
       }
