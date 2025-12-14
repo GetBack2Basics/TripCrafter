@@ -202,35 +202,51 @@ async function getRoute(coordinates) {
 }
 
 // Create custom marker icon
-function createCustomIcon(number, type, isActive, scale = 1) {
-  const size = 20 * scale;
+function createCustomIcon(number, type, isActive, scale = 1, dateStr = '') {
+  const size = 28 * scale;
+
+  function formatDateShort(ds) {
+    if (!ds) return '';
+    try {
+      const d = new Date(ds);
+      if (!isNaN(d.getTime())) {
+        const day = d.getDate();
+        const month = d.toLocaleString(undefined, { month: 'short' });
+        return `${day} ${month}`;
+      }
+      // fallback: return last segment if comma-separated
+      const seg = String(ds).split(',')[0];
+      return seg;
+    } catch (e) { return String(ds).slice(0, 8); }
+  }
+
+  const dateLabel = formatDateShort(dateStr || '');
+  const bg = isActive ? '#f59e42' : (type === 'roofed' || type === 'camp' ? '#2563eb' : type === 'enroute' ? '#f59e42' : '#4F46E5');
+  const border = isActive ? '#f59e42' : 'white';
+
   const html = `
     <div style="
       width: ${size}px;
       height: ${size}px;
       border-radius: 50%;
-      background-color: ${isActive ? '#f59e42' : type === 'roofed' || type === 'camp' ? '#2563eb' : type === 'enroute' ? '#f59e42' : '#4F46E5'};
-      border: 2px solid ${isActive ? '#f59e42' : 'white'};
+      background-color: ${bg};
+      border: 2px solid ${border};
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       color: white;
-      font-weight: bold;
-      font-size: ${12 * scale}px;
+      font-weight: 700;
+      box-sizing: border-box;
     ">
-      ${number}
+      <div style="font-size: ${12 * scale}px; line-height: 1;">${number}</div>
+      ${dateLabel ? `<div style=\"font-size: ${8 * scale}px; line-height:1; margin-top:2px; opacity:0.95; color: white; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;\">${dateLabel}</div>` : ''}
     </div>
   `;
 
-  // Add an 'active' class when this marker is active so CSS can animate it
   const className = `custom-marker${isActive ? ' active' : ''}`;
 
-  return L.divIcon({
-    html,
-    className,
-    iconSize: [size, size],
-    iconAnchor: [size/2, size/2]
-  });
+  return L.divIcon({ html, className, iconSize: [size, size], iconAnchor: [size/2, size/2] });
 }
 
 // Small on-screen debug overlay component
@@ -695,14 +711,33 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
         const item = sortedTripItems[i];
         // Include all item types (do not skip notes)
 
-        // Try cached geocode first
-        let coords = geocodeCacheRef.current[item.location];
-        if (!coords) {
-          coords = await geocodeLocation(item.location);
-          if (coords) geocodeCacheRef.current[item.location] = coords;
+        // Prefer explicit coords coming from an item (e.g. photo upload) before geocoding
+        let coords = null;
+        try {
+          if (item.coords && Array.isArray(item.coords) && item.coords.length >= 2) {
+            coords = { lat: Number(item.coords[0]), lng: Number(item.coords[1]) };
+          } else if (item.gps && (item.gps.latitude || item.gps.longitude)) {
+            coords = { lat: Number(item.gps.latitude), lng: Number(item.gps.longitude) };
+          }
+        } catch (e) {
+          coords = null;
         }
 
-  if (!coords) continue;
+        // Try cached geocode by location only if we still don't have coords
+        if (!coords) {
+          const cached = geocodeCacheRef.current[item.location];
+          if (cached) coords = cached;
+        }
+
+        if (!coords) {
+          const geocoded = await geocodeLocation(item.location);
+          if (geocoded) {
+            coords = geocoded;
+            try { geocodeCacheRef.current[item.location] = geocoded; } catch (e) {}
+          }
+        }
+
+        if (!coords) continue;
 
   coordsByIndex[i] = coords;
   visibleIndices.push(i);
@@ -720,7 +755,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
             position: markerPos,
             item,
             index: i,
-            icon: createCustomIcon(labelIndex, item.type, activeIndex === i, scale)
+            icon: createCustomIcon(labelIndex, item.type, activeIndex === i, scale, item.date)
           };
           newMarkers.push(marker);
 
@@ -833,7 +868,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
     if (!markers || markers.length === 0) return;
     setMarkers(prev => prev.map(m => ({
       ...m,
-      icon: createCustomIcon((typeof m.item.displayIndex === 'number' ? m.item.displayIndex : (m.index + 1)), m.item.type, activeIndex === m.index, 1)
+      icon: createCustomIcon((typeof m.item.displayIndex === 'number' ? m.item.displayIndex : (m.index + 1)), m.item.type, activeIndex === m.index, 1, m.item && m.item.date)
     })));
   }, [activeIndex]);
 
@@ -873,13 +908,13 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
 
         if (cached) {
           const item = (typeof targetIndex === 'number') ? sortedTripItems[targetIndex] : (id ? sortedTripItems.find(it => it.id === id) : null);
-          marker = { id: item?.id, position: [Number(cached.lat), Number(cached.lng)], item, index: targetIndex != null ? targetIndex : (item ? sortedTripItems.findIndex(it => it.id === item.id) : null), icon: createCustomIcon((targetIndex != null ? (targetIndex + 1) : 1), item?.type, false, 0.9) };
+          marker = { id: item?.id, position: [Number(cached.lat), Number(cached.lng)], item, index: targetIndex != null ? targetIndex : (item ? sortedTripItems.findIndex(it => it.id === item.id) : null), icon: createCustomIcon((targetIndex != null ? (targetIndex + 1) : 1), item?.type, false, 0.9, item && item.date) };
         } else if (typeof targetIndex === 'number' && sortedTripItems[targetIndex]) {
           // try on-demand geocode fallback using the item's location
           const coords = await geocodeLocation(sortedTripItems[targetIndex].location);
           if (coords) {
             const item = sortedTripItems[targetIndex];
-            marker = { id: item.id, position: [Number(coords.lat), Number(coords.lng)], item, index: targetIndex, icon: createCustomIcon(targetIndex+1, item?.type, false, 0.9) };
+            marker = { id: item.id, position: [Number(coords.lat), Number(coords.lng)], item, index: targetIndex, icon: createCustomIcon(targetIndex+1, item?.type, false, 0.9, item && item.date) };
             // cache it for future
             geocodeCacheRef.current[sortedTripItems[targetIndex].location] = coords;
             coordsByIndexRef.current[targetIndex] = coords;
@@ -892,7 +927,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
             const coords = await geocodeLocation(sortedTripItems[idx].location);
             if (coords) {
               const item = sortedTripItems[idx];
-              marker = { id: item.id, position: [Number(coords.lat), Number(coords.lng)], item, index: idx, icon: createCustomIcon(idx+1, item?.type, false, 0.9) };
+              marker = { id: item.id, position: [Number(coords.lat), Number(coords.lng)], item, index: idx, icon: createCustomIcon(idx+1, item?.type, false, 0.9, item && item.date) };
               geocodeCacheRef.current[sortedTripItems[idx].location] = coords;
               coordsByIndexRef.current[idx] = coords;
               if (item && item.id) coordsByIdRef.current[item.id] = coords;
@@ -1217,6 +1252,20 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
                       <div style={{ minWidth: 180 }}>
                         <div style={{ fontWeight: 700 }}>{escapeHtml(getPlaceName(m.item && m.item.location))}</div>
                         {m.item && m.item.type && <div style={{ fontSize: 12, color: '#666' }}>{m.item.type}</div>}
+                        {m.item && m.item.status === 'Completed' && (
+                          <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>✓ Completed</div>
+                        )}
+                        {m.item && m.item.photos && (() => {
+                          const photoUrls = typeof m.item.photos === 'string' ? m.item.photos.split(',').map(u => u.trim()).filter(Boolean) : [];
+                          return photoUrls.length > 0 && (
+                            <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {photoUrls.slice(0, 3).map((url, idx) => (
+                                <img key={idx} src={url} alt="Trip photo" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} onClick={() => window.open(url, '_blank')} />
+                              ))}
+                              {photoUrls.length > 3 && <div style={{ fontSize: 11, color: '#666', alignSelf: 'center' }}>+{photoUrls.length - 3} more</div>}
+                            </div>
+                          );
+                        })()}
                         <div style={{ marginTop: 6 }}>
                           <button onClick={async () => { try { await attemptFly(m.id || m.index); } catch (e) { console.warn(e); } }} style={{ padding: '6px 8px', background: '#4F46E5', color: '#fff', border: 0, borderRadius: 4 }}>Fly</button>
                           <button onClick={() => { try { if (typeof window.__TRIPCRAFT_MAP_ADD_ITEM__ === 'function') window.__TRIPCRAFT_MAP_ADD_ITEM__({ location: m.item.location, title: getPlaceName(m.item.location), type: m.item.type || 'enroute' }); } catch (e) { console.warn(e); } }} style={{ marginLeft: 8, padding: '6px 8px', background: '#f3f4f6', border: 0, borderRadius: 4 }}>Add</button>
@@ -1281,9 +1330,33 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
             const isActive = activeIndex === index;
             const displayIndex = index + 1;
             const imgIdx = imageIndexes[item.id] || 0;
-            const images = Array.isArray(item.discoverImages) ? item.discoverImages : [getLocalDiscoverImage(item.location)];
+            // Prioritize user photos, then fall back to discover images or generated image
+            const userPhotos = item.photos && typeof item.photos === 'string' 
+              ? item.photos.split(',').map(u => u.trim()).filter(Boolean) 
+              : [];
+            const fallbackImages = Array.isArray(item.discoverImages) ? item.discoverImages : [getLocalDiscoverImage(item.location)];
+            const images = userPhotos.length > 0 ? userPhotos : fallbackImages;
             const showPrev = images.length > 1;
             const showNext = images.length > 1;
+            const activityLabel = (() => {
+              try {
+                if (item.activities && typeof item.activities === 'string' && item.activities.trim()) {
+                  const s = item.activities.replace(/\s+/g, ' ').trim();
+                  return s.split('.').shift().split(',').shift().split(';').shift().split('\n').shift().slice(0, 40);
+                }
+                // Fallback to the item type as a readable label
+                if (item.type) return item.type.replace(/_/g, ' ');
+                return '';
+              } catch (e) { return ''; }
+            })();
+            const dateLabel = (() => {
+              try {
+                if (!item || !item.date) return '';
+                const d = new Date(item.date);
+                if (!isNaN(d.getTime())) return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+                return String(item.date).split('T')[0];
+              } catch (e) { return ''; }
+            })();
             const handlePrev = (e) => {
               e.stopPropagation();
               setImageIndexes(idxes => ({ ...idxes, [item.id]: ((idxes[item.id] || 0) - 1 + images.length) % images.length }));
@@ -1316,7 +1389,7 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
                 }}
                 style={{ cursor: 'pointer' }}
               >
-                <span className="mb-1 relative block w-10 h-10 rounded-full overflow-hidden bg-gray-100" style={{marginBottom: 4}}>
+                <span className="mb-1 relative block w-14 h-14 rounded-full overflow-hidden bg-gray-100" style={{marginBottom: 4}}>
                   {/* Cycling discover images */}
                   <img
                     src={images[imgIdx]}
@@ -1324,17 +1397,29 @@ function TripMap({ tripItems, currentTripId, loadingInitialData, onUpdateTravelT
                     className="object-cover w-full h-full"
                     onError={e => { e.target.style.display = 'none'; }}
                   />
-                  <span className="absolute inset-0 flex items-center justify-center">
+                  {/* Type icon top-left with color matching item type */}
+                  <span className="absolute top-0 left-0 m-1 rounded-full p-1" style={{width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',backgroundColor: item.type === 'roofed' ? '#818cf8' : item.type === 'camp' ? '#16a34a' : item.type === 'enroute' ? '#ea580c' : item.type === 'note' ? '#a855f7' : item.type === 'ferry' ? '#3b82f6' : '#6b7280'}}>
                     {getTypeIcon(item.type, item)}
                   </span>
+                  {/* Small overlay at bottom for activity label */}
+                  {activityLabel && (
+                    <div className="absolute left-0 right-0 bottom-0 px-1 py-0.5 text-[10px] text-white" style={{background:'linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.6))', textAlign:'center', textShadow:'-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000'}}>
+                      {String(activityLabel).length > 30 ? String(activityLabel).slice(0,27) + '…' : activityLabel}
+                    </div>
+                  )}
+                  {/* Fly badge (index + date) top-right badge for quick fly - larger to fit date */}
                   <button
                     type="button"
-                    className="absolute -top-2 -left-2 bg-indigo-600 text-white text-[10px] font-semibold rounded-full w-6 h-6 flex items-center justify-center"
+                    className="absolute -top-2 -right-2 text-white font-semibold rounded-full flex items-center justify-center"
+                    style={{width:48,height:48,backgroundColor:'#4f46e5',display:'flex',alignItems:'center',justifyContent:'center'}}
                     title={`Fly to ${getPlaceName(item.location)}`}
                     aria-label={`Fly to ${getPlaceName(item.location)}`}
                     onClick={(e) => { e.stopPropagation(); try { attemptFly(item.id); } catch (err) { console.warn('badge fly failed', err); } }}
                   >
-                    {displayIndex}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                      <div style={{ fontSize: 12 }}>{displayIndex}</div>
+                      {dateLabel && <div style={{ fontSize: 9, opacity: 0.95, marginTop: 2, color: 'white', textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000' }}>{dateLabel}</div>}
+                    </div>
                   </button>
                   {showPrev && (
                     <button type="button" className="absolute left-0 top-1/2 -translate-y-1/2 bg-white bg-opacity-60 rounded-full px-1 text-xs" onClick={handlePrev}>&lt;</button>

@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import AIImportButton from './AIImportButton';
 export default function AppHeader({
   onSettings, onHelp, userEmail, userAvatar, activeView, setActiveView,
-  onAddStop, onAIImport, onHelpClick,
+  onAddStop, onAIImport, onPhotoUpload, onHelpClick,
   onProfileLogin, onProfileLogout, onProfileChangeTrip, onProfileAddTrip
 }) {
   // Dropdown state
@@ -84,6 +84,15 @@ export default function AppHeader({
           >
             <span className="text-xl mr-2">🤖</span>
             <span>AI Import</span>
+          </button>
+          <button
+            className="h-10 min-h-[2.5rem] px-4 flex items-center justify-center rounded-lg font-semibold text-sm shadow transition bg-green-600 hover:bg-green-700 text-white"
+            style={{ fontFamily: 'inherit', lineHeight: 1.2 }}
+            onClick={onPhotoUpload}
+            title="Upload photos with GPS data to create trip items"
+          >
+            <span className="text-xl mr-2">📸</span>
+            <span>Photos</span>
           </button>
           <button
             className="h-10 min-h-[2.5rem] px-4 flex items-center justify-center rounded-lg font-semibold text-sm shadow transition bg-gray-200 hover:bg-gray-300 text-indigo-700"

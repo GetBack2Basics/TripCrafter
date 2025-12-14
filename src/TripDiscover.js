@@ -153,8 +153,15 @@ export default function TripDiscover({ tripItems = [], tripProfile = {}, handleE
   // Use a neutral placeholder until the server proxy responds and fills the cache.
   // Compute merged profile for display fallback generation too
   const mergedProfile = { ...(tripProfile || {}), ...(item.profile || {}) };
-  const images = (cached && cached.images) || null;
-  const srcBadge = (cached && cached.source) || 'Loading';
+  
+  // Prioritize user-uploaded photos, then fall back to Unsplash images
+  const userPhotos = item.photos && typeof item.photos === 'string' 
+    ? item.photos.split(',').map(u => u.trim()).filter(Boolean) 
+    : [];
+  const unsplashImages = (cached && cached.images) || null;
+  const images = userPhotos.length > 0 ? userPhotos : unsplashImages;
+  
+  const srcBadge = userPhotos.length > 0 ? 'Your Photos' : ((cached && cached.source) || 'Loading');
   const imgUrl = (images && images[0]) || '/logo512.png';
         return (
           <div key={item.id} className="bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col hover:shadow-2xl transition-shadow duration-200">
@@ -166,7 +173,7 @@ export default function TripDiscover({ tripItems = [], tripProfile = {}, handleE
                   className="h-40 w-full object-cover border-b border-gray-200 transition-transform duration-200 hover:scale-105"
                   style={{ background: '#f8fafc' }}
                 />
-                <div title={cached && cached.query ? `search: ${cached.query}` : ''} className="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">{srcBadge === 'unsplash-api' ? 'Unsplash' : 'Fallback'}</div>
+                <div title={cached && cached.query ? `search: ${cached.query}` : ''} className="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">{srcBadge === 'Your Photos' ? '📸 Your Photos' : (srcBadge === 'unsplash-api' ? 'Unsplash' : 'Fallback')}</div>
               </div>
             </div>
             <div className="p-3 flex-1 flex flex-col">

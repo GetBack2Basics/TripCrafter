@@ -45,6 +45,7 @@ import TripProfileModal from './TripProfileModal';
 import TripHelpModal from './TripHelpModal';
 import TripForm from '../TripForm';
 import AppHeader from './AppHeader';
+import PhotoUploadModal from './PhotoUploadModal';
 import LoginModal from './LoginModal';
 import TripSelectModal from './TripSelectModal';
 import TripCreateModal from './TripCreateModal';
@@ -58,6 +59,7 @@ export default function TripDashboard() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAIImportModal, setShowAIImportModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   // Auth / profile state
   const [userEmail, setUserEmail] = useState(null);
   const [userAvatar, setUserAvatar] = useState(null);
@@ -119,49 +121,10 @@ export default function TripDashboard() {
     const cityName = locationParts[0].trim();
     const state = tripSettings.state || 'Tasmania';
     const country = tripSettings.country || 'Australia';
-
-    switch (type) {
-      case 'roofed': {
-        if (!checkinDate) return '';
-        const checkin = new Date(checkinDate);
-        if (isNaN(checkin.getTime())) return '';
-        const checkinYear = checkin.getFullYear();
-        const checkinMonth = checkin.getMonth() + 1;
-        const checkinDay = checkin.getDate();
-        const checkout = new Date(checkin);
-        checkout.setDate(checkout.getDate() + 1);
-        const checkoutYear = checkout.getFullYear();
-        const checkoutMonth = checkout.getMonth() + 1;
-        const checkoutDay = checkout.getDate();
-        // Build a more complete Booking.com search URL that includes locale and rooms
-        const baseUrl = 'https://www.booking.com/searchresults.en-gb.html';
-        const searchLocation = `${cityName}, ${state || ''} ${country || ''}`.replace(/\s+/g, ' ').trim();
-        const params = new URLSearchParams({
-          ss: searchLocation,
-          lang: 'en-gb',
-          efdco: '1',
-          sb: '1',
-          src: 'index',
-          src_elem: 'sb',
-          checkin: `${checkinYear}-${String(checkinMonth).padStart(2, '0')}-${String(checkinDay).padStart(2, '0')}`,
-          checkout: `${checkoutYear}-${String(checkoutMonth).padStart(2, '0')}-${String(checkoutDay).padStart(2, '0')}`,
-          group_adults: String(adults),
-          no_rooms: '1',
-          group_children: String(children || 0)
-        });
-        return `${baseUrl}?${params.toString()}`;
-      }
-      case 'camp': {
-        const campSearchQuery = encodeURIComponent(`campsites near ${cityName} ${state} ${country}`);
-        return `https://www.google.com/search?q=${campSearchQuery}`;
-      }
-      case 'enroute': {
-        const searchQuery = encodeURIComponent(`things to do ${cityName} ${state} ${country} activities attractions`);
-        return `https://www.google.com/search?q=${searchQuery}`;
-      }
-      default:
-        return '';
-    }
+    // Activities link should be a Google search for "things to do in <location>"
+    const raw = `things to do in ${cityName} ${state || 'Tasmania'}`;
+    const encoded = encodeURIComponent(raw).replace(/%20/g, '+');
+    return `https://www.google.com/search?q=${encoded}`;
   }
 
   // Generate a title-specific link (prefer searching by the exact title/property name)
@@ -195,8 +158,16 @@ export default function TripDashboard() {
       const q = encodeURIComponent(searchTerm);
       return `https://www.google.com/search?q=${q}`;
     }
+    // For camp, link directly to a Google Maps campsite search (using title if present)
+    if (type === 'camp') {
+      const state = tripSettings.state || 'Tasmania';
+      const country = tripSettings.country || 'Australia';
+      const raw = `${title} Campsite ${state} ${country}`.replace(/"/g, '');
+      const encoded = encodeURIComponent(raw).replace(/%20/g, '+');
+      return `https://www.google.com/maps/search/${encoded}`;
+    }
 
-    // For camp or enroute, fall back to a Google search for the title
+    // Default: simple Google search for the title and location
     const q = encodeURIComponent(`${title} ${tripSettings.state || 'Tasmania'} ${tripSettings.country || 'Australia'}`);
     return `https://www.google.com/search?q=${q}`;
   }
@@ -597,6 +568,43 @@ export default function TripDashboard() {
     setEditingItem(item);
     setNewItem(item);
     setShowAddForm(true);
+  };
+
+  const handleToggleStatus = (itemId) => {
+    // Toggle between Unconfirmed and Completed
+    const item = tripItems.find(it => it.id === itemId);
+    if (!item) return;
+    const newStatus = item.status === 'Completed' ? 'Unconfirmed' : 'Completed';
+    setTripItems(prev => prev.map(it => it.id === itemId ? { ...it, status: newStatus } : it));
+    setPendingOps(prev => [...prev, { op: 'update', id: itemId, payload: { status: newStatus } }]);
+    addToast(`Marked as ${newStatus}`, 'success');
+  };
+
+  const handlePhotoUpload = (photoResults) => {
+    // Create trip items from uploaded photos with GPS data
+    const newItems = photoResults.map((photo, idx) => {
+      const id = `photo-${Date.now()}-${idx}`;
+      const item = {
+        id,
+        date: new Date().toISOString().slice(0, 10),
+        location: photo.location,
+        title: photo.title || 'Photo Location',
+        type: 'enroute',
+        status: 'Completed',
+        photos: photo.photoUrl,
+        notes: photo.gps ? `GPS: ${photo.gps.latitude.toFixed(6)}, ${photo.gps.longitude.toFixed(6)}` : '',
+        coords: photo.gps ? [photo.gps.latitude, photo.gps.longitude] : null
+      };
+      return item;
+    });
+    
+    // Add all new items
+    setTripItems(prev => sortTripItems([...prev, ...newItems]));
+    newItems.forEach(item => {
+      setPendingOps(prev => [...prev, { op: 'add', id: item.id, payload: item }]);
+    });
+    
+    addToast(`Added ${newItems.length} photo location${newItems.length > 1 ? 's' : ''}`, 'success');
   };
 
   // Expose a global helper so external pages/scripts (demo) can open the TripForm
@@ -1441,6 +1449,7 @@ export default function TripDashboard() {
         onAddStop={() => openAddForm()}
         onAIImport={() => setShowAIImportModal(true)}
         onHelpClick={() => setShowHelp(true)}
+        onPhotoUpload={() => setShowPhotoUpload(true)}
         onProfileLogin={handleProfileLogin}
         onProfileLogout={handleProfileLogout}
         onProfileChangeTrip={handleProfileChangeTrip}
@@ -1510,8 +1519,8 @@ export default function TripDashboard() {
       </div>
       {/* Main Content Area */}
       <div className="flex-1">
-  {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
-  {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} />}
+  {activeView === 'itinerary' && <TripTable tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} handleToggleStatus={handleToggleStatus} />}
+  {activeView === 'list' && <TripList tripItems={tripItems} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleReorder={handleReorder} handleMoveUp={handleMoveUp} handleMoveDown={handleMoveDown} handleToggleStatus={handleToggleStatus} />}
   {activeView === 'map' && <TripMap tripItems={tripItems} currentTripId={currentTripId} onUpdateTravelTime={handleUpdateTravelTime} onAddItem={(item) => {
         // Accept minimal item { location, title, type, date }
         try {
@@ -1615,9 +1624,10 @@ export default function TripDashboard() {
         }
       }} />
       <TripHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      <PhotoUploadModal isOpen={showPhotoUpload} onClose={() => setShowPhotoUpload(false)} onPhotosUploaded={handlePhotoUpload} />
   {/* Add/Edit Trip Item Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000]">
           <div className="bg-white p-0 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
             <button
               className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl font-bold z-10"

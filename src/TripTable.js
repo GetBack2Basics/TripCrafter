@@ -11,7 +11,7 @@ function getTypeIcon(type, item) {
   return null;
 }
 
-function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingInitialData, handleReorder, handleMoveUp, handleMoveDown }) {
+function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingInitialData, handleReorder, handleMoveUp, handleMoveDown, handleToggleStatus }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [expandedIndex, setExpandedIndex] = useState(null);
@@ -103,13 +103,26 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{item.location}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                      {item.title && item.titleLink ? (
-                        <a href={item.titleLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
-                          {item.title}
-                        </a>
-                      ) : (
-                        item.title
-                      )}
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={item.status === 'Completed'} 
+                          onChange={() => handleToggleStatus && handleToggleStatus(item.id)}
+                          className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500 cursor-pointer"
+                          title="Mark as completed"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        {item.title && item.titleLink ? (
+                          <a href={item.titleLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
+                            {item.title}
+                          </a>
+                        ) : (
+                          item.title
+                        )}
+                        {item.status === 'Completed' && (
+                          <span className="inline-flex items-center text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded" title="Completed">✓</span>
+                        )}
+                      </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     {item.activities && item.activityLink ? (
@@ -146,6 +159,21 @@ function TripTable({ tripItems = [], handleEditClick, handleDeleteItem, loadingI
                       {item.status && (
                         <div className="mb-1"><span className="font-medium">Status:</span> {item.status}</div>
                       )}
+                      {item.photos && (() => {
+                        const photoUrls = typeof item.photos === 'string' ? item.photos.split(',').map(u => u.trim()).filter(Boolean) : [];
+                        return photoUrls.length > 0 && (
+                          <div className="mb-1">
+                            <span className="font-medium">Photos:</span>
+                            <div className="flex gap-2 flex-wrap mt-2">
+                              {photoUrls.map((url, idx) => (
+                                <a key={idx} href={url} target="_blank" rel="noopener noreferrer">
+                                  <img src={url} alt={`Trip photo ${idx + 1}`} className="w-20 h-20 object-cover rounded border border-gray-300 hover:opacity-80 transition-opacity" />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 )}

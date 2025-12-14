@@ -212,7 +212,41 @@ function AIImportModal({ isOpen, onClose, onImportSuccess, onError, initialProfi
 
   // Review/merge handlers
   // Work by entry id (or fallback to index) to avoid index mismatches
-  
+  // Helper to set an entry's _status by id or by entry object
+  function setEntryStatusById(entryOrId, status) {
+    setReviewData(prev => {
+      if (!prev) return prev;
+      return prev.map(e => {
+        const matches = (typeof entryOrId === 'string')
+          ? (e.id === entryOrId || e._id === entryOrId)
+          : (e.id === (entryOrId && entryOrId.id) || e._id === (entryOrId && entryOrId._id));
+        if (matches) {
+          return { ...e, _status: status };
+        }
+        return e;
+      });
+    });
+  }
+
+  // Ensure only one approved entry exists per date+type by demoting others to 'pending'
+  function enforceSinglePerDay(entry) {
+    try {
+      if (!entry || !entry.date) return;
+      setReviewData(prev => {
+        if (!prev) return prev;
+        return prev.map(e => {
+          if (e.id && e.id === entry.id) return e; // skip the selected entry
+          if ((e.date || '') === (entry.date || '') && (e.type || '') === (entry.type || '') && e._status === 'approved') {
+            return { ...e, _status: 'pending' };
+          }
+          return e;
+        });
+      });
+    } catch (e) {
+      console.warn('enforceSinglePerDay failed', e);
+    }
+  }
+
 
   const [mergeTarget, setMergeTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);

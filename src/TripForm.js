@@ -107,6 +107,34 @@ function TripForm({ newItem, handleInputChange, onAddItem, onSaveEdit, onCancelE
               title="This URL is auto-generated based on type and location, but you can edit it manually"
             />
           </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+            <select
+              name="status"
+              value={formData.status || 'Unconfirmed'}
+              onChange={handleFormChange}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="Unconfirmed">Unconfirmed</option>
+              <option value="Booked">Booked</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+              <option value="Not booked">Not booked</option>
+            </select>
+          </div>
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Photo URL(s)</label>
+            <input
+              type="text"
+              name="photos"
+              value={formData.photos || ''}
+              onChange={handleFormChange}
+              placeholder="Comma-separated photo URLs"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              title="Enter photo URLs separated by commas, or leave blank"
+            />
+            <p className="text-xs text-gray-500 mt-1">Tip: Upload photos to a cloud service and paste URLs here</p>
+          </div>
           <div className="lg:col-span-3">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Notes</label>
             <textarea
